@@ -1,0 +1,10 @@
+[Unit]
+Description=wp-tt LIVE shift tick T1 every 3 min (load-conscious; cheap MCH_OPERATION source)
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=3min
+AccuracySec=20s
+
+[Install]
+WantedBy=timers.target

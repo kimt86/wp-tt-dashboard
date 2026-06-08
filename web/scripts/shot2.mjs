@@ -1,0 +1,12 @@
+import { chromium } from "playwright";
+const b = await chromium.launch();
+const p = await b.newPage({ viewport: { width: 1500, height: 1500 } });
+await p.goto("http://127.0.0.1:8080", { waitUntil: "networkidle" });
+await p.waitForSelector(".vessel-card, .kpi .val", { timeout: 15000 }).catch(()=>{});
+await p.waitForTimeout(1500);
+await p.screenshot({ path: process.argv[2], fullPage: true });
+await p.locator(".tabsw-btn").nth(1).click();
+await p.waitForTimeout(2500);
+await p.screenshot({ path: process.argv[3], fullPage: true });
+await b.close();
+console.log("done");

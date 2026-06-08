@@ -1,0 +1,3254 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WP AI Service 2 — Operations Dashboard (Mockup, Dark)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    /* Dark theme tokens */
+    --bg: #0a0f1d;
+    --bg-soft: #0e1525;
+    --surface: #131b2e;
+    --surface-2: #1a2438;
+    --surface-3: #222d44;
+    --border: #2a3654;
+    --border-soft: #1f2940;
+    --border-strong: #3a4768;
+
+    --text: #e2e8f0;
+    --text-dim: #94a3b8;
+    --text-mute: #64748b;
+    --text-faint: #475569;
+
+    --brand: #60a5fa;
+    --brand-deep: #3b82f6;
+    --brand-grad-1: #1e3a8a;
+    --brand-grad-2: #1e40af;
+
+    --good: #22c55e;
+    --good-bg: rgba(34,197,94,0.15);
+    --good-border: rgba(34,197,94,0.35);
+    --warn: #f59e0b;
+    --warn-bg: rgba(245,158,11,0.15);
+    --warn-border: rgba(245,158,11,0.35);
+    --bad: #ef4444;
+    --bad-bg: rgba(239,68,68,0.15);
+    --bad-border: rgba(239,68,68,0.35);
+    --info: #38bdf8;
+    --info-bg: rgba(56,189,248,0.15);
+    --info-border: rgba(56,189,248,0.35);
+    --teal: #2dd4bf;
+    --purple: #a78bfa;
+    --purple-bg: rgba(167,139,250,0.15);
+
+    --radius-md: 0.25rem;
+    --radius-lg: 0.5rem;
+    --radius-xl: 0.75rem;
+
+    --side-w: 64px;
+    --header-h: 56px;
+    --tab-h: 44px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body { height: 100%; overflow: hidden; }
+
+  body {
+    font-family: 'Inter', 'Malgun Gothic', sans-serif;
+    font-weight: 400;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    font-size: 13px;
+  }
+
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  .material-symbols-outlined { font-size: 18px; vertical-align: middle; }
+
+  /* ───────── HEADER ───────── */
+  .header {
+    height: var(--header-h);
+    background: linear-gradient(180deg, #0a0f1d 0%, #0e1525 100%);
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    display: flex; align-items: center;
+    padding: 0 20px;
+    position: relative; z-index: 50;
+  }
+  .header .logo {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 800;
+    font-size: 16px;
+    letter-spacing: -0.3px;
+    margin-right: 16px;
+    color: white;
+  }
+  .header .logo .accent { color: var(--brand); }
+  .breadcrumb {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--text-dim);
+  }
+  .breadcrumb .sep { opacity: 0.4; }
+  .breadcrumb .current { color: white; font-weight: 500; }
+  .header .spacer { flex: 1; }
+  .header .status-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 999px;
+    background: var(--good-bg); color: #86efac;
+    border: 1px solid var(--good-border);
+    font-size: 11px; font-weight: 500;
+    margin-right: 12px;
+  }
+  .header .status-pill .dot {
+    width: 6px; height: 6px; border-radius: 999px; background: var(--good);
+    box-shadow: 0 0 8px var(--good);
+    animation: pulse 1.6s infinite;
+  }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  .header .clock {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; font-weight: 500;
+    color: var(--text-dim); margin-right: 16px;
+  }
+  .header .user { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .header .avatar {
+    width: 28px; height: 28px; border-radius: 999px;
+    background: linear-gradient(135deg, #60a5fa, #3b82f6);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 11px; color: white;
+  }
+  .header-icon {
+    width: 32px; height: 32px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--text-dim); cursor: pointer;
+    border-radius: var(--radius-md);
+    position: relative;
+  }
+  .header-icon:hover { background: rgba(255,255,255,0.06); color: white; }
+  .header-icon .badge {
+    position: absolute; top: 4px; right: 4px;
+    width: 7px; height: 7px; border-radius: 999px; background: var(--bad);
+    box-shadow: 0 0 6px var(--bad);
+  }
+
+  /* ───────── LAYOUT ───────── */
+  .app {
+    display: grid;
+    grid-template-columns: var(--side-w) 1fr;
+    height: calc(100vh - var(--header-h));
+  }
+
+  /* ───────── SIDEBAR ───────── */
+  .sidebar {
+    background: var(--bg-soft);
+    border-right: 1px solid var(--border);
+    padding: 12px 0;
+    display: flex; flex-direction: column; align-items: center;
+    gap: 4px;
+  }
+  .side-item {
+    width: 48px; height: 48px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    color: var(--text-dim);
+    cursor: pointer;
+    border-radius: var(--radius-lg);
+    position: relative;
+    transition: all 0.15s;
+  }
+  .side-item .label { font-size: 9px; font-weight: 600; margin-top: 2px; letter-spacing: 0.4px; }
+  .side-item .material-symbols-outlined { font-size: 20px; }
+  .side-item:hover { background: var(--surface); color: var(--text); }
+  .side-item.active {
+    background: linear-gradient(135deg, var(--brand-grad-1), var(--brand-grad-2));
+    color: white;
+  }
+  .side-item.active::before {
+    content: ''; position: absolute; left: -12px; top: 8px; bottom: 8px;
+    width: 3px; border-radius: 0 2px 2px 0; background: var(--brand);
+  }
+
+  /* ───────── MAIN ───────── */
+  .main { display: flex; flex-direction: column; overflow: hidden; }
+
+  /* tab bar */
+  .tabs {
+    height: var(--tab-h);
+    background: var(--bg-soft);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center;
+    padding: 0 16px;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .tab {
+    padding: 7px 14px;
+    font-size: 12px; font-weight: 500;
+    color: var(--text-dim);
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .tab.active {
+    background: var(--brand-grad-1);
+    color: white;
+  }
+  .tab .key {
+    font-size: 9px; padding: 1px 5px;
+    background: rgba(255,255,255,0.08); border-radius: 3px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim);
+  }
+  .tab.active .key { background: rgba(255,255,255,0.18); color: white; }
+  .tabs .spacer { flex: 1; }
+  .tabs .toolbar { display: flex; align-items: center; gap: 6px; }
+  .range-btn {
+    padding: 4px 10px; font-size: 11px; font-weight: 500;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+  .range-btn.active { background: var(--brand-grad-2); color: white; border-color: var(--brand-deep); }
+
+  /* content scroll */
+  .content {
+    flex: 1; overflow-y: auto;
+    padding: 12px;
+    background: var(--bg);
+  }
+  .content::-webkit-scrollbar { width: 8px; }
+  .content::-webkit-scrollbar-track { background: var(--bg); }
+  .content::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+
+  .grid { display: grid; gap: 12px; }
+  .grid-kpi { grid-template-columns: repeat(6, 1fr); }
+  .grid-main { grid-template-columns: 7fr 5fr; }
+  .grid-second { grid-template-columns: 8fr 4fr; }
+
+  /* card */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+  .card-head {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-soft);
+    display: flex; align-items: center; justify-content: space-between;
+    background: linear-gradient(180deg, var(--surface-2) 0%, var(--surface) 100%);
+  }
+  .card-head h3 {
+    font-size: 12px; font-weight: 600;
+    color: var(--text);
+    letter-spacing: 0.2px;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .card-head h3 .material-symbols-outlined { font-size: 16px; color: var(--brand); }
+  .card-head .head-sub {
+    font-size: 10px; color: var(--text-dim); font-weight: 500;
+  }
+  .card-body { padding: 12px 14px; }
+
+  /* ───────── KPI cards (fixed height) ───────── */
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 10px 12px;
+    position: relative;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    gap: 4px;
+    height: 124px;     /* fixed height — fixes the layout bug */
+  }
+  .kpi.primary {
+    border-left: 3px solid var(--warn);
+    border-top-color: var(--border);
+    border-right-color: var(--border);
+    border-bottom-color: var(--border);
+  }
+  .kpi.primary::after {
+    content: 'PRIMARY';
+    position: absolute; top: 8px; right: 10px;
+    font-size: 8px; font-weight: 800; letter-spacing: 0.6px;
+    color: var(--warn);
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-border);
+    padding: 1px 5px; border-radius: 3px;
+  }
+  .kpi-label {
+    font-size: 10px; font-weight: 600; color: var(--text-dim);
+    line-height: 1.25;
+    min-height: 24px;     /* keep two-line names from breaking grid */
+  }
+  .kpi.primary .kpi-label { padding-right: 60px; }
+
+  .kpi-value-row {
+    display: flex; align-items: baseline; gap: 4px;
+    margin-top: 2px;
+  }
+  .kpi-value {
+    font-family: 'Manrope', sans-serif;
+    font-size: 24px; font-weight: 800;
+    letter-spacing: -0.5px;
+    color: var(--text);
+    line-height: 1;
+  }
+  .kpi-unit { font-size: 11px; font-weight: 500; color: var(--text-mute); }
+
+  .kpi-delta {
+    font-size: 10px; font-weight: 600;
+    display: inline-flex; align-items: center; gap: 2px;
+  }
+  .kpi-delta.good { color: #86efac; }
+  .kpi-delta.bad { color: #fca5a5; }
+  .kpi-delta .vs { color: var(--text-mute); font-weight: 400; margin-left: 4px; }
+
+  /* Sparkline — fixed container, canvas absolutely positioned */
+  .spark-wrap {
+    position: relative;
+    height: 28px; width: 100%;
+    margin-top: auto;     /* push to bottom */
+  }
+  .spark-wrap canvas {
+    position: absolute !important;
+    top: 0; left: 0;
+    width: 100% !important; height: 100% !important;
+  }
+
+  /* ───────── Vessel banner ───────── */
+  .vessel-card {
+    background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #1e3a8a 100%);
+    color: white;
+    border: 1px solid var(--brand-deep);
+    border-radius: var(--radius-lg);
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    display: grid;
+    grid-template-columns: auto 1fr auto auto auto auto;
+    gap: 18px; align-items: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .vessel-card::before {
+    content: '';
+    position: absolute; inset: 0;
+    background-image: radial-gradient(circle at top right, rgba(96,165,250,0.25), transparent 50%);
+    pointer-events: none;
+  }
+  .vessel-card > * { position: relative; z-index: 1; }
+  .vessel-card .v-name {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 800; font-size: 15px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .vessel-card .v-meta { font-size: 11px; color: #cbd5e1; }
+  .vessel-card .lbl {
+    font-size: 9px; color: #cbd5e1;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    margin-bottom: 3px;
+  }
+  .vessel-card .val {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600; font-size: 13px;
+  }
+  .vessel-card .progress {
+    width: 240px;
+    background: rgba(0,0,0,0.3); border-radius: 999px; height: 7px;
+    overflow: hidden; border: 1px solid rgba(255,255,255,0.1);
+  }
+  .vessel-card .progress .bar {
+    background: linear-gradient(90deg, #60a5fa, #38bdf8, #60a5fa);
+    height: 100%; width: 64%; border-radius: 999px;
+    box-shadow: 0 0 12px rgba(56,189,248,0.6);
+  }
+  .vessel-card .progress-label {
+    font-size: 10px; color: #cbd5e1; margin-top: 5px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ───────── Terminal Map ───────── */
+  .map-card { min-height: 380px; }
+  .map-body {
+    padding: 0; position: relative;
+    background: #0a1428;
+    height: 340px;
+  }
+  .map-svg { width: 100%; height: 100%; display: block; }
+  .map-legend {
+    position: absolute; top: 10px; left: 10px;
+    background: rgba(10,15,29,0.85);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 6px 10px;
+    font-size: 10px;
+    display: flex; gap: 12px;
+    color: var(--text-dim);
+  }
+  .map-legend .item { display: inline-flex; align-items: center; gap: 4px; }
+  .map-legend .dot { width: 8px; height: 8px; border-radius: 999px; }
+  .map-overlay {
+    position: absolute; top: 10px; right: 10px;
+    background: rgba(10,15,29,0.85);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 8px 10px;
+    font-size: 10px; color: var(--text-dim);
+    min-width: 150px;
+  }
+  .map-overlay .row { display: flex; justify-content: space-between; padding: 2px 0; }
+  .map-overlay .row .v { color: var(--text); font-weight: 600; }
+
+  /* ───────── TT state donut ───────── */
+  .donut-wrap { display: grid; grid-template-columns: 110px 1fr; gap: 14px; align-items: center; }
+  .legend-list { display: flex; flex-direction: column; gap: 6px; }
+  .legend-item {
+    display: grid; grid-template-columns: 12px 1fr auto; gap: 8px; align-items: center;
+    font-size: 11px;
+  }
+  .legend-item .swatch { width: 10px; height: 10px; border-radius: 2px; }
+  .legend-item .name { color: var(--text-dim); }
+  .legend-item .val { font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--text); }
+
+  /* ───────── QC Sequence Panel ───────── */
+  .qc-panel {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+  .qc-col {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 10px;
+    display: flex; flex-direction: column;
+    gap: 6px;
+  }
+  .qc-col.maint { background: rgba(239,68,68,0.06); border-color: rgba(239,68,68,0.3); }
+  .qc-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border-soft);
+    margin-bottom: 2px;
+  }
+  .qc-head .id {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 800; font-size: 14px;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .qc-head .id .dot {
+    width: 8px; height: 8px; border-radius: 999px;
+    box-shadow: 0 0 6px currentColor;
+  }
+  .qc-head .id.busy .dot { background: var(--good); color: var(--good); }
+  .qc-head .id.idle .dot { background: var(--text-mute); color: var(--text-mute); }
+  .qc-head .id.maint .dot { background: var(--bad); color: var(--bad); }
+  .qc-head .mph {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; color: var(--text-dim); font-weight: 600;
+  }
+  .qc-head .mph .v { color: var(--brand); }
+  .qc-progress {
+    font-size: 10px; color: var(--text-dim);
+    display: flex; justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  .qc-progress .mono { color: var(--text); font-weight: 600; }
+  .qc-progress-bar {
+    height: 4px; background: var(--bg-soft); border-radius: 999px; overflow: hidden;
+    margin-bottom: 6px;
+  }
+  .qc-progress-bar .fill {
+    height: 100%; background: linear-gradient(90deg, var(--brand-deep), var(--brand));
+    border-radius: 999px;
+  }
+  .qc-progress-bar.maint .fill { background: var(--bad); }
+
+  .qc-task {
+    display: grid;
+    grid-template-columns: 22px 1fr auto;
+    gap: 6px; align-items: center;
+    padding: 5px 6px;
+    border-radius: var(--radius-md);
+    font-size: 11px;
+  }
+  .qc-task.now {
+    background: rgba(34,197,94,0.10);
+    border: 1px solid var(--good-border);
+  }
+  .qc-task.next {
+    background: var(--bg-soft);
+    border: 1px solid var(--border-soft);
+  }
+  .qc-task.queued {
+    background: transparent;
+    border: 1px dashed var(--border-soft);
+    opacity: 0.85;
+  }
+  .qc-task.unassigned {
+    background: transparent;
+    border: 1px dashed var(--bad-border);
+    opacity: 0.85;
+  }
+  .qc-task .seq {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; font-weight: 700;
+    text-align: center;
+    padding: 2px 0;
+    border-radius: 3px;
+    color: var(--text-dim);
+    background: rgba(255,255,255,0.05);
+  }
+  .qc-task.now .seq { background: var(--good); color: #052e16; }
+  .qc-task.next .seq { background: var(--brand-deep); color: white; }
+
+  .qc-task .body { min-width: 0; }
+  .qc-task .body .top {
+    display: flex; gap: 6px; align-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; font-weight: 600;
+    color: var(--text);
+  }
+  .qc-task .body .bot {
+    font-size: 9px; color: var(--text-mute);
+    margin-top: 1px;
+  }
+  .qc-task .assign {
+    text-align: right;
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    line-height: 1.2;
+  }
+  .qc-task .assign .tt {
+    font-weight: 700; color: var(--brand);
+    background: rgba(96,165,250,0.12);
+    padding: 1px 5px; border-radius: 3px;
+  }
+  .qc-task .assign .tt-status {
+    font-size: 8px; color: var(--text-dim); margin-top: 2px;
+    display: block;
+  }
+  .qc-task .assign .tt-none {
+    font-size: 9px; color: var(--bad);
+    font-weight: 600;
+  }
+  .type-dsc { color: var(--info); }
+  .type-lod { color: var(--purple); }
+  .type-shf { color: var(--warn); }
+
+  /* ───────── Crane grid ───────── */
+  .crane-grid {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px;
+  }
+  .crane-cell {
+    border-radius: var(--radius-md);
+    padding: 6px 4px;
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; font-weight: 700;
+    border: 1px solid transparent;
+    position: relative;
+  }
+  .crane-cell.busy { background: var(--good-bg); color: #86efac; border-color: var(--good-border); }
+  .crane-cell.idle { background: var(--surface-3); color: var(--text-dim); border-color: var(--border); }
+  .crane-cell.maint { background: var(--bad-bg); color: #fca5a5; border-color: var(--bad-border); }
+  .crane-cell .sub { font-size: 8px; font-weight: 500; margin-top: 2px; display: block; }
+
+  /* charts */
+  .chart-box { height: 200px; position: relative; }
+
+  /* alerts */
+  .alert-row {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 8px 4px;
+    border-bottom: 1px dashed var(--border-soft);
+    font-size: 11px;
+  }
+  .alert-row:last-child { border: none; }
+  .alert-row .pin {
+    width: 22px; height: 22px; border-radius: var(--radius-md);
+    flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .alert-row .pin.warn { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-border); }
+  .alert-row .pin.bad  { background: var(--bad-bg);  color: var(--bad);  border: 1px solid var(--bad-border); }
+  .alert-row .pin.info { background: var(--info-bg); color: var(--info); border: 1px solid var(--info-border); }
+  .alert-row .pin .material-symbols-outlined { font-size: 13px; }
+  .alert-row .body .title { font-weight: 600; color: var(--text); }
+  .alert-row .body .meta { font-size: 10px; color: var(--text-mute); margin-top: 1px; }
+  .alert-row .body .time { font-family: 'JetBrains Mono', monospace; color: var(--text-dim); }
+
+  /* system status */
+  .sys-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--border-soft);
+    font-size: 11px;
+  }
+  .sys-row:last-child { border: none; }
+  .sys-name { color: var(--text-dim); display: inline-flex; align-items: center; gap: 6px; }
+  .sys-name .dot { width: 8px; height: 8px; border-radius: 999px; }
+  .sys-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 600; color: var(--text);
+  }
+  .pill {
+    font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px;
+    letter-spacing: 0.3px;
+  }
+  .pill.good { background: var(--good-bg); color: #86efac; border: 1px solid var(--good-border); }
+  .pill.warn { background: var(--warn-bg); color: #fcd34d; border: 1px solid var(--warn-border); }
+  .pill.bad  { background: var(--bad-bg);  color: #fca5a5; border: 1px solid var(--bad-border); }
+
+  /* TT util grid */
+  .util-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; margin-top: 6px; }
+  .util-cell {
+    height: 26px; border-radius: 2px;
+    background: var(--bg-soft);
+    border: 1px solid var(--border-soft);
+    position: relative; overflow: hidden;
+  }
+  .util-cell .fill {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: linear-gradient(180deg, var(--brand), var(--brand-deep));
+  }
+  .util-cell.warn .fill { background: linear-gradient(180deg, var(--warn), #b45309); }
+  .util-cell.bad .fill { background: linear-gradient(180deg, var(--bad), #991b1b); }
+  .util-cell.idle .fill { background: var(--text-faint); }
+
+  /* AI decision */
+  .ai-decision {
+    background: var(--bg-soft);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md);
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+  .ai-decision .head {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 6px;
+  }
+  .ai-decision .head .title {
+    font-weight: 600; font-family: 'JetBrains Mono', monospace; color: var(--text);
+  }
+  .ai-decision .cost-bar {
+    display: grid; grid-template-columns: 80px 1fr 50px; gap: 6px;
+    align-items: center; padding: 2px 0;
+    font-size: 10px;
+  }
+  .ai-decision .cost-bar .l { color: var(--text-dim); }
+  .ai-decision .cost-bar .v { text-align: right; font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--text); }
+  .ai-decision .cost-bar .bar-bg {
+    height: 5px; background: var(--surface-3); border-radius: 999px; overflow: hidden;
+  }
+  .ai-decision .cost-bar .bar-fill { height: 100%; border-radius: 999px; }
+  .cf-f1 .bar-fill { background: var(--info); }
+  .cf-f2 .bar-fill { background: var(--purple); }
+  .cf-f3 .bar-fill { background: var(--teal); }
+
+  /* footer */
+  .footer {
+    height: 26px;
+    background: var(--bg-soft);
+    color: var(--text-dim);
+    display: flex; align-items: center;
+    padding: 0 16px;
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    border-top: 1px solid var(--border);
+    gap: 18px;
+    flex-shrink: 0;
+  }
+  .footer .sep { color: var(--text-faint); }
+  .footer .item { display: inline-flex; align-items: center; gap: 4px; }
+  .footer .dot { width: 6px; height: 6px; border-radius: 999px; }
+  .footer .dot.g { background: var(--good); box-shadow: 0 0 4px var(--good); }
+  .footer .dot.y { background: var(--warn); }
+  .footer .spacer { flex: 1; }
+
+  @media (max-width: 1280px) {
+    .grid-kpi { grid-template-columns: repeat(3, 1fr); }
+    .qc-panel { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  /* ───────── View switching ───────── */
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* ───────── Language toggle ───────── */
+  body[data-lang="en"] .ko { display: none; }
+  body[data-lang="ko"] .en { display: none; }
+
+  .lang-toggle {
+    display: inline-flex;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: var(--radius-md);
+    padding: 2px;
+    margin-right: 10px;
+    overflow: hidden;
+  }
+  .lang-btn {
+    padding: 3px 10px;
+    font-size: 10px; font-weight: 700;
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    border-radius: 3px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.5px;
+    transition: all 0.15s;
+  }
+  .lang-btn:hover { color: var(--text); }
+  .lang-btn.active {
+    background: var(--brand);
+    color: white;
+  }
+
+
+  /* ───────── Data Requirements (F) ───────── */
+  .dr-summary {
+    display: grid; grid-template-columns: repeat(6, 1fr);
+    gap: 10px; margin-bottom: 12px;
+  }
+  .dr-sum-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 12px 14px;
+  }
+  .dr-sum-card .lbl {
+    font-size: 9px; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 0.4px; font-weight: 600;
+  }
+  .dr-sum-card .val {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 800; font-size: 24px;
+    color: var(--text); margin-top: 3px;
+    letter-spacing: -0.5px;
+  }
+  .dr-sum-card .sub {
+    font-size: 10px; color: var(--text-mute); margin-top: 2px;
+  }
+
+  .dr-filter {
+    display: flex; gap: 6px; align-items: center;
+    margin-bottom: 10px;
+    padding: 8px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+  }
+  .dr-filter .filt-btn {
+    padding: 4px 10px;
+    font-size: 11px; font-weight: 500;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+  .dr-filter .filt-btn.active { background: var(--brand-grad-2); color: white; border-color: var(--brand-deep); }
+  .dr-filter .spacer { flex: 1; }
+
+  .dr-category {
+    margin-bottom: 14px;
+  }
+  .dr-cat-head {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 8px;
+    padding: 0 4px;
+  }
+  .dr-cat-head .icon {
+    width: 28px; height: 28px; border-radius: var(--radius-md);
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--brand-grad-1); color: white;
+  }
+  .dr-cat-head h2 {
+    font-family: 'Manrope', sans-serif;
+    font-size: 15px; font-weight: 800;
+    color: var(--text);
+  }
+  .dr-cat-head .count {
+    font-size: 11px; color: var(--text-dim);
+    background: var(--surface-2);
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+  }
+
+  .dr-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  }
+  @media (max-width: 1280px) {
+    .dr-grid { grid-template-columns: repeat(2, 1fr); }
+    .dr-summary { grid-template-columns: repeat(3, 1fr); }
+  }
+
+  .dr-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 12px;
+    display: flex; flex-direction: column;
+    gap: 6px;
+    position: relative;
+  }
+  .dr-card.p0 { border-left: 3px solid var(--bad); }
+  .dr-card.p1 { border-left: 3px solid var(--warn); }
+  .dr-card.p2 { border-left: 3px solid var(--text-faint); }
+
+  .dr-head {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 6px;
+  }
+  .dr-id {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; font-weight: 700;
+    color: var(--text-dim);
+  }
+  .dr-name {
+    font-size: 12px; font-weight: 700;
+    color: var(--text);
+    line-height: 1.3;
+    flex: 1;
+  }
+  .dr-badges { display: flex; gap: 4px; flex-shrink: 0; }
+  .dr-pill {
+    font-size: 9px; font-weight: 700;
+    padding: 2px 6px; border-radius: 3px;
+    letter-spacing: 0.3px;
+  }
+  .dr-pill.p0 { background: var(--bad-bg); color: #fca5a5; border: 1px solid var(--bad-border); }
+  .dr-pill.p1 { background: var(--warn-bg); color: #fcd34d; border: 1px solid var(--warn-border); }
+  .dr-pill.p2 { background: var(--surface-3); color: var(--text-dim); border: 1px solid var(--border); }
+  .dr-pill.tos { background: var(--info-bg); color: #93c5fd; border: 1px solid var(--info-border); }
+  .dr-pill.gps { background: var(--good-bg); color: #86efac; border: 1px solid var(--good-border); }
+  .dr-pill.ext { background: var(--purple-bg); color: #c4b5fd; border: 1px solid rgba(167,139,250,0.35); }
+  .dr-pill.ai  { background: rgba(45,212,191,0.15); color: #5eead4; border: 1px solid rgba(45,212,191,0.35); }
+
+  .dr-row {
+    display: flex; gap: 6px;
+    font-size: 10px;
+    padding: 1px 0;
+  }
+  .dr-row .k {
+    color: var(--text-mute);
+    min-width: 56px;
+    flex-shrink: 0;
+    font-weight: 500;
+  }
+  .dr-row .v {
+    color: var(--text-dim);
+    flex: 1;
+    line-height: 1.4;
+  }
+  .dr-row .v.mono {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text);
+    font-size: 10px;
+  }
+  .dr-status {
+    margin-top: 4px; padding-top: 6px;
+    border-top: 1px dashed var(--border-soft);
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 10px;
+  }
+  .dr-status .check {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    color: var(--warn);
+  }
+  .dr-status .check.ok { color: #86efac; }
+  .dr-status .check.no { color: #fca5a5; }
+  .dr-status .check .material-symbols-outlined { font-size: 13px; }
+
+  .dr-note {
+    margin-top: 4px;
+    padding: 6px 8px;
+    background: var(--bg-soft);
+    border: 1px dashed var(--border-soft);
+    border-radius: 4px;
+    font-size: 10px;
+    color: var(--text-dim);
+    line-height: 1.4;
+  }
+  .dr-note b { color: var(--warn); }
+
+
+  /* ───────── KPI Live (B) ───────── */
+  .kpi-big {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 14px 16px;
+    display: flex; flex-direction: column;
+    min-height: 200px;
+    position: relative;
+  }
+  .kpi-big.primary {
+    border-left: 3px solid var(--warn);
+  }
+  .kpi-big-head { display:flex; justify-content:space-between; align-items:flex-start; }
+  .kpi-big-head .name { font-size: 13px; font-weight: 700; color: var(--text); }
+  .kpi-big-head .badge {
+    font-size: 9px; font-weight: 800; letter-spacing: 0.5px;
+    padding: 2px 6px; border-radius: 3px;
+    background: var(--info-bg); color: var(--info); border: 1px solid var(--info-border);
+  }
+  .kpi-big.primary .badge {
+    background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-border);
+  }
+  .kpi-big .big-val {
+    font-family: 'Manrope', sans-serif;
+    font-size: 40px; font-weight: 800;
+    letter-spacing: -1px; line-height: 1.1;
+    margin: 8px 0 4px;
+    color: var(--text);
+  }
+  .kpi-big .big-val .unit { font-size: 14px; color: var(--text-mute); font-weight: 500; margin-left: 4px; }
+  .kpi-big .meta-grid {
+    display:grid; grid-template-columns:repeat(3,1fr); gap:8px;
+    font-size: 10px; color: var(--text-dim);
+    padding: 8px 0; border-top: 1px dashed var(--border-soft);
+    margin-top: 8px;
+  }
+  .kpi-big .meta-grid .lbl { font-size: 9px; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 2px; }
+  .kpi-big .meta-grid .v { font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--text); font-size: 11px; }
+  .kpi-big .trend-mini { height: 50px; position: relative; margin-top: 6px; }
+  .kpi-big .trend-mini canvas { position: absolute !important; top:0;left:0; width:100% !important; height:100% !important; }
+  .kpi-big .sig-row {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 10px; margin-top: 6px;
+    color: var(--text-dim);
+  }
+  .kpi-big .pval {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    padding: 1px 6px; border-radius: 3px;
+  }
+  .kpi-big .pval.good { background: var(--good-bg); color: #86efac; }
+  .kpi-big .pval.warn { background: var(--warn-bg); color: #fcd34d; }
+
+  /* Heatmap */
+  .heatmap-grid {
+    display: grid; grid-template-columns: 50px repeat(24, 1fr); gap: 2px;
+    font-size: 9px; color: var(--text-dim);
+  }
+  .hm-row-label { padding: 4px 6px; font-weight: 600; text-align: right; }
+  .hm-cell {
+    height: 22px; border-radius: 2px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+  }
+  .hm-col-label { font-size: 9px; text-align: center; color: var(--text-mute); padding: 2px 0; }
+
+  /* ───────── AI Health (C) ───────── */
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 12px 14px;
+  }
+  .stat-card .label { font-size: 10px; color: var(--text-dim); font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
+  .stat-card .val {
+    font-family: 'Manrope', sans-serif;
+    font-size: 26px; font-weight: 800;
+    color: var(--text);
+    margin: 4px 0 2px;
+    letter-spacing: -0.5px;
+  }
+  .stat-card .val .unit { font-size: 12px; font-weight: 500; color: var(--text-mute); margin-left: 4px; }
+  .stat-card .delta { font-size: 10px; font-weight: 600; }
+  .stat-card .delta.good { color: #86efac; }
+  .stat-card .delta.warn { color: #fcd34d; }
+
+  /* Decision table */
+  .dec-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .dec-table th {
+    text-align: left; padding: 6px 8px;
+    font-size: 9px; font-weight: 700; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 0.4px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+  }
+  .dec-table td {
+    padding: 6px 8px;
+    border-bottom: 1px dashed var(--border-soft);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+  }
+  .dec-table tr:hover td { background: rgba(96,165,250,0.05); }
+  .dec-table .ok { color: #86efac; }
+  .dec-table .fb { color: #fcd34d; }
+
+  /* UAT checklist (D) */
+  .check-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 14px 16px;
+  }
+  .check-cat {
+    font-family: 'Manrope', sans-serif;
+    font-size: 14px; font-weight: 800;
+    margin-bottom: 8px;
+    color: var(--text);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .check-cat .stat { font-size: 11px; }
+  .check-item {
+    display: grid; grid-template-columns: 24px 1fr auto auto; gap: 10px;
+    align-items: center;
+    padding: 6px 0;
+    font-size: 11px;
+    border-bottom: 1px dashed var(--border-soft);
+  }
+  .check-item:last-child { border: none; }
+  .check-item .ico {
+    width: 22px; height: 22px; border-radius: 999px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .check-item .ico.pass { background: var(--good-bg); color: var(--good); border: 1px solid var(--good-border); }
+  .check-item .ico.warn { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-border); }
+  .check-item .ico.fail { background: var(--bad-bg); color: var(--bad); border: 1px solid var(--bad-border); }
+  .check-item .ico .material-symbols-outlined { font-size: 13px; }
+  .check-item .desc .top { font-weight: 600; color: var(--text); }
+  .check-item .desc .bot { font-size: 9px; color: var(--text-mute); margin-top: 1px; }
+  .check-item .target { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-dim); }
+  .check-item .actual { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; }
+  .check-item .actual.good { color: #86efac; }
+  .check-item .actual.warn { color: #fcd34d; }
+  .check-item .actual.bad { color: #fca5a5; }
+
+  /* Compare table */
+  .compare-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .compare-table th, .compare-table td {
+    padding: 7px 8px; text-align: left;
+    border-bottom: 1px dashed var(--border-soft);
+  }
+  .compare-table th { font-size: 9px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.4px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  .compare-table td.mono { font-family: 'JetBrains Mono', monospace; }
+  .compare-table .diff-pos { color: #86efac; font-weight: 700; }
+  .compare-table .diff-neg { color: #fca5a5; font-weight: 700; }
+
+  /* System topology (E) */
+  .topo-card { min-height: 320px; }
+  .topo-body { padding: 16px; background: #0a1428; }
+  .topo-svg { width: 100%; height: 280px; display: block; }
+
+  /* Berth gantt */
+  .gantt {
+    display: grid; grid-template-columns: 70px 1fr;
+    gap: 8px;
+    font-size: 10px;
+  }
+  .gantt-row { display: contents; }
+  .gantt-berth {
+    padding: 8px 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    color: var(--text-dim);
+    background: var(--surface-2);
+    border-radius: var(--radius-md);
+    text-align: center;
+  }
+  .gantt-track {
+    position: relative;
+    height: 32px;
+    background: var(--bg-soft);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md);
+  }
+  .gantt-block {
+    position: absolute;
+    top: 3px; bottom: 3px;
+    border-radius: 3px;
+    padding: 4px 8px;
+    display: flex; align-items: center;
+    font-size: 10px; font-weight: 600;
+    color: white;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .gantt-block.curr { background: linear-gradient(90deg, var(--brand-grad-2), var(--brand-deep)); border: 1px solid var(--brand); }
+  .gantt-block.plan { background: var(--surface-3); color: var(--text-dim); border: 1px dashed var(--border-strong); }
+  .gantt-block.done { background: rgba(34,197,94,0.25); color: #86efac; border: 1px solid var(--good-border); }
+  .gantt-axis {
+    display: grid; grid-template-columns: 70px 1fr;
+    gap: 8px;
+    font-size: 9px; color: var(--text-mute);
+    margin-bottom: 4px;
+  }
+  .gantt-axis-line {
+    position: relative;
+    display: flex; justify-content: space-between;
+  }
+  .gantt-axis-line span { padding: 0 2px; }
+
+</style>
+</head>
+<body data-lang="en">
+
+<!-- ───────── HEADER ───────── -->
+<div class="header">
+  <div class="logo">CLT<span class="accent">·</span>AI TT Dispatcher</div>
+  <div class="spacer"></div>
+
+  <div class="lang-toggle">
+    <button class="lang-btn active" data-lang="en">EN</button>
+    <button class="lang-btn" data-lang="ko">KO</button>
+  </div>
+  <div class="status-pill">
+    <span class="dot"></span>
+    <span class="en">AI Dispatch · Normal</span>
+    <span class="ko">AI 배차 · 정상</span>
+  </div>
+  <div class="clock" id="clock">2026-05-14 14:32:08 MYT</div>
+  <div class="header-icon"><span class="material-symbols-outlined">notifications</span><span class="badge"></span></div>
+  <div class="header-icon"><span class="material-symbols-outlined">settings</span></div>
+  <div class="user">
+    <div class="avatar">TK</div>
+    <div>
+      <span class="en">TK Kim</span>
+      <span class="ko">김태광</span>
+      <span style="opacity:0.6">· CLT</span>
+    </div>
+  </div>
+</div>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="side-item active" title="Live Operations">
+      <span class="material-symbols-outlined">dashboard</span>
+      <span class="label">LIVE</span>
+    </div>
+    <div class="side-item" title="KPI Monitoring">
+      <span class="material-symbols-outlined">monitoring</span>
+      <span class="label">KPI</span>
+    </div>
+    <div class="side-item" title="AI Dispatch Health">
+      <span class="material-symbols-outlined">network_intelligence</span>
+      <span class="label">AI</span>
+    </div>
+    <div class="side-item" title="UAT Validation">
+      <span class="material-symbols-outlined">compare_arrows</span>
+      <span class="label">UAT</span>
+    </div>
+    <div class="side-item" title="System status">
+      <span class="material-symbols-outlined">dns</span>
+      <span class="label">SYS</span>
+    </div>
+    <div style="flex:1"></div>
+    <div class="side-item" title="Help">
+      <span class="material-symbols-outlined">help</span>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- TABS -->
+    <div class="tabs">
+      <div class="tab active"><span class="key">A</span><span class="en">Live Operations</span><span class="ko">실시간</span><span class="en">Live</span> <span class="ko">작업 현황</span></div>
+      <div class="tab"><span class="key">B</span><span class="en">KPI Live</span><span class="ko">KPI Live</span></div>
+      <div class="tab"><span class="key">C</span><span class="en">AI Dispatch Health</span><span class="ko">AI 배차 헬스</span></div>
+      <div class="tab"><span class="key">D</span><span class="en">UAT Validation</span><span class="ko">검증 비교</span></div>
+      <div class="tab"><span class="key">E</span><span class="en">System</span><span class="ko">시스템 상태</span></div>
+
+      <div class="spacer"></div>
+      <div class="toolbar">
+        <button class="range-btn active">Live</button>
+        <button class="range-btn">1H</button>
+        <button class="range-btn">8H</button>
+        <button class="range-btn">24H</button>
+        <button class="range-btn">Shift</button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <!-- VIEW A: <span class="ko">실시간 작업 현황</span><span class="en">Live Operations</span>                                          -->
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <div class="view view-A active">
+
+      <!-- TERMINAL OVERVIEW (global TT pool · multi-vessel) -->
+      <div class="vessel-card" style="grid-template-columns: repeat(5, 1fr);">
+        <div>
+          <div class="lbl"><span class="en">Active Vessels</span><span class="ko">진행 항차</span></div>
+          <div class="val">3</div>
+          <div style="font-size:9px;color:#94a3b8;margin-top:1px;">SEMARANG · COMMITMENT · CMA PUTRA</div>
+        </div>
+        <div>
+          <div class="lbl"><span class="en">Active QCs</span><span class="ko">활성 QC</span></div>
+          <div class="val">8 / 12</div>
+          <div style="font-size:9px;color:#94a3b8;margin-top:1px;">across 3 vessels</div>
+        </div>
+        <div>
+          <div class="lbl"><span class="en">Global TT Pool</span><span class="ko">글로벌 TT 풀</span></div>
+          <div class="val">50</div>
+          <div style="font-size:9px;color:#94a3b8;margin-top:1px;">busy 37 · idle 9 · maint 0</div>
+        </div>
+        <div>
+          <div class="lbl"><span class="en">Throughput (today)</span><span class="ko">오늘 처리량</span></div>
+          <div class="val">3,892 moves</div>
+          <div style="font-size:9px;color:#94a3b8;margin-top:1px;">target 5,400 · 72%</div>
+        </div>
+        <div>
+          <div class="lbl"><span class="en">Shift Remaining</span><span class="ko">교대 잔여</span></div>
+          <div class="val">3h 28m</div>
+          <div style="font-size:9px;color:#94a3b8;margin-top:1px;">D-Shift → 18:00</div>
+        </div>
+      </div>
+
+      <!-- Active vessels strip -->
+      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; margin-bottom:12px;">
+        <div style="background:var(--surface); border:1px solid var(--border); border-left:3px solid #60a5fa; border-radius:var(--radius-md); padding:8px 12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-weight:700; font-size:12px; color:var(--text);">MV MAERSK SEMARANG</div>
+            <div style="font-family:JetBrains Mono; font-size:10px; color:var(--text-dim);">Berth 7-9</div>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:3px;">
+            <div style="font-size:10px; color:var(--text-mute);">QC1·QC2·QC4 · 09:15→18:30</div>
+            <div style="font-family:JetBrains Mono; font-size:10px; color:#86efac; font-weight:600;">2,438 / 3,810 · 64%</div>
+          </div>
+        </div>
+        <div style="background:var(--surface); border:1px solid var(--border); border-left:3px solid #a78bfa; border-radius:var(--radius-md); padding:8px 12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-weight:700; font-size:12px; color:var(--text);">MV ONE COMMITMENT</div>
+            <div style="font-family:JetBrains Mono; font-size:10px; color:var(--text-dim);">Berth 4-6</div>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:3px;">
+            <div style="font-size:10px; color:var(--text-mute);">QC5·QC6·QC7 · 07:00→16:30</div>
+            <div style="font-family:JetBrains Mono; font-size:10px; color:#86efac; font-weight:600;">1,127 / 1,540 · 73%</div>
+          </div>
+        </div>
+        <div style="background:var(--surface); border:1px solid var(--border); border-left:3px solid #2dd4bf; border-radius:var(--radius-md); padding:8px 12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-weight:700; font-size:12px; color:var(--text);">MV CMA CGM PUTRA</div>
+            <div style="font-family:JetBrains Mono; font-size:10px; color:var(--text-dim);">Berth 1-3</div>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:3px;">
+            <div style="font-size:10px; color:var(--text-mute);">QC9·QC10 · 11:00→21:00</div>
+            <div style="font-family:JetBrains Mono; font-size:10px; color:#fcd34d; font-weight:600;">327 / 2,200 · 15%</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KPI STRIP (full names, fixed height) -->
+      <div class="grid grid-kpi" style="margin-bottom:12px;">
+        <div class="kpi primary">
+          <div class="kpi-label"><span class="ko">작업당 공차 이동 거리</span><span class="en">Empty Travel Distance / Job</span></div>
+          <div class="kpi-value-row">
+            <span class="kpi-value">0.84</span>
+            <span class="kpi-unit">km/<span class="ko">작업</span><span class="en">Job</span></span>
+          </div>
+          <div class="kpi-delta good">
+            <span class="material-symbols-outlined" style="font-size:13px;">arrow_downward</span>
+            12.3%
+            <span class="vs">vs baseline 0.96</span>
+          </div>
+          <div class="spark-wrap"><canvas id="sp-empty"></canvas></div>
+        </div>
+
+        <div class="kpi">
+          <div class="kpi-label"><span class="ko">공차 이동 비율</span><span class="en">Empty Travel Ratio</span></div>
+          <div class="kpi-value-row">
+            <span class="kpi-value">37.1</span>
+            <span class="kpi-unit">%</span>
+          </div>
+          <div class="kpi-delta good">
+            <span class="material-symbols-outlined" style="font-size:13px;">arrow_downward</span>
+            5.2pp
+            <span class="vs">vs 42.3</span>
+          </div>
+          <div class="spark-wrap"><canvas id="sp-emptyr"></canvas></div>
+        </div>
+
+        <div class="kpi">
+          <div class="kpi-label"><span class="ko">QC 크레인 대기 시간</span><span class="en">QC Crane Wait Time</span></div>
+          <div class="kpi-value-row">
+            <span class="kpi-value">14.2</span>
+            <span class="kpi-unit"><span class="ko">초/</span><span class="en">s/</span><span class="ko">핸드오버</span><span class="en">Handover</span></span>
+          </div>
+          <div class="kpi-delta good">
+            <span class="material-symbols-outlined" style="font-size:13px;">arrow_downward</span>
+            18.6%
+            <span class="vs">vs 17.4</span>
+          </div>
+          <div class="spark-wrap"><canvas id="sp-craneq"></canvas></div>
+        </div>
+
+        <div class="kpi">
+          <div class="kpi-label"><span class="ko">QC 시간당 처리 (MPH)</span><span class="en">QC Moves Per Hour</span></div>
+          <div class="kpi-value-row">
+            <span class="kpi-value">31.8</span>
+            <span class="kpi-unit">move/hr</span>
+          </div>
+          <div class="kpi-delta good">
+            <span class="material-symbols-outlined" style="font-size:13px;">arrow_upward</span>
+            +6.7%
+            <span class="vs">vs 29.8</span>
+          </div>
+          <div class="spark-wrap"><canvas id="sp-mph"></canvas></div>
+        </div>
+
+        <div class="kpi">
+          <div class="kpi-label"><span class="ko">TT 사이클 타임</span><span class="en">TT Cycle Time</span></div>
+          <div class="kpi-value-row">
+            <span class="kpi-value">847</span>
+            <span class="kpi-unit"><span class="ko">초</span><span class="en">s</span></span>
+          </div>
+          <div class="kpi-delta good">
+            <span class="material-symbols-outlined" style="font-size:13px;">arrow_downward</span>
+            8.4%
+            <span class="vs">vs 925</span>
+          </div>
+          <div class="spark-wrap"><canvas id="sp-cycle"></canvas></div>
+        </div>
+
+        <div class="kpi">
+          <div class="kpi-label"><span class="ko">TT 장비 활용률</span><span class="en">TT Utilization</span></div>
+          <div class="kpi-value-row">
+            <span class="kpi-value">78.4</span>
+            <span class="kpi-unit">%</span>
+          </div>
+          <div class="kpi-delta good">
+            <span class="material-symbols-outlined" style="font-size:13px;">arrow_upward</span>
+            +4.1pp
+            <span class="vs">vs 74.3</span>
+          </div>
+          <div class="spark-wrap"><canvas id="sp-util"></canvas></div>
+        </div>
+      </div>
+
+      <!-- QC SEQUENCE & TT ASSIGNMENT (NEW — FEATURED) -->
+      <div class="card" style="margin-bottom:12px;">
+        <div class="card-head">
+          <h3>
+            <span class="material-symbols-outlined">view_timeline</span>
+            <span class="ko">QC 시퀀스 & TT 배차 현황</span><span class="en">QC Sequence & TT Dispatch (Global Pool)</span> — <span class="en">across all active vessels</span><span class="ko">전 항차 통합</span>
+          </h3>
+          <div class="head-sub">
+            <span class="pill good"><span class="ko">진행 중</span><span class="en">In progress</span> 3</span>&nbsp;
+            <span class="pill warn"><span class="ko">정비</span><span class="en">Maint</span> 1</span>&nbsp;
+            <span style="color:var(--text-dim);"><span class="ko">갱신</span><span class="en">Updated</span>: 2<span class="ko">초 전</span><span class="en">s ago</span></span>
+          </div>
+        </div>
+        <div class="card-body" style="padding:14px;">
+          <div class="qc-panel">
+
+            <!-- QC1 -->
+            <div class="qc-col">
+              <div class="qc-head">
+                <span class="id busy"><span class="dot"></span>QC1 · <span class="en">Discharge</span><span class="ko">양하</span><span style="font-size:9px;color:var(--text-mute);font-weight:500;margin-left:6px;">SEMARANG</span></span>
+                <span class="mph">MPH <span class="v">28.4</span></span>
+              </div>
+              <div class="qc-progress"><span>Bay 22, Row 4-7</span><span class="mono">612 / 1,142</span></div>
+              <div class="qc-progress-bar"><div class="fill" style="width:53.6%"></div></div>
+
+              <div class="qc-task now">
+                <span class="seq">NOW</span>
+                <div class="body">
+                  <div class="top"><span class="type-dsc">DSC</span> K03-1145</div>
+                  <div class="bot">40ft · Bay 22-R5 → K-03 · ETA 14:34:22</div>
+                </div>
+                <div class="assign">
+                  <span class="tt">TT-23</span>
+                  <span class="tt-status"><span class="ko">핸드오버 중</span><span class="en">Handover</span></span>
+                </div>
+              </div>
+
+              <div class="qc-task next">
+                <span class="seq">NEXT</span>
+                <div class="body">
+                  <div class="top"><span class="type-dsc">DSC</span> K03-1146</div>
+                  <div class="bot">40ft · Bay 22-R6 → K-03</div>
+                </div>
+                <div class="assign">
+                  <span class="tt">TT-07</span>
+                  <span class="tt-status"><span class="ko">이동 중</span><span class="en">Moving</span> (52%)</span>
+                </div>
+              </div>
+
+              <div class="qc-task queued">
+                <span class="seq">+2</span>
+                <div class="body">
+                  <div class="top"><span class="type-dsc">DSC</span> K03-1147</div>
+                  <div class="bot">20ft · Bay 22-R6 → K-03</div>
+                </div>
+                <div class="assign">
+                  <span class="tt">TT-31</span>
+                  <span class="tt-status"><span class="ko">유휴 → 출발 대기</span><span class="en">Idle → ready</span></span>
+                </div>
+              </div>
+
+              <div class="qc-task queued">
+                <span class="seq">+3</span>
+                <div class="body">
+                  <div class="top"><span class="type-dsc">DSC</span> K03-1148</div>
+                  <div class="bot">40ft · Bay 22-R7 → K-03</div>
+                </div>
+                <div class="assign">
+                  <span class="tt">TT-14</span>
+                  <span class="tt-status"><span class="ko">이전 작업 완료 중</span><span class="en">Completing prior job</span></span>
+                </div>
+              </div>
+
+              <div class="qc-task unassigned">
+                <span class="seq">+4</span>
+                <div class="body">
+                  <div class="top"><span class="type-dsc">DSC</span> K03-1149</div>
+                  <div class="bot">40ft · Bay 22-R7 → K-03</div>
+                </div>
+                <div class="assign">
+                  <span class="tt-none"><span class="ko">미배차</span><span class="en">Unassigned</span></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- QC2 -->
+            <div class="qc-col">
+              <div class="qc-head">
+                <span class="id busy"><span class="dot"></span>QC2 · <span class="en">Loading</span><span class="ko">적하</span><span style="font-size:9px;color:var(--text-mute);font-weight:500;margin-left:6px;">COMMITMENT</span></span>
+                <span class="mph">MPH <span class="v">31.7</span></span>
+              </div>
+              <div class="qc-progress"><span>Bay 30, Row 2-5</span><span class="mono">487 / 924</span></div>
+              <div class="qc-progress-bar"><div class="fill" style="width:52.7%"></div></div>
+
+              <div class="qc-task now">
+                <span class="seq">NOW</span>
+                <div class="body">
+                  <div class="top"><span class="type-lod">LOD</span> L05-0822</div>
+                  <div class="bot">20ft · L-05 → Bay 30-R3 · ETA 14:34:01</div>
+                </div>
+                <div class="assign">
+                  <span class="tt">TT-12</span>
+                  <span class="tt-status"><span class="ko">크레인 도착</span><span class="en">At crane</span></span>
+                </div>
+              </div>
+
+              <div class="qc-task next">
+                <span class="seq">NEXT</span>
+                <div class="body">
+                  <div class="top"><span class="type-lod">LOD</span> L05-0823</div>
+                  <div class="bot">20ft · L-05 → Bay 30-R3</div>
+                </div>
+                <div class="assign">
+                  <span class="tt">TT-41</span>
+                  <span class="tt-status"><span class="ko">이동 중</span><span class="en">Moving</span> (71%)</span>
+                </div>
+              </div>
+
+              <div class="qc-task queued">
+                <span class="seq">+2</span>
+                <div class="body">
+                  <div class="top"><span class="type-lod">LOD</span> L05-0824</div>
+                  <div class="bot">40ft · L-05 → Bay 30-R4</div>
+                </div>
+                <div class="assign">
+                  <span class="tt">TT-08</span>
+                  <span class="tt-status"><span class="ko">유휴 → 출발 대기</span><span class="en">Idle → ready</span></span>
+                </div>
+              </div>
+
+              <div class="qc-task queued">
+                <span class="seq">+3</span>
+                <div class="body">
+                  <div class="top"><span class="type-lod">LOD</span> L03-1027</div>
+                  <div class="bot">40ft · L-03 → Bay 30-R4</div>
+                </div>
+                <div class="assign">
+                  <span class="tt">TT-19</span>
+                  <span class="tt-status"><span class="ko">배차 검토 중</span><span class="en">Under review</span></span>
+                </div>
+              </div>
+
+              <div class="qc-task queued">
+                <span class="seq">+4</span>
+                <div class="body">
+                  <div class="top"><span class="type-lod">LOD</span> L03-1028</div>
+                  <div class="bot">20ft · L-03 → Bay 30-R5</div>
+                </div>
+                <div class="assign">
+                  <span class="tt">TT-37</span>
+                  <span class="tt-status"><span class="ko">유휴 → 출발 대기</span><span class="en">Idle → ready</span></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- QC3 (MAINTENANCE) -->
+            <div class="qc-col maint">
+              <div class="qc-head">
+                <span class="id maint"><span class="dot"></span>QC3 · <span class="en">Maint</span><span class="ko">정비</span><span style="font-size:9px;color:var(--text-mute);font-weight:500;margin-left:6px;">SEMARANG</span></span>
+                <span class="mph" style="color:var(--bad);">DOWN</span>
+              </div>
+              <div class="qc-progress"><span>Hoist <span class="ko">점검</span><span class="en">inspection</span> — 14:18 <span class="ko">시작</span><span class="en">started</span></span><span class="mono">357 / 870</span></div>
+              <div class="qc-progress-bar maint"><div class="fill" style="width:41.0%"></div></div>
+
+              <div class="qc-task" style="background:var(--bad-bg);border:1px solid var(--bad-border);">
+                <span class="seq" style="background:var(--bad);color:white;">!</span>
+                <div class="body">
+                  <div class="top" style="color:#fca5a5;"><span class="ko">정비 진행 중</span><span class="en">Maintenance</span></div>
+                  <div class="bot" style="color:var(--text-dim);"><span class="ko">예상 복구</span><span class="en">Recovery ETA</span>: 15:00 (28<span class="ko">분 후</span><span class="en">min later</span>)</div>
+                </div>
+                <div class="assign">
+                  <span class="tt-status" style="color:#fca5a5;"><span class="ko">담당</span><span class="en">Engineer</span>: K. Hisham</span>
+                </div>
+              </div>
+
+              <div class="qc-task queued" style="opacity:0.6;">
+                <span class="seq"><span class="ko">대기</span><span class="en">wait</span></span>
+                <div class="body">
+                  <div class="top"><span class="type-dsc">DSC</span> K06-0418</div>
+                  <div class="bot">Twin · <span class="ko">복구 후 자동 재개</span><span class="en">Auto-resume after recovery</span></div>
+                </div>
+                <div class="assign">
+                  <span class="tt-none"><span class="ko">홀드</span><span class="en">Hold</span></span>
+                </div>
+              </div>
+
+              <div class="qc-task queued" style="opacity:0.5;">
+                <span class="seq"><span class="ko">대기</span><span class="en">wait</span></span>
+                <div class="body">
+                  <div class="top"><span class="type-dsc">DSC</span> K06-0419</div>
+                  <div class="bot">40ft · <span class="ko">복구 후 자동 재개</span><span class="en">Auto-resume after recovery</span></div>
+                </div>
+                <div class="assign">
+                  <span class="tt-none"><span class="ko">홀드</span><span class="en">Hold</span></span>
+                </div>
+              </div>
+
+              <div style="font-size:10px;color:var(--text-dim);text-align:center;padding:4px 0;margin-top:auto;">
+                + <span class="ko">18건</span><span class="en">18 cases</span> <span class="ko">홀드 중</span><span class="en">on hold</span>
+              </div>
+            </div>
+
+            <!-- QC4 -->
+            <div class="qc-col">
+              <div class="qc-head">
+                <span class="id busy"><span class="dot"></span>QC4 · <span class="en">Discharge</span><span class="ko">양하</span><span style="font-size:9px;color:var(--text-mute);font-weight:500;margin-left:6px;">CMA PUTRA</span></span>
+                <span class="mph">MPH <span class="v">34.1</span></span>
+              </div>
+              <div class="qc-progress"><span>Bay 38, Row 1-4</span><span class="mono">524 / 874</span></div>
+              <div class="qc-progress-bar"><div class="fill" style="width:60.0%"></div></div>
+
+              <div class="qc-task now">
+                <span class="seq">NOW</span>
+                <div class="body">
+                  <div class="top"><span class="type-dsc">DSC</span> K06-0418</div>
+                  <div class="bot">Twin · Bay 38-R2 → K-06 · ETA 14:34:48</div>
+                </div>
+                <div class="assign">
+                  <span class="tt">TT-11</span>
+                  <span class="tt-status"><span class="ko">크레인 대기</span><span class="en">Crane wait</span> <span class="ko">(4초)</span><span class="en">(4s)</span></span>
+                </div>
+              </div>
+
+              <div class="qc-task next">
+                <span class="seq">NEXT</span>
+                <div class="body">
+                  <div class="top"><span class="type-dsc">DSC</span> K05-0712</div>
+                  <div class="bot">20ft · Bay 38-R2 → K-05</div>
+                </div>
+                <div class="assign">
+                  <span class="tt">TT-42</span>
+                  <span class="tt-status"><span class="ko">이동 중</span><span class="en">Moving</span> (33%)</span>
+                </div>
+              </div>
+
+              <div class="qc-task queued">
+                <span class="seq">+2</span>
+                <div class="body">
+                  <div class="top"><span class="type-dsc">DSC</span> K06-0420</div>
+                  <div class="bot">40ft · Bay 38-R3 → K-06</div>
+                </div>
+                <div class="assign">
+                  <span class="tt">TT-28</span>
+                  <span class="tt-status"><span class="ko">유휴 → 출발 대기</span><span class="en">Idle → ready</span></span>
+                </div>
+              </div>
+
+              <div class="qc-task queued">
+                <span class="seq">+3</span>
+                <div class="body">
+                  <div class="top"><span class="type-dsc">DSC</span> K06-0421</div>
+                  <div class="bot">40ft · Bay 38-R3 → K-06</div>
+                </div>
+                <div class="assign">
+                  <span class="tt">TT-16</span>
+                  <span class="tt-status"><span class="ko">이전 작업 완료 중</span><span class="en">Completing prior job</span></span>
+                </div>
+              </div>
+
+              <div class="qc-task queued">
+                <span class="seq">+4</span>
+                <div class="body">
+                  <div class="top"><span class="type-dsc">DSC</span> K05-0713</div>
+                  <div class="bot">20ft · Bay 38-R4 → K-05</div>
+                </div>
+                <div class="assign">
+                  <span class="tt">TT-04</span>
+                  <span class="tt-status"><span class="ko">유휴 → 출발 대기</span><span class="en">Idle → ready</span></span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- MAIN ROW: MAP + RIGHT PANELS -->
+      <div class="grid grid-main" style="margin-bottom:12px;">
+
+        <!-- Terminal Map -->
+        <div class="card map-card">
+          <div class="card-head">
+            <h3><span class="material-symbols-outlined">map</span><span class="ko">터미널 실시간 맵</span><span class="en">Terminal Live Map</span> <span style="color:var(--text-mute);font-weight:400;font-size:10px;margin-left:6px;">GPS 1.2s <span class="ko">지연</span><span class="en">lag</span></span></h3>
+            <div class="head-sub"><span class="ko">표시 중:</span><span class="en">Showing:</span> TT 50 · QC 4 · YC 14</div>
+          </div>
+          <div class="map-body">
+            <svg class="map-svg" viewBox="0 0 700 340" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <pattern id="sea" patternUnits="userSpaceOnUse" width="40" height="40">
+                  <rect width="40" height="40" fill="#0e1d3a"/>
+                  <path d="M0 20 Q10 14 20 20 T 40 20" stroke="#1e3a5f" stroke-width="0.6" fill="none"/>
+                </pattern>
+              </defs>
+              <rect width="700" height="60" fill="url(#sea)"/>
+
+              <!-- Quay -->
+              <rect x="0" y="60" width="700" height="22" fill="#1e293b"/>
+              <rect x="0" y="60" width="700" height="2" fill="#0f172a"/>
+
+              <!-- Vessels (3 berths) -->
+              <!-- B1-3: CMA PUTRA -->
+              <rect x="20" y="22" width="140" height="38" rx="4" fill="#0f172a" stroke="#2dd4bf"/>
+              <rect x="28" y="28" width="124" height="26" rx="2" fill="#1e293b"/>
+              <text x="90" y="44" fill="#5eead4" font-size="9" font-family="Inter" font-weight="600" text-anchor="middle">MV CMA PUTRA</text>
+              <text x="90" y="55" fill="#94a3b8" font-size="7" font-family="JetBrains Mono" text-anchor="middle">B1-3 · 15%</text>
+              <polygon points="160,22 180,40 160,60" fill="#0f172a" stroke="#2dd4bf"/>
+
+              <!-- B4-6: ONE COMMITMENT -->
+              <rect x="200" y="22" width="180" height="38" rx="4" fill="#0f172a" stroke="#a78bfa"/>
+              <rect x="208" y="28" width="164" height="26" rx="2" fill="#1e293b"/>
+              <text x="290" y="44" fill="#c4b5fd" font-size="9" font-family="Inter" font-weight="600" text-anchor="middle">MV ONE COMMITMENT</text>
+              <text x="290" y="55" fill="#94a3b8" font-size="7" font-family="JetBrains Mono" text-anchor="middle">B4-6 · 73%</text>
+              <polygon points="380,22 400,40 380,60" fill="#0f172a" stroke="#a78bfa"/>
+
+              <!-- B7-9: MAERSK SEMARANG -->
+              <rect x="420" y="22" width="200" height="38" rx="4" fill="#0f172a" stroke="#60a5fa"/>
+              <rect x="428" y="28" width="184" height="26" rx="2" fill="#1e293b"/>
+              <text x="520" y="44" fill="#93c5fd" font-size="9" font-family="Inter" font-weight="600" text-anchor="middle">MV MAERSK SEMARANG</text>
+              <text x="520" y="55" fill="#94a3b8" font-size="7" font-family="JetBrains Mono" text-anchor="middle">B7-9 · 64%</text>
+              <polygon points="620,22 640,40 620,60" fill="#0f172a" stroke="#60a5fa"/>
+
+              <!-- QC9 @ CMA PUTRA (B1-3) -->
+              <g transform="translate(70,70)">
+                <line x1="0" y1="0" x2="0" y2="-50" stroke="#475569" stroke-width="3"/>
+                <line x1="0" y1="-50" x2="-30" y2="-50" stroke="#475569" stroke-width="3"/>
+                <circle cx="0" cy="0" r="7" fill="#22c55e"/>
+                <text x="0" y="14" font-size="8" font-family="JetBrains Mono" font-weight="700" text-anchor="middle" fill="#86efac">QC9</text>
+              </g>
+              <!-- QC10 @ CMA PUTRA -->
+              <g transform="translate(120,70)">
+                <line x1="0" y1="0" x2="0" y2="-50" stroke="#475569" stroke-width="3"/>
+                <line x1="0" y1="-50" x2="-30" y2="-50" stroke="#475569" stroke-width="3"/>
+                <circle cx="0" cy="0" r="7" fill="#22c55e"/>
+                <text x="0" y="14" font-size="8" font-family="JetBrains Mono" font-weight="700" text-anchor="middle" fill="#86efac">QC10</text>
+              </g>
+
+              <!-- QC5 @ COMMITMENT (B4-6) -->
+              <g transform="translate(230,70)">
+                <line x1="0" y1="0" x2="0" y2="-50" stroke="#475569" stroke-width="3"/>
+                <line x1="0" y1="-50" x2="-30" y2="-50" stroke="#475569" stroke-width="3"/>
+                <circle cx="0" cy="0" r="7" fill="#22c55e"/>
+                <text x="0" y="14" font-size="8" font-family="JetBrains Mono" font-weight="700" text-anchor="middle" fill="#86efac">QC5</text>
+              </g>
+              <!-- QC6 @ COMMITMENT -->
+              <g transform="translate(290,70)">
+                <line x1="0" y1="0" x2="0" y2="-50" stroke="#475569" stroke-width="3"/>
+                <line x1="0" y1="-50" x2="-30" y2="-50" stroke="#475569" stroke-width="3"/>
+                <circle cx="0" cy="0" r="7" fill="#22c55e"/>
+                <text x="0" y="14" font-size="8" font-family="JetBrains Mono" font-weight="700" text-anchor="middle" fill="#86efac">QC6</text>
+              </g>
+              <!-- QC7 @ COMMITMENT -->
+              <g transform="translate(350,70)">
+                <line x1="0" y1="0" x2="0" y2="-50" stroke="#475569" stroke-width="3"/>
+                <line x1="0" y1="-50" x2="-30" y2="-50" stroke="#475569" stroke-width="3"/>
+                <circle cx="0" cy="0" r="7" fill="#22c55e"/>
+                <text x="0" y="14" font-size="8" font-family="JetBrains Mono" font-weight="700" text-anchor="middle" fill="#86efac">QC7</text>
+              </g>
+
+              <!-- QC1 @ SEMARANG (B7-9) -->
+              <g transform="translate(450,70)">
+                <line x1="0" y1="0" x2="0" y2="-50" stroke="#475569" stroke-width="3"/>
+                <line x1="0" y1="-50" x2="-30" y2="-50" stroke="#475569" stroke-width="3"/>
+                <circle cx="0" cy="0" r="7" fill="#22c55e"/>
+                <text x="0" y="14" font-size="8" font-family="JetBrains Mono" font-weight="700" text-anchor="middle" fill="#86efac">QC1</text>
+              </g>
+              <!-- QC2 @ SEMARANG -->
+              <g transform="translate(510,70)">
+                <line x1="0" y1="0" x2="0" y2="-50" stroke="#475569" stroke-width="3"/>
+                <line x1="0" y1="-50" x2="-30" y2="-50" stroke="#475569" stroke-width="3"/>
+                <circle cx="0" cy="0" r="7" fill="#22c55e"/>
+                <text x="0" y="14" font-size="8" font-family="JetBrains Mono" font-weight="700" text-anchor="middle" fill="#86efac">QC2</text>
+              </g>
+              <!-- QC3 @ SEMARANG (MAINT) -->
+              <g transform="translate(560,70)">
+                <line x1="0" y1="0" x2="0" y2="-50" stroke="#475569" stroke-width="3"/>
+                <line x1="0" y1="-50" x2="-30" y2="-50" stroke="#475569" stroke-width="3"/>
+                <circle cx="0" cy="0" r="7" fill="#ef4444"/>
+                <text x="0" y="14" font-size="8" font-family="JetBrains Mono" font-weight="700" text-anchor="middle" fill="#fca5a5">QC3</text>
+              </g>
+              <!-- QC4 @ SEMARANG -->
+              <g transform="translate(610,70)">
+                <line x1="0" y1="0" x2="0" y2="-50" stroke="#475569" stroke-width="3"/>
+                <line x1="0" y1="-50" x2="-30" y2="-50" stroke="#475569" stroke-width="3"/>
+                <circle cx="0" cy="0" r="7" fill="#22c55e"/>
+                <text x="0" y="14" font-size="8" font-family="JetBrains Mono" font-weight="700" text-anchor="middle" fill="#86efac">QC4</text>
+              </g>
+
+              <!-- Yard Blocks K, L, M -->
+              <g font-family="JetBrains Mono" font-size="9" font-weight="600">
+                <!-- Block K row -->
+                <rect x="40" y="110" width="70" height="40" fill="rgba(245,158,11,0.15)" stroke="#b45309"/>
+                <text x="75" y="133" text-anchor="middle" fill="#fbbf24">K-01</text>
+                <rect x="120" y="110" width="70" height="40" fill="rgba(245,158,11,0.15)" stroke="#b45309"/>
+                <text x="155" y="133" text-anchor="middle" fill="#fbbf24">K-02</text>
+                <rect x="200" y="110" width="70" height="40" fill="rgba(245,158,11,0.28)" stroke="#f59e0b"/>
+                <text x="235" y="133" text-anchor="middle" fill="#fde68a">K-03</text>
+                <rect x="280" y="110" width="70" height="40" fill="rgba(245,158,11,0.15)" stroke="#b45309"/>
+                <text x="315" y="133" text-anchor="middle" fill="#fbbf24">K-04</text>
+                <rect x="360" y="110" width="70" height="40" fill="rgba(245,158,11,0.15)" stroke="#b45309"/>
+                <text x="395" y="133" text-anchor="middle" fill="#fbbf24">K-05</text>
+                <rect x="440" y="110" width="70" height="40" fill="rgba(245,158,11,0.28)" stroke="#f59e0b"/>
+                <text x="475" y="133" text-anchor="middle" fill="#fde68a">K-06</text>
+                <rect x="520" y="110" width="70" height="40" fill="rgba(245,158,11,0.15)" stroke="#b45309"/>
+                <text x="555" y="133" text-anchor="middle" fill="#fbbf24">K-07</text>
+                <rect x="600" y="110" width="70" height="40" fill="rgba(245,158,11,0.15)" stroke="#b45309"/>
+                <text x="635" y="133" text-anchor="middle" fill="#fbbf24">K-08</text>
+
+                <!-- Block L row -->
+                <rect x="40" y="170" width="70" height="40" fill="rgba(59,130,246,0.15)" stroke="#2563eb"/>
+                <text x="75" y="193" text-anchor="middle" fill="#93c5fd">L-01</text>
+                <rect x="120" y="170" width="70" height="40" fill="rgba(59,130,246,0.15)" stroke="#2563eb"/>
+                <text x="155" y="193" text-anchor="middle" fill="#93c5fd">L-02</text>
+                <rect x="200" y="170" width="70" height="40" fill="rgba(59,130,246,0.28)" stroke="#3b82f6"/>
+                <text x="235" y="193" text-anchor="middle" fill="#bfdbfe">L-03</text>
+                <rect x="280" y="170" width="70" height="40" fill="rgba(59,130,246,0.15)" stroke="#2563eb"/>
+                <text x="315" y="193" text-anchor="middle" fill="#93c5fd">L-04</text>
+                <rect x="360" y="170" width="70" height="40" fill="rgba(59,130,246,0.28)" stroke="#3b82f6"/>
+                <text x="395" y="193" text-anchor="middle" fill="#bfdbfe">L-05</text>
+                <rect x="440" y="170" width="70" height="40" fill="rgba(59,130,246,0.15)" stroke="#2563eb"/>
+                <text x="475" y="193" text-anchor="middle" fill="#93c5fd">L-06</text>
+                <rect x="520" y="170" width="70" height="40" fill="rgba(59,130,246,0.15)" stroke="#2563eb"/>
+                <text x="555" y="193" text-anchor="middle" fill="#93c5fd">L-07</text>
+                <rect x="600" y="170" width="70" height="40" fill="rgba(59,130,246,0.15)" stroke="#2563eb"/>
+                <text x="635" y="193" text-anchor="middle" fill="#93c5fd">L-08</text>
+
+                <!-- Block M row -->
+                <rect x="40" y="230" width="70" height="40" fill="rgba(34,197,94,0.15)" stroke="#15803d"/>
+                <text x="75" y="253" text-anchor="middle" fill="#86efac">M-01</text>
+                <rect x="120" y="230" width="70" height="40" fill="rgba(34,197,94,0.15)" stroke="#15803d"/>
+                <text x="155" y="253" text-anchor="middle" fill="#86efac">M-02</text>
+                <rect x="200" y="230" width="70" height="40" fill="rgba(34,197,94,0.15)" stroke="#15803d"/>
+                <text x="235" y="253" text-anchor="middle" fill="#86efac">M-03</text>
+                <rect x="280" y="230" width="70" height="40" fill="rgba(34,197,94,0.28)" stroke="#22c55e"/>
+                <text x="315" y="253" text-anchor="middle" fill="#bbf7d0">M-04</text>
+                <rect x="360" y="230" width="70" height="40" fill="rgba(34,197,94,0.15)" stroke="#15803d"/>
+                <text x="395" y="253" text-anchor="middle" fill="#86efac">M-05</text>
+                <rect x="440" y="230" width="70" height="40" fill="rgba(34,197,94,0.15)" stroke="#15803d"/>
+                <text x="475" y="253" text-anchor="middle" fill="#86efac">M-06</text>
+                <rect x="520" y="230" width="70" height="40" fill="rgba(34,197,94,0.15)" stroke="#15803d"/>
+                <text x="555" y="253" text-anchor="middle" fill="#86efac">M-07</text>
+                <rect x="600" y="230" width="70" height="40" fill="rgba(34,197,94,0.15)" stroke="#15803d"/>
+                <text x="635" y="253" text-anchor="middle" fill="#86efac">M-08</text>
+              </g>
+
+              <!-- TT trip paths -->
+              <g>
+                <path d="M220 85 Q160 100 75 130" stroke="#38bdf8" stroke-width="1.5" fill="none" stroke-dasharray="4,2" opacity="0.7"/>
+                <path d="M290 85 Q240 105 235 165" stroke="#22c55e" stroke-width="1.5" fill="none" opacity="0.7"/>
+                <path d="M360 85 Q395 110 395 165" stroke="#22c55e" stroke-width="1.5" fill="none" opacity="0.4"/>
+                <path d="M430 85 Q470 105 475 165" stroke="#38bdf8" stroke-width="1.5" fill="none" stroke-dasharray="4,2" opacity="0.7"/>
+                <path d="M75 150 Q120 200 235 225" stroke="#22c55e" stroke-width="1.5" fill="none" opacity="0.7"/>
+              </g>
+
+              <!-- TT markers -->
+              <g font-family="JetBrains Mono" font-size="7" font-weight="600">
+                <circle cx="235" cy="100" r="6" fill="#22c55e" stroke="#0a1428" stroke-width="1.5"/>
+                <text x="235" y="103" text-anchor="middle" fill="white">23</text>
+
+                <circle cx="395" cy="105" r="6" fill="#22c55e" stroke="#0a1428" stroke-width="1.5"/>
+                <text x="395" y="108" text-anchor="middle" fill="white">07</text>
+
+                <circle cx="155" cy="160" r="6" fill="#22c55e" stroke="#0a1428" stroke-width="1.5"/>
+                <text x="155" y="163" text-anchor="middle" fill="white">12</text>
+
+                <circle cx="555" cy="160" r="6" fill="#22c55e" stroke="#0a1428" stroke-width="1.5"/>
+                <text x="555" y="163" text-anchor="middle" fill="white">41</text>
+
+                <circle cx="475" cy="220" r="6" fill="#22c55e" stroke="#0a1428" stroke-width="1.5"/>
+                <text x="475" y="223" text-anchor="middle" fill="white">31</text>
+
+                <circle cx="120" cy="160" r="6" fill="#38bdf8" stroke="#0a1428" stroke-width="1.5"/>
+                <text x="120" y="163" text-anchor="middle" fill="white">04</text>
+
+                <circle cx="315" cy="160" r="6" fill="#38bdf8" stroke="#0a1428" stroke-width="1.5"/>
+                <text x="315" y="163" text-anchor="middle" fill="white">19</text>
+
+                <circle cx="635" cy="220" r="6" fill="#38bdf8" stroke="#0a1428" stroke-width="1.5"/>
+                <text x="635" y="223" text-anchor="middle" fill="white">42</text>
+
+                <circle cx="75" cy="220" r="6" fill="#38bdf8" stroke="#0a1428" stroke-width="1.5"/>
+                <text x="75" y="223" text-anchor="middle" fill="white">28</text>
+
+                <circle cx="40" cy="295" r="6" fill="#64748b" stroke="#0a1428" stroke-width="1.5"/>
+                <text x="40" y="298" text-anchor="middle" fill="white">15</text>
+                <circle cx="60" cy="295" r="6" fill="#64748b" stroke="#0a1428" stroke-width="1.5"/>
+                <text x="60" y="298" text-anchor="middle" fill="white">22</text>
+                <circle cx="80" cy="295" r="6" fill="#64748b" stroke="#0a1428" stroke-width="1.5"/>
+                <text x="80" y="298" text-anchor="middle" fill="white">36</text>
+
+                <circle cx="430" cy="92" r="6" fill="#f59e0b" stroke="#0a1428" stroke-width="1.5"/>
+                <text x="430" y="95" text-anchor="middle" fill="white">11</text>
+              </g>
+
+              <!-- Parking pool -->
+              <rect x="20" y="282" width="180" height="32" fill="none" stroke="#475569" stroke-dasharray="3,3"/>
+              <text x="110" y="278" font-family="Inter" font-size="9" fill="#94a3b8">TT Parking Pool</text>
+
+              <!-- Gate -->
+              <rect x="660" y="100" width="30" height="180" fill="#1e293b" stroke="#475569"/>
+              <text x="675" y="195" font-family="Inter" font-size="9" fill="#94a3b8" transform="rotate(-90 675 195)">EXIT GATE</text>
+
+              <!-- Block labels -->
+              <text x="20" y="135" font-family="Manrope" font-size="11" font-weight="800" fill="#fbbf24">K</text>
+              <text x="20" y="195" font-family="Manrope" font-size="11" font-weight="800" fill="#93c5fd">L</text>
+              <text x="20" y="255" font-family="Manrope" font-size="11" font-weight="800" fill="#86efac">M</text>
+            </svg>
+
+            <div class="map-legend">
+              <span class="item"><span class="dot" style="background:#22c55e"></span><span class="ko">부하 TT</span><span class="en">Loaded TT</span> (23)</span>
+              <span class="item"><span class="dot" style="background:#38bdf8"></span><span class="ko">공차 TT</span><span class="en">Empty TT</span> (14)</span>
+              <span class="item"><span class="dot" style="background:#f59e0b"></span><span class="ko">대기 TT</span><span class="en">Waiting TT</span> (4)</span>
+              <span class="item"><span class="dot" style="background:#64748b"></span><span class="ko">유휴 TT</span><span class="en">Idle TT</span> (9)</span>
+            </div>
+
+            <div class="map-overlay">
+              <div class="row"><span><span class="ko">총 TT</span><span class="en">Total TT</span></span><span class="v"><span class="ko">50대</span><span class="en">50 units</span></span></div>
+              <div class="row"><span><span class="ko">가동률</span><span class="en">Util.</span></span><span class="v" style="color:#86efac">78.4%</span></div>
+              <div class="row"><span><span class="en">Active vessels</span><span class="ko">진행 항차</span></span><span class="v">3</span></div>
+              <div class="row"><span>QC <span class="en">Active</span><span class="ko">활성</span></span><span class="v">8 / 12</span></div>
+              <div class="row"><span>YC <span class="en">Active</span><span class="ko">활성</span></span><span class="v">12 / 14</span></div>
+              <div class="row"><span>GPS Lag</span><span class="v">1.2s</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right column -->
+        <div style="display:flex; flex-direction:column; gap:12px;">
+
+          <div class="card">
+            <div class="card-head">
+              <h3><span class="material-symbols-outlined">local_shipping</span><span class="ko">TT 상태 분포</span><span class="en">TT Status Distribution</span></h3>
+              <div class="head-sub"><span class="ko">총</span><span class="en">Total</span> <span class="ko">50대</span><span class="en">50 units</span></div>
+            </div>
+            <div class="card-body">
+              <div class="donut-wrap">
+                <div style="position:relative; height:110px; width:110px;">
+                  <canvas id="ttDonut"></canvas>
+                </div>
+                <div class="legend-list">
+                  <div class="legend-item"><span class="swatch" style="background:#22c55e"></span><span class="name"><span class="ko">Busy (부하 이동)</span><span class="en">Busy (Loaded)</span></span><span class="val">23</span></div>
+                  <div class="legend-item"><span class="swatch" style="background:#38bdf8"></span><span class="name"><span class="ko">공차 이동</span><span class="en">Empty travel</span></span><span class="val">14</span></div>
+                  <div class="legend-item"><span class="swatch" style="background:#f59e0b"></span><span class="name"><span class="ko">크레인 대기</span><span class="en">Crane wait</span></span><span class="val">4</span></div>
+                  <div class="legend-item"><span class="swatch" style="background:#64748b"></span><span class="name">Idle</span><span class="val">9</span></div>
+                  <div class="legend-item"><span class="swatch" style="background:#ef4444"></span><span class="name"><span class="ko">정비</span><span class="en">Maint</span></span><span class="val">0</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h3><span class="material-symbols-outlined">precision_manufacturing</span><span class="ko">크레인 가동 보드</span><span class="en">Crane Status Board</span></h3>
+              <div class="head-sub">QC 12 · YC 14</div>
+            </div>
+            <div class="card-body">
+              <div style="font-size:10px; color:var(--text-mute); font-weight:600; margin-bottom:5px; letter-spacing:0.4px;">STS (QC) <span style="color:var(--text-faint);font-weight:400;">· grouped by vessel</span></div>
+              <div class="crane-grid" style="grid-template-columns:repeat(6,1fr); gap:4px;">
+                <div class="crane-cell busy" style="font-size:9px;">QC1<span class="sub">28.4</span></div>
+                <div class="crane-cell busy" style="font-size:9px;">QC2<span class="sub">31.7</span></div>
+                <div class="crane-cell maint" style="font-size:9px;">QC3<span class="sub">M</span></div>
+                <div class="crane-cell busy" style="font-size:9px;">QC4<span class="sub">34.1</span></div>
+                <div class="crane-cell busy" style="font-size:9px;">QC5<span class="sub">29.8</span></div>
+                <div class="crane-cell busy" style="font-size:9px;">QC6<span class="sub">32.4</span></div>
+                <div class="crane-cell busy" style="font-size:9px;">QC7<span class="sub">30.1</span></div>
+                <div class="crane-cell idle" style="font-size:9px;">QC8<span class="sub">—</span></div>
+                <div class="crane-cell busy" style="font-size:9px;">QC9<span class="sub">27.5</span></div>
+                <div class="crane-cell busy" style="font-size:9px;">QC10<span class="sub">26.8</span></div>
+                <div class="crane-cell idle" style="font-size:9px;">QC11<span class="sub">—</span></div>
+                <div class="crane-cell idle" style="font-size:9px;">QC12<span class="sub">—</span></div>
+              </div>
+              <div style="font-size:10px; color:var(--text-mute); font-weight:600; margin:10px 0 5px; letter-spacing:0.4px;">RTG (YC)</div>
+              <div class="crane-grid">
+                <div class="crane-cell busy">Y1</div>
+                <div class="crane-cell busy">Y2</div>
+                <div class="crane-cell busy">Y3</div>
+                <div class="crane-cell idle">Y4</div>
+                <div class="crane-cell busy">Y5</div>
+                <div class="crane-cell busy">Y6</div>
+                <div class="crane-cell busy">Y7</div>
+                <div class="crane-cell busy">Y8</div>
+                <div class="crane-cell busy">Y9</div>
+                <div class="crane-cell idle">Y10</div>
+                <div class="crane-cell busy">Y11</div>
+                <div class="crane-cell busy">Y12</div>
+                <div class="crane-cell busy">Y13</div>
+                <div class="crane-cell busy">Y14</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- BOTTOM: Trend chart + AI decision + Alerts -->
+      <div class="grid" style="grid-template-columns: 6fr 3fr 3fr; gap: 12px; margin-bottom:12px;">
+
+        <div class="card">
+          <div class="card-head">
+            <h3><span class="material-symbols-outlined">trending_down</span><span class="ko">작업당 공차 이동 거리</span><span class="en">Empty Travel Distance / Job</span> · <span class="ko">교대별 추이</span><span class="en">by Shift</span></h3>
+            <div class="head-sub">Baseline 0.96 km/<span class="ko">작업</span><span class="en">Job</span> · <span class="ko">목표</span><span class="en">Target</span> ≤ 0.86</div>
+          </div>
+          <div class="card-body">
+            <div class="chart-box"><canvas id="trendChart"></canvas></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h3><span class="material-symbols-outlined">lightbulb</span><span class="ko">최근 배차 결정</span><span class="en">Last Decision</span></h3>
+            <div class="head-sub mono">14:32:04 · 17ms</div>
+          </div>
+          <div class="card-body">
+            <div class="ai-decision">
+              <div class="head">
+                <span class="title">TT-23 → DSC-K03-1145</span>
+                <span class="pill good"><span class="ko">선택</span><span class="en">Chosen</span></span>
+              </div>
+              <div class="cost-bar cf-f1">
+                <span class="l">F1 <span class="ko">차량 대기</span><span class="en">Truck Wait</span></span>
+                <div class="bar-bg"><div class="bar-fill" style="width:18%"></div></div>
+                <span class="v">2.1s</span>
+              </div>
+              <div class="cost-bar cf-f2">
+                <span class="l">F2 <span class="ko">크레인 대기</span><span class="en">Crane wait</span></span>
+                <div class="bar-bg"><div class="bar-fill" style="width:55%"></div></div>
+                <span class="v">6.4s</span>
+              </div>
+              <div class="cost-bar cf-f3">
+                <span class="l">F3 <span class="ko">공차 시간</span><span class="en">Empty Time</span></span>
+                <div class="bar-bg"><div class="bar-fill" style="width:38%"></div></div>
+                <span class="v">4.4s</span>
+              </div>
+              <div style="border-top:1px dashed var(--border-soft); margin-top:6px; padding-top:5px; display:flex; justify-content:space-between; font-size:10px;">
+                <span style="color:var(--text-dim)"><span class="ko">총 비용 (Hungarian)</span><span class="en">Total Cost (Hungarian)</span></span>
+                <span class="mono" style="font-weight:700;color:var(--text);">12.9s</span>
+              </div>
+              <div style="font-size:9px; color:var(--text-mute); margin-top:4px;"><span class="ko">차선 후보:</span><span class="en">Alt. candidates:</span> TT-07 (14.2s) · TT-31 (15.8s)</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h3><span class="material-symbols-outlined">warning</span><span class="ko">알림</span><span class="en">Alerts</span></h3>
+            <div class="head-sub"><span class="pill bad">3</span></div>
+          </div>
+          <div class="card-body" style="padding-top:4px;">
+            <div class="alert-row">
+              <span class="pin bad"><span class="material-symbols-outlined">build</span></span>
+              <div class="body">
+                <div class="title">QC3 <span class="ko">정비 — Hoist 점검</span><span class="en">Maintenance — Hoist inspection</span></div>
+                <div class="meta"><span class="time">14:18 (14<span class="ko">분 경과</span><span class="en">min elapsed</span>)</span> · <span class="ko">영향</span><span class="en">Impact</span>: K-03 <span class="ko">양하 지연</span><span class="en">Discharge delayed</span></div>
+              </div>
+            </div>
+            <div class="alert-row">
+              <span class="pin warn"><span class="material-symbols-outlined">schedule</span></span>
+              <div class="body">
+                <div class="title"><span class="ko">QC 크레인 대기 시간</span><span class="en">QC Crane Wait Time</span> <span class="ko">임계치 근접</span><span class="en">Threshold approaching</span></div>
+                <div class="meta"><span class="time">14:24 (8<span class="ko">분 전</span><span class="en">min ago</span>)</span> · QC4 <span class="ko">평균</span><span class="en">Avg</span> <span class="ko">18.2초</span><span class="en">18.2s</span> (<span class="ko">한계</span><span class="en">limit</span> 20)</div>
+              </div>
+            </div>
+            <div class="alert-row">
+              <span class="pin info"><span class="material-symbols-outlined">info</span></span>
+              <div class="body">
+                <div class="title"><span class="ko">교대 인계 30분 전 알림</span><span class="en">Shift handover in 30 min</span></div>
+                <div class="meta"><span class="time">14:30</span> · <span class="ko">재배차 대기열 사전 정렬 시작</span><span class="en">Pre-sorting redispatch queue</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- LAST ROW -->
+      <div class="grid" style="grid-template-columns: 6fr 3fr 3fr; gap:12px; margin-bottom:12px;">
+
+        <div class="card">
+          <div class="card-head">
+            <h3><span class="material-symbols-outlined">grid_on</span><span class="ko">TT 활용률 (차량별, 직전 1시간)</span><span class="en">TT Utilization (per vehicle, last 1H)</span></h3>
+            <div class="head-sub"><span class="ko">평균</span><span class="en">Avg</span> 78.4%</div>
+          </div>
+          <div class="card-body">
+            <div class="util-grid" id="utilGrid"></div>
+            <div style="margin-top:8px; display:flex; gap:14px; font-size:10px; color:var(--text-dim);">
+              <span><span style="display:inline-block;width:8px;height:8px;background:var(--brand-deep);border-radius:2px;vertical-align:middle;margin-right:4px;"></span><span class="ko">정상</span><span class="en">Normal</span> (≥70%)</span>
+              <span><span style="display:inline-block;width:8px;height:8px;background:var(--warn);border-radius:2px;vertical-align:middle;margin-right:4px;"></span><span class="ko">저조</span><span class="en">Low</span> (50~70%)</span>
+              <span><span style="display:inline-block;width:8px;height:8px;background:var(--bad);border-radius:2px;vertical-align:middle;margin-right:4px;"></span><span class="ko">심각</span><span class="en">Critical</span> (&lt;50%)</span>
+              <span><span style="display:inline-block;width:8px;height:8px;background:var(--text-faint);border-radius:2px;vertical-align:middle;margin-right:4px;"></span><span class="ko">유휴/정비</span><span class="en">Idle/Maint</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h3><span class="material-symbols-outlined">dns</span><span class="ko">시스템</span><span class="en">System</span> <span class="ko">상태</span><span class="en">Status</span></h3>
+            <div class="head-sub"><span class="pill good"><span class="ko">정상</span><span class="en">Normal</span></span></div>
+          </div>
+          <div class="card-body">
+            <div class="sys-row"><span class="sys-name"><span class="dot" style="background:var(--good)"></span>TOS Connection</span><span class="sys-val">CDC OK · 0.4s lag</span></div>
+            <div class="sys-row"><span class="sys-name"><span class="dot" style="background:var(--good)"></span>Kafka Consumer</span><span class="sys-val">lag 0</span></div>
+            <div class="sys-row"><span class="sys-name"><span class="dot" style="background:var(--good)"></span>GPS WebSocket</span><span class="sys-val">1.2s · 49/50</span></div>
+            <div class="sys-row"><span class="sys-name"><span class="dot" style="background:var(--warn)"></span>Telematics</span><span class="sys-val">TT-22 last 4m</span></div>
+            <div class="sys-row"><span class="sys-name"><span class="dot" style="background:var(--good)"></span>AI Engine</span><span class="sys-val">p99 22ms</span></div>
+            <div class="sys-row"><span class="sys-name"><span class="dot" style="background:var(--good)"></span>PostgreSQL</span><span class="sys-val"><span class="ko">정상</span><span class="en">Normal</span> · 64% disk</span></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h3><span class="material-symbols-outlined">network_intelligence</span><span class="ko">AI 배차 헬스</span><span class="en">AI Dispatch Health</span></h3>
+            <div class="head-sub"><span class="ko">최근</span><span class="en">Recent</span> 1H</div>
+          </div>
+          <div class="card-body">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div>
+                <div style="font-size:10px;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:0.4px;"><span class="ko">AI 활성 비율</span><span class="en">AI Active Rate</span></div>
+                <div style="font-family:Manrope;font-weight:800;font-size:22px;margin-top:2px;color:var(--text);">99.4<span style="font-size:11px;color:var(--text-mute);">%</span></div>
+                <div style="font-size:10px;color:#86efac;">▲ <span class="ko">폴백</span><span class="en">Fallback</span> <span class="ko">2건</span><span class="en">2 cases</span></div>
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:0.4px;"><span class="ko">배차 응답 p99</span><span class="en">Dispatch p99</span></div>
+                <div style="font-family:Manrope;font-weight:800;font-size:22px;margin-top:2px;color:var(--text);">22<span style="font-size:11px;color:var(--text-mute);">ms</span></div>
+                <div style="font-size:10px;color:#86efac;">SLA 100ms <span class="ko">이하</span><span class="en">or less</span></div>
+              </div>
+            </div>
+            <div style="margin-top:10px;">
+              <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:3px;">
+                <span style="color:var(--text-dim);font-weight:600;"><span class="ko">시간대별 배차 건수</span><span class="en">Hourly Dispatch Count</span></span>
+                <span class="mono" style="font-weight:600;color:var(--text);"><span class="ko">총</span><span class="en">Total</span> 1,842</span>
+              </div>
+              <div style="position:relative; height:60px;"><canvas id="dispatchBar"></canvas></div>
+            </div>
+            <div style="margin-top:8px; display:flex; justify-content:space-between; font-size:10px; color:var(--text-dim);">
+              <span><span class="ko">제약 충족률</span><span class="en">Constraint Compliance</span> <span class="mono" style="color:#86efac;font-weight:700;">100%</span></span>
+              <span><span class="ko">매칭 일치</span><span class="en">Match Rate</span> <span class="mono" style="font-weight:700;color:var(--text);">87.3%</span></span>
+              <span><span class="ko">엔진 가동</span><span class="en">Engine Up</span> <span class="mono" style="color:#86efac;font-weight:700;">100%</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      </div><!-- /view-A -->
+
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <!-- VIEW B: KPI Live                                                  -->
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <div class="view view-B">
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <div>
+            <div style="font-family:Manrope; font-weight:800; font-size:18px;"><span class="ko">KPI Live · 실시간 운영 지표</span><span class="en">KPI Live · Real-time Operating Metrics</span></div>
+            <div style="font-size:11px; color:var(--text-dim); margin-top:2px;"><span class="ko">현재 교대</span><span class="en">Current Shift</span> S-1 (2026-05-14 06:00~18:00) · Baseline 2026-04-14~04-27 (<span class="ko">4주</span><span class="en">4-week</span> <span class="ko">평균</span><span class="en">Avg</span>)</div>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <span class="pill good"><span class="ko">주 가설 유의</span><span class="en">Hypothesis significant</span> (p=0.018)</span>
+            <span class="pill good"><span class="ko">최소 목표 달성</span><span class="en">Minimum target met</span></span>
+          </div>
+        </div>
+
+        <!-- KPI Big cards 3x2 -->
+        <div class="grid" style="grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:12px;">
+
+          <div class="kpi-big primary">
+            <div class="kpi-big-head">
+              <span class="name"><span class="ko">작업당 공차 이동 거리</span><span class="en">Empty Travel Distance / Job</span></span>
+              <span class="badge">PRIMARY</span>
+            </div>
+            <div class="big-val">0.84<span class="unit">km/<span class="ko">작업</span><span class="en">Job</span></span></div>
+            <div class="sig-row">
+              <span>vs Baseline 0.96</span>
+              <span class="pval good">−12.3% · p=0.018</span>
+            </div>
+            <div class="trend-mini"><canvas id="b-trend-empty"></canvas></div>
+            <div class="meta-grid">
+              <div><div class="lbl"><span class="ko">목표</span><span class="en">Target</span></div><div class="v">≤ 0.86</div></div>
+              <div><div class="lbl"><span class="ko">우수</span><span class="en">Excellent</span></div><div class="v">≤ 0.77</div></div>
+              <div><div class="lbl"><span class="ko">표본 N</span><span class="en">Sample N</span></div><div class="v">2,438</div></div>
+            </div>
+          </div>
+
+          <div class="kpi-big">
+            <div class="kpi-big-head">
+              <span class="name"><span class="ko">공차 이동 비율</span><span class="en">Empty Travel Ratio</span></span>
+              <span class="badge" style="background:var(--info-bg);color:var(--info);"><span class="ko">1차 병행</span><span class="en">Primary parallel</span></span>
+            </div>
+            <div class="big-val">37.1<span class="unit">%</span></div>
+            <div class="sig-row">
+              <span>vs Baseline 42.3%</span>
+              <span class="pval good">−5.2pp · p=0.024</span>
+            </div>
+            <div class="trend-mini"><canvas id="b-trend-emptyr"></canvas></div>
+            <div class="meta-grid">
+              <div><div class="lbl"><span class="ko">목표</span><span class="en">Target</span></div><div class="v">≤ 40.3%</div></div>
+              <div><div class="lbl"><span class="ko">우수</span><span class="en">Excellent</span></div><div class="v">≤ 38.1%</div></div>
+              <div><div class="lbl"><span class="ko">표본 N</span><span class="en">Sample N</span></div><div class="v">2,438</div></div>
+            </div>
+          </div>
+
+          <div class="kpi-big">
+            <div class="kpi-big-head">
+              <span class="name"><span class="ko">QC 크레인 대기 시간</span><span class="en">QC Crane Wait Time</span></span>
+              <span class="badge" style="background:var(--info-bg);color:var(--info);"><span class="ko">1차 핵심</span><span class="en">Primary key</span></span>
+            </div>
+            <div class="big-val">14.2<span class="unit"><span class="ko">초/HO</span><span class="en">s/HO</span></span></div>
+            <div class="sig-row">
+              <span>vs Baseline <span class="ko">17.4초</span><span class="en">17.4s</span></span>
+              <span class="pval good">−18.6% · p=0.041</span>
+            </div>
+            <div class="trend-mini"><canvas id="b-trend-craneq"></canvas></div>
+            <div class="meta-grid">
+              <div><div class="lbl"><span class="ko">목표</span><span class="en">Target</span></div><div class="v">≤ 16.5</div></div>
+              <div><div class="lbl"><span class="ko">우수</span><span class="en">Excellent</span></div><div class="v">≤ 14.8</div></div>
+              <div><div class="lbl"><span class="ko">표본 N</span><span class="en">Sample N</span></div><div class="v">2,438</div></div>
+            </div>
+          </div>
+
+          <div class="kpi-big">
+            <div class="kpi-big-head">
+              <span class="name"><span class="ko">QC 시간당 처리 (MPH)</span><span class="en">QC Moves Per Hour</span></span>
+              <span class="badge" style="background:var(--surface-3);color:var(--text-dim);"><span class="ko">참고</span><span class="en">Reference</span></span>
+            </div>
+            <div class="big-val">31.8<span class="unit">move/hr</span></div>
+            <div class="sig-row">
+              <span>vs Baseline 29.8</span>
+              <span class="pval good">+6.7% · p=0.062</span>
+            </div>
+            <div class="trend-mini"><canvas id="b-trend-mph"></canvas></div>
+            <div class="meta-grid">
+              <div><div class="lbl"><span class="ko">목표</span><span class="en">Target</span></div><div class="v">≥ 31.3</div></div>
+              <div><div class="lbl"><span class="ko">우수</span><span class="en">Excellent</span></div><div class="v">≥ 32.8</div></div>
+              <div><div class="lbl"><span class="ko">표본 N</span><span class="en">Sample N</span></div><div class="v">7 shifts</div></div>
+            </div>
+          </div>
+
+          <div class="kpi-big">
+            <div class="kpi-big-head">
+              <span class="name"><span class="ko">TT 사이클 타임</span><span class="en">TT Cycle Time</span></span>
+              <span class="badge" style="background:var(--purple-bg);color:var(--purple);"><span class="ko">최상위</span><span class="en">Top</span></span>
+            </div>
+            <div class="big-val">847<span class="unit"><span class="ko">초/cycle</span><span class="en">s/cycle</span></span></div>
+            <div class="sig-row">
+              <span>vs Baseline <span class="ko">925초</span><span class="en">925s</span></span>
+              <span class="pval good">−8.4% · p=0.029</span>
+            </div>
+            <div class="trend-mini"><canvas id="b-trend-cycle"></canvas></div>
+            <div class="meta-grid">
+              <div><div class="lbl"><span class="ko">목표</span><span class="en">Target</span></div><div class="v">≤ 879</div></div>
+              <div><div class="lbl"><span class="ko">우수</span><span class="en">Excellent</span></div><div class="v">≤ 786</div></div>
+              <div><div class="lbl"><span class="ko">표본 N</span><span class="en">Sample N</span></div><div class="v">1,247</div></div>
+            </div>
+          </div>
+
+          <div class="kpi-big">
+            <div class="kpi-big-head">
+              <span class="name"><span class="ko">TT 장비 활용률</span><span class="en">TT Utilization</span></span>
+              <span class="badge" style="background:var(--purple-bg);color:var(--purple);"><span class="ko">2차</span><span class="en">Phase 2</span></span>
+            </div>
+            <div class="big-val">78.4<span class="unit">%</span></div>
+            <div class="sig-row">
+              <span>vs Baseline 74.3%</span>
+              <span class="pval good">+4.1pp · p=0.038</span>
+            </div>
+            <div class="trend-mini"><canvas id="b-trend-util"></canvas></div>
+            <div class="meta-grid">
+              <div><div class="lbl"><span class="ko">목표</span><span class="en">Target</span></div><div class="v">≥ 76.0%</div></div>
+              <div><div class="lbl"><span class="ko">우수</span><span class="en">Excellent</span></div><div class="v">≥ 80.0%</div></div>
+              <div><div class="lbl"><span class="ko">표본 N</span><span class="en">Sample N</span></div><div class="v">50 TT</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Heatmap + Breakdown -->
+        <div class="grid" style="grid-template-columns:7fr 5fr; gap:12px; margin-bottom:12px;">
+
+          <div class="card">
+            <div class="card-head">
+              <h3><span class="material-symbols-outlined">grid_view</span><span class="ko">공차 이동 거리 — 교대 × 시간대 히트맵 (직전 7일)</span><span class="en">Empty Travel — Shift × Hour Heatmap (last 7 days)</span></h3>
+              <div class="head-sub"><span class="ko">색상: 진할수록 길음</span><span class="en">Darker = longer</span></div>
+            </div>
+            <div class="card-body">
+              <div class="heatmap-grid">
+                <div class="hm-row-label"></div>
+                <!-- Hours header -->
+                <div class="hm-col-label">0</div><div class="hm-col-label">1</div><div class="hm-col-label">2</div><div class="hm-col-label">3</div>
+                <div class="hm-col-label">4</div><div class="hm-col-label">5</div><div class="hm-col-label">6</div><div class="hm-col-label">7</div>
+                <div class="hm-col-label">8</div><div class="hm-col-label">9</div><div class="hm-col-label">10</div><div class="hm-col-label">11</div>
+                <div class="hm-col-label">12</div><div class="hm-col-label">13</div><div class="hm-col-label">14</div><div class="hm-col-label">15</div>
+                <div class="hm-col-label">16</div><div class="hm-col-label">17</div><div class="hm-col-label">18</div><div class="hm-col-label">19</div>
+                <div class="hm-col-label">20</div><div class="hm-col-label">21</div><div class="hm-col-label">22</div><div class="hm-col-label">23</div>
+              </div>
+              <div id="heatmap"></div>
+              <div style="display:flex; gap:14px; font-size:10px; color:var(--text-dim); margin-top:8px; align-items:center;">
+                <span>Scale (km/<span class="ko">작업</span><span class="en">Job</span>):</span>
+                <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;background:#86efac;border-radius:2px;"></span>0.75</span>
+                <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;background:#60a5fa;border-radius:2px;"></span>0.85</span>
+                <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;background:#a78bfa;border-radius:2px;"></span>0.95</span>
+                <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;background:#fcd34d;border-radius:2px;"></span>1.05</span>
+                <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;background:#fca5a5;border-radius:2px;"></span>≥1.15</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h3><span class="material-symbols-outlined">bar_chart</span><span class="ko">QC별 KPI 분해</span><span class="en">KPI Breakdown by QC</span></h3>
+              <div class="head-sub"><span class="ko">현재 교대</span><span class="en">Current Shift</span></div>
+            </div>
+            <div class="card-body" style="padding-top:8px;">
+              <table class="compare-table">
+                <thead>
+                  <tr><th>QC</th><th class="mono"><span class="ko">공차 거리</span><span class="en">Empty distance</span></th><th class="mono"><span class="ko">크레인 대기</span><span class="en">Crane wait</span></th><th class="mono">MPH</th><th><span class="ko">달성</span><span class="en">Met</span></th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><b>QC1</b> <span class="ko">양하</span><span class="en">Discharge</span></td>
+                    <td class="mono">0.81 km</td>
+                    <td class="mono">13.6s</td>
+                    <td class="mono">28.4</td>
+                    <td><span class="pill good"><span class="ko">달성</span><span class="en">Met</span></span></td>
+                  </tr>
+                  <tr>
+                    <td><b>QC2</b> <span class="ko">적하</span><span class="en">Loading</span></td>
+                    <td class="mono">0.79 km</td>
+                    <td class="mono">12.8s</td>
+                    <td class="mono">31.7</td>
+                    <td><span class="pill good"><span class="ko">우수</span><span class="en">Excellent</span></span></td>
+                  </tr>
+                  <tr style="opacity:0.6;">
+                    <td><b>QC3</b> <span class="ko">정비</span><span class="en">Maint</span></td>
+                    <td class="mono">—</td>
+                    <td class="mono">—</td>
+                    <td class="mono">—</td>
+                    <td><span class="pill bad">DOWN</span></td>
+                  </tr>
+                  <tr>
+                    <td><b>QC4</b> <span class="ko">양하</span><span class="en">Discharge</span></td>
+                    <td class="mono">0.88 km</td>
+                    <td class="mono">18.2s</td>
+                    <td class="mono">34.1</td>
+                    <td><span class="pill warn"><span class="ko">근접</span><span class="en">Near</span></span></td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div style="margin-top:14px;">
+                <div style="font-size:11px; color:var(--text-dim); margin-bottom:6px; font-weight:600;"><span class="ko">통계 검정 결과 (Paired t-test, 항차 단위)</span><span class="en">Statistical Test (Paired t-test, vessel level)</span></div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px; font-size:10px;">
+                  <div style="padding:8px;background:var(--bg-soft);border-radius:4px;">
+                    <div style="color:var(--text-dim);">H1: <span class="ko">공차거리 감소</span><span class="en">Empty distance reduction</span></div>
+                    <div style="font-family:JetBrains Mono;font-weight:700;color:#86efac;margin-top:2px;">p = 0.018 ✓</div>
+                  </div>
+                  <div style="padding:8px;background:var(--bg-soft);border-radius:4px;">
+                    <div style="color:var(--text-dim);">Cohen's d</div>
+                    <div style="font-family:JetBrains Mono;font-weight:700;color:var(--text);margin-top:2px;">0.42 (<span class="ko">중간</span><span class="en">medium</span>)</div>
+                  </div>
+                  <div style="padding:8px;background:var(--bg-soft);border-radius:4px;">
+                    <div style="color:var(--text-dim);"><span class="ko">필요 표본</span><span class="en">Required N</span> (β=0.8)</div>
+                    <div style="font-family:JetBrains Mono;font-weight:700;color:var(--text);margin-top:2px;">N ≥ 84 ✓</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /view-B -->
+
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <!-- VIEW C: <span class="ko">AI 배차 헬스</span><span class="en">AI Dispatch Health</span>                                              -->
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <div class="view view-C">
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <div>
+            <div style="font-family:Manrope; font-weight:800; font-size:18px;"><span class="ko">AI 배차 엔진 — 헬스 모니터</span><span class="en">AI Dispatch Engine — Health Monitor</span></div>
+            <div style="font-size:11px; color:var(--text-dim); margin-top:2px;"><span class="ko">엔진</span><span class="en">Engine</span> v0.4.1-poc · Uptime 14d 03:42:18 · <span class="ko">마지막 재시작</span><span class="en">Last restart</span> 2026-04-30 11:14</div>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <span class="pill good"><span class="ko">엔진 정상</span><span class="en">Engine OK</span></span>
+            <span class="pill good"><span class="ko">SLA 충족</span><span class="en">SLA OK</span></span>
+          </div>
+        </div>
+
+        <!-- Engine status cards -->
+        <div class="grid" style="grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:12px;">
+          <div class="stat-card">
+            <div class="label"><span class="ko">가용성 (24H)</span><span class="en">Availability (24H)</span></div>
+            <div class="val">99.94<span class="unit">%</span></div>
+            <div class="delta good">SLA ≥ 99.5%</div>
+          </div>
+          <div class="stat-card">
+            <div class="label"><span class="ko">배차 응답 p99</span><span class="en">Dispatch p99</span></div>
+            <div class="val">22<span class="unit">ms</span></div>
+            <div class="delta good">SLA ≤ 100ms</div>
+          </div>
+          <div class="stat-card">
+            <div class="label"><span class="ko">AI 활성 비율</span><span class="en">AI Active Rate</span></div>
+            <div class="val">99.4<span class="unit">%</span></div>
+            <div class="delta good"><span class="ko">폴백</span><span class="en">Fallback</span> <span class="ko">2건</span><span class="en">2 cases</span> / 1,842</div>
+          </div>
+          <div class="stat-card">
+            <div class="label"><span class="ko">제약 충족률</span><span class="en">Constraint Compliance</span></div>
+            <div class="val">100<span class="unit">%</span></div>
+            <div class="delta good"><span class="ko">불가 배차</span><span class="en">Invalid dispatch</span> <span class="ko">0건</span><span class="en">0 cases</span></div>
+          </div>
+          <div class="stat-card">
+            <div class="label"><span class="ko">매칭 일치율 (vs TOS)</span><span class="en">Match Rate (vs TOS)</span></div>
+            <div class="val">87.3<span class="unit">%</span></div>
+            <div class="delta warn"><span class="ko">불일치</span><span class="en">Mismatch</span> 234<span class="ko">건 검토</span><span class="en">cases under review</span></div>
+          </div>
+        </div>
+
+        <!-- Latency dist + AI ratio trend -->
+        <div class="grid" style="grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="card">
+            <div class="card-head">
+              <h3><span class="material-symbols-outlined">speed</span><span class="ko">배차 응답 시간 분포 (최근 1시간)</span><span class="en">Dispatch Response Time Dist. (last 1H)</span></h3>
+              <div class="head-sub">N = 384</div>
+            </div>
+            <div class="card-body">
+              <div style="height:180px;position:relative;"><canvas id="latencyHist"></canvas></div>
+              <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:8px; font-size:11px;">
+                <div style="text-align:center;"><div style="color:var(--text-dim); font-size:10px;">p50</div><div class="mono" style="font-weight:700;">9ms</div></div>
+                <div style="text-align:center;"><div style="color:var(--text-dim); font-size:10px;">p95</div><div class="mono" style="font-weight:700;">18ms</div></div>
+                <div style="text-align:center;"><div style="color:var(--text-dim); font-size:10px;">p99</div><div class="mono" style="font-weight:700;color:#86efac;">22ms</div></div>
+                <div style="text-align:center;"><div style="color:var(--text-dim); font-size:10px;"><span class="ko">최대</span><span class="en">Max</span></div><div class="mono" style="font-weight:700;">31ms</div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h3><span class="material-symbols-outlined">stacked_line_chart</span><span class="ko">AI 활성 비율 추이 (24H)</span><span class="en">AI Active Rate Trend (24H)</span></h3>
+              <div class="head-sub"><span class="ko">폴백</span><span class="en">Fallback</span> <span class="ko">발생 시점 표시</span><span class="en">Event timestamps marked</span></div>
+            </div>
+            <div class="card-body">
+              <div style="height:180px;position:relative;"><canvas id="aiRatio"></canvas></div>
+              <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:8px; font-size:11px;">
+                <div style="text-align:center;"><div style="color:var(--text-dim); font-size:10px;"><span class="ko">평균</span><span class="en">Avg</span></div><div class="mono" style="font-weight:700;color:#86efac;">99.4%</div></div>
+                <div style="text-align:center;"><div style="color:var(--text-dim); font-size:10px;"><span class="ko">폴백</span><span class="en">Fallback</span></div><div class="mono" style="font-weight:700;color:#fcd34d;"><span class="ko">2건</span><span class="en">2 cases</span></div></div>
+                <div style="text-align:center;"><div style="color:var(--text-dim); font-size:10px;"><span class="ko">제약 위반</span><span class="en">Constraint violation</span></div><div class="mono" style="font-weight:700;color:#86efac;"><span class="ko">0건</span><span class="en">0 cases</span></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent decisions table -->
+        <div class="card">
+          <div class="card-head">
+            <h3><span class="material-symbols-outlined">history</span><span class="ko">최근 배차 결정 로그 (10건)</span><span class="en">Recent Dispatch Decisions (10)</span></h3>
+            <div class="head-sub"><span class="ko">스트림 실시간 · 클릭 시 비용 분해 드릴다운</span><span class="en">Live stream · click for cost breakdown</span></div>
+          </div>
+          <div class="card-body" style="padding:0;">
+            <table class="dec-table">
+              <thead>
+                <tr>
+                  <th><span class="ko">시각</span><span class="en">Time</span></th><th><span class="ko">응답</span><span class="en">Resp</span></th><th><span class="ko">차량</span><span class="en">Vehicle</span></th><th><span class="ko">작업</span><span class="en">Job</span></th><th>QC</th>
+                  <th class="mono">F1 <span class="ko">차량대기</span><span class="en">Truck Wait</span></th><th class="mono">F2 <span class="ko">크레인대기</span><span class="en">Crane Wait</span></th><th class="mono">F3 <span class="ko">공차시간</span><span class="en">Empty Time</span></th>
+                  <th class="mono"><span class="ko">총비용</span><span class="en">Total Cost</span></th><th><span class="ko">차선후보</span><span class="en">Alt. Cand.</span></th><th><span class="ko">결과</span><span class="en">Result</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>14:32:04</td><td>17ms</td><td>TT-23</td><td>DSC-K03-1145</td><td>QC1</td><td>2.1s</td><td>6.4s</td><td>4.4s</td><td>12.9s</td><td>TT-07 (14.2s)</td><td><span class="ok"><span class="ko">선택 ✓</span><span class="en">Selected ✓</span></span></td></tr>
+                <tr><td>14:32:01</td><td>14ms</td><td>TT-41</td><td>LOD-L05-0823</td><td>QC2</td><td>3.4s</td><td>4.1s</td><td>5.2s</td><td>12.7s</td><td>TT-08 (13.5s)</td><td><span class="ok"><span class="ko">선택 ✓</span><span class="en">Selected ✓</span></span></td></tr>
+                <tr><td>14:31:48</td><td>22ms</td><td>TT-11</td><td>DSC-K06-0418</td><td>QC4</td><td>1.8s</td><td>4.0s</td><td>3.9s</td><td>9.7s</td><td>TT-28 (11.2s)</td><td><span class="ok"><span class="ko">선택 ✓</span><span class="en">Selected ✓</span></span></td></tr>
+                <tr><td>14:31:32</td><td>11ms</td><td>TT-19</td><td>SHF-M04-0291</td><td>YC8</td><td>0.5s</td><td>—</td><td>2.8s</td><td>3.3s</td><td>TT-37 (4.1s)</td><td><span class="ok"><span class="ko">선택 ✓</span><span class="en">Selected ✓</span></span></td></tr>
+                <tr><td>14:31:18</td><td>26ms</td><td>TT-04</td><td>LOD-L03-1027</td><td>QC2</td><td>4.2s</td><td>5.8s</td><td>6.1s</td><td>16.1s</td><td>TT-19 (16.4s)</td><td><span class="ok"><span class="ko">선택 ✓</span><span class="en">Selected ✓</span></span></td></tr>
+                <tr><td>14:31:02</td><td>19ms</td><td>TT-31</td><td>DSC-K05-0712</td><td>QC4</td><td>2.7s</td><td>7.2s</td><td>5.5s</td><td>15.4s</td><td>TT-14 (16.8s)</td><td><span class="ok"><span class="ko">선택 ✓</span><span class="en">Selected ✓</span></span></td></tr>
+                <tr><td>14:30:48</td><td>—</td><td>TT-37</td><td>SHF-L02-0184</td><td>YC3</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><span class="fb"><span class="ko">폴백 (제약)</span><span class="en">Fallback (constraint)</span></span></td></tr>
+                <tr><td>14:30:34</td><td>16ms</td><td>TT-08</td><td>LOD-L05-0822</td><td>QC2</td><td>1.4s</td><td>3.7s</td><td>4.8s</td><td>9.9s</td><td>TT-41 (11.5s)</td><td><span class="ok"><span class="ko">선택 ✓</span><span class="en">Selected ✓</span></span></td></tr>
+                <tr><td>14:30:21</td><td>14ms</td><td>TT-12</td><td>DSC-K03-1144</td><td>QC1</td><td>2.0s</td><td>5.5s</td><td>4.1s</td><td>11.6s</td><td>TT-23 (12.9s)</td><td><span class="ok"><span class="ko">선택 ✓</span><span class="en">Selected ✓</span></span></td></tr>
+                <tr><td>14:30:08</td><td>20ms</td><td>TT-28</td><td>DSC-K06-0417</td><td>QC4</td><td>3.1s</td><td>4.6s</td><td>5.7s</td><td>13.4s</td><td>TT-11 (13.9s)</td><td><span class="ok"><span class="ko">선택 ✓</span><span class="en">Selected ✓</span></span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div><!-- /view-C -->
+
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <!-- VIEW D: UAT <span class="ko">검증</span><span class="en">Validation</span>                                                  -->
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <div class="view view-D">
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <div>
+            <div style="font-family:Manrope; font-weight:800; font-size:18px;"><span class="ko">UAT 검증 — 합격 판정 대시보드</span><span class="en">UAT Validation — Acceptance Dashboard</span></div>
+            <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">UAT <span class="ko">기간</span><span class="en">Period</span> W27~W31 · <span class="ko">현재</span><span class="en">Current</span> W28 4<span class="ko">일차</span><span class="en">day</span> · <span class="ko">합격 판정 = A·B·D 전 항목 + C 유의 신호</span><span class="en">Pass = all A·B·D + significant C signal</span></div>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <span class="pill good">A <span class="ko">시스템</span><span class="en">System</span> ✓</span>
+            <span class="pill good">B <span class="ko">알고리즘</span><span class="en">Algorithm</span> ✓</span>
+            <span class="pill warn">C <span class="ko">효과</span><span class="en">Effect</span> (<span class="ko">진행 중</span><span class="en">In progress</span>)</span>
+            <span class="pill good">D <span class="ko">운영</span><span class="en">Ops</span> ✓</span>
+          </div>
+        </div>
+
+        <!-- UAT 4 category checklist -->
+        <div class="grid" style="grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+
+          <div class="check-card">
+            <div class="check-cat">
+              <span><span class="ko">A · 시스템 건전성</span><span class="en">A · System Health</span></span>
+              <span class="stat"><span class="pill good">4/4 PASS</span></span>
+            </div>
+            <div class="check-item">
+              <span class="ico pass"><span class="material-symbols-outlined">check</span></span>
+              <div class="desc"><div class="top"><span class="ko">엔진 가용성</span><span class="en">Engine availability</span></div><div class="bot"><span class="ko">UAT 기간 평균 가동률</span><span class="en">UAT period uptime</span></div></div>
+              <span class="target">≥ 99.5%</span>
+              <span class="actual good">99.94%</span>
+            </div>
+            <div class="check-item">
+              <span class="ico pass"><span class="material-symbols-outlined">check</span></span>
+              <div class="desc"><div class="top"><span class="ko">배차 응답 p99</span><span class="en">Dispatch p99</span></div><div class="bot"><span class="ko">최근 7일 p99 분포</span><span class="en">p99 distribution last 7 days</span></div></div>
+              <span class="target">≤ 100ms</span>
+              <span class="actual good">22ms</span>
+            </div>
+            <div class="check-item">
+              <span class="ico pass"><span class="material-symbols-outlined">check</span></span>
+              <div class="desc"><div class="top"><span class="ko">메모리 누수·크래시</span><span class="en">Memory leak / crashes</span></div><div class="bot"><span class="ko">UAT 기간 누적</span><span class="en">UAT cumulative</span></div></div>
+              <span class="target"><span class="ko">0건</span><span class="en">0 cases</span></span>
+              <span class="actual good"><span class="ko">0건</span><span class="en">0 cases</span></span>
+            </div>
+            <div class="check-item">
+              <span class="ico pass"><span class="material-symbols-outlined">check</span></span>
+              <div class="desc"><div class="top"><span class="ko">데이터 파이프라인 유실률</span><span class="en">Data pipeline loss rate</span></div><div class="bot"><span class="ko">CDC 이벤트 결측</span><span class="en">CDC event missing</span></div></div>
+              <span class="target">≤ 0.1%</span>
+              <span class="actual good">0.02%</span>
+            </div>
+          </div>
+
+          <div class="check-card">
+            <div class="check-cat">
+              <span><span class="ko">B · 알고리즘 건전성</span><span class="en">B · Algorithm Health</span></span>
+              <span class="stat"><span class="pill good">3/3 PASS</span></span>
+            </div>
+            <div class="check-item">
+              <span class="ico pass"><span class="material-symbols-outlined">check</span></span>
+              <div class="desc"><div class="top"><span class="ko">TOS 제약 충족률</span><span class="en">TOS constraint compliance</span></div><div class="bot"><span class="ko">불가능 배차 0건 보증</span><span class="en">Zero invalid dispatch</span></div></div>
+              <span class="target">100%</span>
+              <span class="actual good">100%</span>
+            </div>
+            <div class="check-item">
+              <span class="ico pass"><span class="material-symbols-outlined">check</span></span>
+              <div class="desc"><div class="top"><span class="ko">교대 시 대규모 매칭</span><span class="en">Large-scale shift matching</span></div><div class="bot">400+ TT <span class="ko">동시 매칭 성공</span><span class="en">concurrent match success</span></div></div>
+              <span class="target"><span class="ko">결과 유효</span><span class="en">Result valid</span></span>
+              <span class="actual good"><span class="ko">검증 완료</span><span class="en">Verified</span></span>
+            </div>
+            <div class="check-item">
+              <span class="ico pass"><span class="material-symbols-outlined">check</span></span>
+              <div class="desc"><div class="top"><span class="ko">폴백 트리거 정상 동작</span><span class="en">Fallback trigger works</span></div><div class="bot"><span class="ko">엔진 이상 시 TOS 폴백</span><span class="en">TOS fallback on engine error</span></div></div>
+              <span class="target">100% <span class="ko">회복</span><span class="en">recovery</span></span>
+              <span class="actual good">2/2 <span class="ko">회복</span><span class="en">recovery</span></span>
+            </div>
+          </div>
+
+          <div class="check-card" style="border-color: var(--warn-border);">
+            <div class="check-cat">
+              <span><span class="ko">C · 효과 신호 (Counterfactual)</span><span class="en">C · Effect Signal (Counterfactual)</span></span>
+              <span class="stat"><span class="pill warn">5/6 <span class="ko">신호</span><span class="en">Signal</span> · <span class="ko">진행 중</span><span class="en">In progress</span></span></span>
+            </div>
+            <div class="check-item">
+              <span class="ico pass"><span class="material-symbols-outlined">check</span></span>
+              <div class="desc"><div class="top"><span class="ko">공차 이동 거리</span><span class="en">Empty travel dist.</span> (<span class="ko">주 가설</span><span class="en">Main hypothesis</span>)</div><div class="bot">−10% <span class="ko">최소 목표</span><span class="en">Min. target</span></div></div>
+              <span class="target">−10%</span>
+              <span class="actual good">−12.3% ✓</span>
+            </div>
+            <div class="check-item">
+              <span class="ico pass"><span class="material-symbols-outlined">check</span></span>
+              <div class="desc"><div class="top"><span class="ko">공차 이동 비율</span><span class="en">Empty Travel Ratio</span></div><div class="bot">−5pp <span class="ko">병행</span><span class="en">parallel</span></div></div>
+              <span class="target">−5pp</span>
+              <span class="actual good">−5.2pp ✓</span>
+            </div>
+            <div class="check-item">
+              <span class="ico pass"><span class="material-symbols-outlined">check</span></span>
+              <div class="desc"><div class="top"><span class="ko">QC 크레인 대기</span><span class="en">QC Crane Wait</span></div><div class="bot">−5%</div></div>
+              <span class="target">−5%</span>
+              <span class="actual good">−18.6% ✓</span>
+            </div>
+            <div class="check-item">
+              <span class="ico pass"><span class="material-symbols-outlined">check</span></span>
+              <div class="desc"><div class="top"><span class="ko">TT 사이클</span><span class="en">TT Cycle</span></div><div class="bot">−5%</div></div>
+              <span class="target">−5%</span>
+              <span class="actual good">−8.4% ✓</span>
+            </div>
+            <div class="check-item">
+              <span class="ico warn"><span class="material-symbols-outlined">schedule</span></span>
+              <div class="desc"><div class="top"><span class="ko">교대 재배차 완료시간</span><span class="en">Shift redispatch completion</span></div><div class="bot"><span class="ko">표본 부족 — 7일 추가 관찰 필요</span><span class="en">Sample insufficient — 7 more days needed</span></div></div>
+              <span class="target">−10%</span>
+              <span class="actual warn">−8.1% (<span class="ko">잠정</span><span class="en">tentative</span>)</span>
+            </div>
+            <div class="check-item">
+              <span class="ico pass"><span class="material-symbols-outlined">check</span></span>
+              <div class="desc"><div class="top"><span class="ko">통계적 유의성 (주 가설)</span><span class="en">Statistical significance (main)</span></div><div class="bot">Paired t-test p&lt;0.05</div></div>
+              <span class="target">p &lt; 0.05</span>
+              <span class="actual good">p = 0.018 ✓</span>
+            </div>
+          </div>
+
+          <div class="check-card">
+            <div class="check-cat">
+              <span><span class="ko">D · 운영 준비</span><span class="en">D · Operational Readiness</span></span>
+              <span class="stat"><span class="pill good">3/3 PASS</span></span>
+            </div>
+            <div class="check-item">
+              <span class="ico pass"><span class="material-symbols-outlined">check</span></span>
+              <div class="desc"><div class="top"><span class="ko">대시보드 5종 정상 동작</span><span class="en">All 5 dashboards working</span></div><div class="bot">A·B·C·D·E <span class="ko">모든 화면</span><span class="en">all screens</span></div></div>
+              <span class="target">5/5</span>
+              <span class="actual good">5/5</span>
+            </div>
+            <div class="check-item">
+              <span class="ico pass"><span class="material-symbols-outlined">check</span></span>
+              <div class="desc"><div class="top"><span class="ko">알림·장애 대응 runbook</span><span class="en">Alert · Incident runbook</span></div><div class="bot"><span class="ko">검토 완료</span><span class="en">Reviewed</span> (2026-05-08)</div></div>
+              <span class="target"><span class="ko">완료</span><span class="en">Done</span></span>
+              <span class="actual good"><span class="ko">서명 완료</span><span class="en">Signed</span></span>
+            </div>
+            <div class="check-item">
+              <span class="ico pass"><span class="material-symbols-outlined">check</span></span>
+              <div class="desc"><div class="top"><span class="ko">공동 리뷰 체크리스트</span><span class="en">Joint review checklist</span></div><div class="bot"><span class="ko">CLT·Westports 서명</span><span class="en">CLT·Westports sign</span></div></div>
+              <span class="target"><span class="ko">양측 서명</span><span class="en">Both signed</span></span>
+              <span class="actual good">2/2 <span class="ko">서명</span><span class="en">sign</span></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- TOS vs AI comparison -->
+        <div class="grid" style="grid-template-columns:7fr 5fr; gap:12px;">
+          <div class="card">
+            <div class="card-head">
+              <h3><span class="material-symbols-outlined">compare_arrows</span><span class="ko">TOS 배차 vs AI 배차 — 핵심 KPI 비교 (UAT 4주 누적)</span><span class="en">TOS Dispatch vs AI Dispatch — KPI Comparison (UAT 4 weeks)</span></h3>
+              <div class="head-sub"><span class="ko">병렬 로깅 기반 · 동일 항차 비교</span><span class="en">Parallel logging · same vessels</span></div>
+            </div>
+            <div class="card-body" style="padding:0;">
+              <table class="compare-table">
+                <thead>
+                  <tr><th>KPI</th><th class="mono"><span class="ko">TOS 실측</span><span class="en">TOS Actual</span></th><th class="mono"><span class="ko">AI 시뮬</span><span class="en">AI Sim</span></th><th class="mono"><span class="ko">개선폭</span><span class="en">Improvement</span></th><th><span class="ko">유의성</span><span class="en">Significance</span></th><th><span class="ko">최소 목표</span><span class="en">Min. target</span></th><th><span class="ko">판정</span><span class="en">Verdict</span></th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><b><span class="ko">작업당 공차 이동 거리</span><span class="en">Empty Travel Distance / Job</span></b></td>
+                    <td class="mono">0.96 km</td>
+                    <td class="mono">0.84 km</td>
+                    <td class="mono diff-pos">−12.3%</td>
+                    <td><span class="pill good">p=0.018</span></td>
+                    <td class="mono">−10%</td>
+                    <td><span class="pill good"><span class="ko">달성</span><span class="en">Met</span> ✓</span></td>
+                  </tr>
+                  <tr>
+                    <td><span class="ko">공차 이동 비율</span><span class="en">Empty Travel Ratio</span></td>
+                    <td class="mono">42.3%</td>
+                    <td class="mono">37.1%</td>
+                    <td class="mono diff-pos">−5.2pp</td>
+                    <td><span class="pill good">p=0.024</span></td>
+                    <td class="mono">−5pp</td>
+                    <td><span class="pill good"><span class="ko">달성</span><span class="en">Met</span> ✓</span></td>
+                  </tr>
+                  <tr>
+                    <td><span class="ko">QC 크레인 대기</span><span class="en">QC Crane Wait</span></td>
+                    <td class="mono">17.4s</td>
+                    <td class="mono">14.2s</td>
+                    <td class="mono diff-pos">−18.6%</td>
+                    <td><span class="pill good">p=0.041</span></td>
+                    <td class="mono">−5%</td>
+                    <td><span class="pill good"><span class="ko">우수</span><span class="en">Excellent</span> ✓</span></td>
+                  </tr>
+                  <tr>
+                    <td><span class="ko">TT 사이클 타임</span><span class="en">TT Cycle Time</span></td>
+                    <td class="mono">925s</td>
+                    <td class="mono">847s</td>
+                    <td class="mono diff-pos">−8.4%</td>
+                    <td><span class="pill good">p=0.029</span></td>
+                    <td class="mono">−5%</td>
+                    <td><span class="pill good"><span class="ko">달성</span><span class="en">Met</span> ✓</span></td>
+                  </tr>
+                  <tr>
+                    <td><span class="ko">YC 크레인 대기</span><span class="en">YC Crane Wait</span></td>
+                    <td class="mono">21.8s</td>
+                    <td class="mono">18.6s</td>
+                    <td class="mono diff-pos">−14.7%</td>
+                    <td><span class="pill good">p=0.047</span></td>
+                    <td class="mono">−5%</td>
+                    <td><span class="pill good"><span class="ko">달성</span><span class="en">Met</span> ✓</span></td>
+                  </tr>
+                  <tr style="background:rgba(245,158,11,0.04);">
+                    <td><span class="ko">교대 재배차 완료</span><span class="en">Shift redispatch</span></td>
+                    <td class="mono">28.4m</td>
+                    <td class="mono">26.1m</td>
+                    <td class="mono diff-pos">−8.1%</td>
+                    <td><span class="pill warn">N <span class="ko">부족</span><span class="en">insufficient</span></span></td>
+                    <td class="mono">−10%</td>
+                    <td><span class="pill warn"><span class="ko">관찰 중</span><span class="en">Observing</span></span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h3><span class="material-symbols-outlined">rule</span><span class="ko">불일치 케이스</span><span class="en">Mismatch Cases</span> (TOP)</h3>
+              <div class="head-sub">N=234 / <span class="ko">매칭 일치율</span><span class="en">Match Rate</span> 87.3%</div>
+            </div>
+            <div class="card-body" style="padding-top:6px;">
+              <div class="alert-row" style="padding:8px 4px;">
+                <span class="pin info"><span class="material-symbols-outlined">swap_horiz</span></span>
+                <div class="body">
+                  <div class="title mono" style="font-size:11px;">TOS: TT-19 / AI: TT-31 → K06-0418</div>
+                  <div class="meta"><span class="ko">AI 선택 사유</span><span class="en">AI choice reason</span>: <span class="ko">차량 대기</span><span class="en">Truck Wait</span> −3.2s · <span class="ko">공차 거리</span><span class="en">Empty distance</span> −0.18km</div>
+                </div>
+              </div>
+              <div class="alert-row" style="padding:8px 4px;">
+                <span class="pin info"><span class="material-symbols-outlined">swap_horiz</span></span>
+                <div class="body">
+                  <div class="title mono" style="font-size:11px;">TOS: TT-04 / AI: TT-12 → L05-0822</div>
+                  <div class="meta"><span class="ko">AI 선택 사유</span><span class="en">AI choice reason</span>: <span class="ko">크레인 대기</span><span class="en">Crane wait</span> −5.1s</div>
+                </div>
+              </div>
+              <div class="alert-row" style="padding:8px 4px;">
+                <span class="pin info"><span class="material-symbols-outlined">swap_horiz</span></span>
+                <div class="body">
+                  <div class="title mono" style="font-size:11px;">TOS: TT-28 / AI: TT-42 → K05-0712</div>
+                  <div class="meta"><span class="ko">AI 선택 사유</span><span class="en">AI choice reason</span>: <span class="ko">공차 거리</span><span class="en">Empty distance</span> −0.31km</div>
+                </div>
+              </div>
+              <div class="alert-row" style="padding:8px 4px;">
+                <span class="pin warn"><span class="material-symbols-outlined">priority_high</span></span>
+                <div class="body">
+                  <div class="title mono" style="font-size:11px;">TOS: TT-37 / AI: <span class="ko">폴백</span><span class="en">Fallback</span></div>
+                  <div class="meta"><span class="ko">AI 폴백 사유</span><span class="en">AI fallback reason</span>: SHF <span class="ko">제약</span><span class="en">Constraint</span> (<span class="ko">Twin-lift 미인식</span><span class="en">Twin-lift unrecognized</span>) · <span class="ko">1건</span><span class="en">1 cases</span></div>
+                </div>
+              </div>
+              <div style="text-align:center; font-size:10px; color:var(--text-mute); padding:8px 0 0;">
+                + 230<span class="ko">건 더 보기</span><span class="en">more cases</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /view-D -->
+
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <!-- VIEW E: <span class="ko">시스템</span><span class="en">System</span> <span class="ko">상태</span><span class="en">Status</span>                                                -->
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <div class="view view-E">
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <div>
+            <div style="font-family:Manrope; font-weight:800; font-size:18px;"><span class="ko">시스템 상태 & 컨텍스트</span><span class="en">System Status & Context</span></div>
+            <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">Azure Malaysia West · Service 1 <span class="ko">공용 데이터 플레인 재사용</span><span class="en">Shared Data Plane reused</span> · Service 2 <span class="ko">전용</span><span class="en">dedicated</span> LB + Primary VM</div>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <span class="pill good"><span class="ko">전체 정상</span><span class="en">All Normal</span></span>
+            <span class="pill warn"><span class="ko">Telematics 부분 지연</span><span class="en">Telematics partial lag</span></span>
+          </div>
+        </div>
+
+        <!-- Topology -->
+        <div class="card topo-card" style="margin-bottom:12px;">
+          <div class="card-head">
+            <h3><span class="material-symbols-outlined">schema</span><span class="ko">데이터 파이프라인 & 컴포넌트 헬스</span><span class="en">Data Pipeline & Component Health</span></h3>
+            <div class="head-sub"><span class="ko">실시간 갱신</span><span class="en">Live update</span></div>
+          </div>
+          <div class="topo-body">
+            <svg class="topo-svg" viewBox="0 0 900 280" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                  <polygon points="0 0, 8 4, 0 8" fill="#60a5fa"/>
+                </marker>
+                <marker id="arrG" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                  <polygon points="0 0, 8 4, 0 8" fill="#22c55e"/>
+                </marker>
+              </defs>
+
+              <!-- On-Prem boundary -->
+              <rect x="20" y="20" width="180" height="240" fill="rgba(245,158,11,0.05)" stroke="#b45309" stroke-dasharray="4,3" rx="6"/>
+              <text x="110" y="40" text-anchor="middle" fill="#fbbf24" font-family="Inter" font-size="11" font-weight="700">ON-PREM (Westports)</text>
+
+              <!-- WP TOS -->
+              <rect x="40" y="60" width="140" height="50" rx="6" fill="#1e293b" stroke="#475569"/>
+              <text x="110" y="80" text-anchor="middle" fill="#cbd5e1" font-size="11" font-weight="700" font-family="Inter">WP TOS</text>
+              <text x="110" y="96" text-anchor="middle" fill="#86efac" font-size="9" font-family="JetBrains Mono">● Normal · CDC OK</text>
+
+              <!-- TOS DB -->
+              <ellipse cx="110" cy="155" rx="50" ry="22" fill="#1e293b" stroke="#475569"/>
+              <ellipse cx="110" cy="148" rx="50" ry="6" fill="none" stroke="#475569"/>
+              <text x="110" y="160" text-anchor="middle" fill="#cbd5e1" font-size="11" font-weight="700" font-family="Inter">TOS DB</text>
+
+              <!-- GPS WebSocket -->
+              <rect x="40" y="200" width="140" height="44" rx="6" fill="#1e293b" stroke="#f59e0b" stroke-dasharray="3,3"/>
+              <text x="110" y="218" text-anchor="middle" fill="#fbbf24" font-size="11" font-weight="700" font-family="Inter">GPS WebSocket</text>
+              <text x="110" y="234" text-anchor="middle" fill="#fcd34d" font-size="9" font-family="JetBrains Mono">⚠ 1.2s lag</text>
+
+              <!-- VPN Gateway -->
+              <polygon points="220,150 260,130 260,170" fill="#475569"/>
+              <text x="240" y="194" text-anchor="middle" fill="#94a3b8" font-size="9" font-family="Inter">VPN</text>
+
+              <!-- Cloud boundary -->
+              <rect x="280" y="20" width="600" height="240" fill="rgba(96,165,250,0.04)" stroke="#3b82f6" stroke-dasharray="4,3" rx="6"/>
+              <text x="580" y="40" text-anchor="middle" fill="#93c5fd" font-family="Inter" font-size="11" font-weight="700">CLOUD · Azure Malaysia West</text>
+
+              <!-- Data Plane subgroup -->
+              <rect x="300" y="60" width="280" height="180" fill="rgba(96,165,250,0.06)" stroke="#1e40af" stroke-dasharray="2,2" rx="6"/>
+              <text x="440" y="76" text-anchor="middle" fill="#bfdbfe" font-family="Inter" font-size="10" font-weight="600">Shared Data Plane (Service 1shared with)</text>
+
+              <!-- Debezium -->
+              <rect x="320" y="92" width="110" height="44" rx="6" fill="#1e3a8a" stroke="#3b82f6"/>
+              <text x="375" y="110" text-anchor="middle" fill="white" font-size="11" font-weight="700" font-family="Inter">Debezium</text>
+              <text x="375" y="125" text-anchor="middle" fill="#86efac" font-size="9" font-family="JetBrains Mono">● CDC 0.4s</text>
+
+              <!-- Kafka -->
+              <rect x="450" y="92" width="110" height="44" rx="6" fill="#1e3a8a" stroke="#3b82f6"/>
+              <text x="505" y="110" text-anchor="middle" fill="white" font-size="11" font-weight="700" font-family="Inter">Kafka</text>
+              <text x="505" y="125" text-anchor="middle" fill="#86efac" font-size="9" font-family="JetBrains Mono">● lag 0</text>
+
+              <!-- Memory DB -->
+              <ellipse cx="375" cy="190" rx="55" ry="20" fill="#1e3a8a" stroke="#3b82f6"/>
+              <ellipse cx="375" cy="184" rx="55" ry="6" fill="none" stroke="#3b82f6"/>
+              <text x="375" y="195" text-anchor="middle" fill="white" font-size="10" font-weight="700" font-family="Inter">Memory DB</text>
+
+              <!-- Postgres -->
+              <ellipse cx="505" cy="190" rx="55" ry="20" fill="#1e3a8a" stroke="#3b82f6"/>
+              <ellipse cx="505" cy="184" rx="55" ry="6" fill="none" stroke="#3b82f6"/>
+              <text x="505" y="195" text-anchor="middle" fill="white" font-size="10" font-weight="700" font-family="Inter">PostgreSQL</text>
+
+              <!-- Service Plane subgroup -->
+              <rect x="610" y="60" width="250" height="180" fill="rgba(96,165,250,0.06)" stroke="#1e40af" stroke-dasharray="2,2" rx="6"/>
+              <text x="735" y="76" text-anchor="middle" fill="#bfdbfe" font-family="Inter" font-size="10" font-weight="600">Service Plane (Service 2)</text>
+
+              <!-- LB -->
+              <rect x="630" y="92" width="100" height="38" rx="6" fill="#0c4a6e" stroke="#0891b2"/>
+              <text x="680" y="108" text-anchor="middle" fill="white" font-size="11" font-weight="700" font-family="Inter">Load Balancer</text>
+              <text x="680" y="122" text-anchor="middle" fill="#86efac" font-size="9" font-family="JetBrains Mono">● Health OK</text>
+
+              <!-- AI Engine -->
+              <rect x="750" y="92" width="100" height="80" rx="6" fill="#581c87" stroke="#a78bfa"/>
+              <text x="800" y="112" text-anchor="middle" fill="white" font-size="11" font-weight="700" font-family="Inter">AI Engine</text>
+              <text x="800" y="126" text-anchor="middle" fill="#ddd6fe" font-size="9" font-family="JetBrains Mono">v0.4.1-poc</text>
+              <text x="800" y="142" text-anchor="middle" fill="#86efac" font-size="9" font-family="JetBrains Mono">● p99 22ms</text>
+              <text x="800" y="158" text-anchor="middle" fill="#86efac" font-size="9" font-family="JetBrains Mono">● 99.4% AI</text>
+
+              <!-- Dashboard -->
+              <rect x="630" y="190" width="100" height="38" rx="6" fill="#0c4a6e" stroke="#0891b2"/>
+              <text x="680" y="206" text-anchor="middle" fill="white" font-size="11" font-weight="700" font-family="Inter">Dashboard</text>
+              <text x="680" y="220" text-anchor="middle" fill="#86efac" font-size="9" font-family="JetBrains Mono">● Normal</text>
+
+              <!-- Connections -->
+              <path d="M180 85 L260 130" stroke="#22c55e" stroke-width="1.5" marker-end="url(#arrG)" fill="none"/>
+              <path d="M160 155 L260 150" stroke="#22c55e" stroke-width="1.5" marker-end="url(#arrG)" fill="none"/>
+              <path d="M180 222 L290 222 L290 192 L320 192" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="3,2" fill="none" marker-end="url(#arr)"/>
+              <path d="M260 150 L320 114" stroke="#22c55e" stroke-width="1.5" marker-end="url(#arrG)" fill="none"/>
+
+              <path d="M430 114 L450 114" stroke="#60a5fa" stroke-width="2" marker-end="url(#arr)"/>
+              <path d="M505 136 L505 170" stroke="#60a5fa" stroke-width="1.5" marker-end="url(#arr)"/>
+              <path d="M450 122 L430 170" stroke="#60a5fa" stroke-width="1.5" marker-end="url(#arr)"/>
+              <path d="M560 114 L630 111" stroke="#60a5fa" stroke-width="2" marker-end="url(#arr)"/>
+              <path d="M560 190 L750 132" stroke="#60a5fa" stroke-width="1.5" marker-end="url(#arr)"/>
+              <path d="M730 132 L750 132" stroke="#60a5fa" stroke-width="2" marker-end="url(#arr)"/>
+              <path d="M800 172 L800 188 L730 199" stroke="#60a5fa" stroke-width="1.5" marker-end="url(#arr)"/>
+
+              <!-- AI back to TOS (response) -->
+              <path d="M750 110 Q400 50 110 90" stroke="#a78bfa" stroke-width="1.2" fill="none" stroke-dasharray="4,3" marker-end="url(#arr)"/>
+              <text x="450" y="58" fill="#a78bfa" font-size="9" font-family="Inter">Dispatch Resp</text>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Component health + Data quality + Berth plan -->
+        <div class="grid" style="grid-template-columns:4fr 4fr 4fr; gap:12px;">
+
+          <div class="card">
+            <div class="card-head">
+              <h3><span class="material-symbols-outlined">monitor_heart</span><span class="ko">컴포넌트 헬스</span><span class="en">Component Health</span></h3>
+              <div class="head-sub"><span class="ko">실시간</span><span class="en">Live</span></div>
+            </div>
+            <div class="card-body">
+              <div class="sys-row"><span class="sys-name"><span class="dot" style="background:var(--good)"></span>WP TOS</span><span class="sys-val"><span class="ko">정상</span><span class="en">Normal</span></span></div>
+              <div class="sys-row"><span class="sys-name"><span class="dot" style="background:var(--good)"></span>TOS DB CDC</span><span class="sys-val">0.4s lag</span></div>
+              <div class="sys-row"><span class="sys-name"><span class="dot" style="background:var(--good)"></span>Debezium VM</span><span class="sys-val">CPU 14%</span></div>
+              <div class="sys-row"><span class="sys-name"><span class="dot" style="background:var(--good)"></span>Kafka Cluster</span><span class="sys-val">lag 0 · 3 brokers</span></div>
+              <div class="sys-row"><span class="sys-name"><span class="dot" style="background:var(--good)"></span>Memory DB</span><span class="sys-val">RAM 38%</span></div>
+              <div class="sys-row"><span class="sys-name"><span class="dot" style="background:var(--good)"></span>PostgreSQL</span><span class="sys-val">disk 64%</span></div>
+              <div class="sys-row"><span class="sys-name"><span class="dot" style="background:var(--good)"></span>AI Engine VM</span><span class="sys-val">CPU 22% · RAM 41%</span></div>
+              <div class="sys-row"><span class="sys-name"><span class="dot" style="background:var(--good)"></span>Load Balancer</span><span class="sys-val">2/2 healthy</span></div>
+              <div class="sys-row"><span class="sys-name"><span class="dot" style="background:var(--warn)"></span>GPS WebSocket</span><span class="sys-val">1.2s · 49/50</span></div>
+              <div class="sys-row"><span class="sys-name"><span class="dot" style="background:var(--warn)"></span>Telematics TT-22</span><span class="sys-val">last 4m</span></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h3><span class="material-symbols-outlined">verified</span><span class="ko">데이터 품질 (24H)</span><span class="en">Data Quality (24H)</span></h3>
+              <div class="head-sub"><span class="ko">결측 · 지연 · 이상</span><span class="en">Missing · Delay · Anomaly</span></div>
+            </div>
+            <div class="card-body">
+              <div class="sys-row"><span class="sys-name"><span class="ko">CDC 이벤트 결측</span><span class="en">CDC event missing</span></span><span class="sys-val" style="color:#86efac;">0.02%</span></div>
+              <div class="sys-row"><span class="sys-name"><span class="ko">CDC 이벤트 지연 (p99)</span><span class="en">CDC event delay (p99)</span></span><span class="sys-val">1.8s</span></div>
+              <div class="sys-row"><span class="sys-name"><span class="ko">GPS 결측 (TT)</span><span class="en">GPS missing (TT)</span></span><span class="sys-val" style="color:#fcd34d;">2.4%</span></div>
+              <div class="sys-row"><span class="sys-name"><span class="ko">GPS 위치 이상치</span><span class="en">GPS outliers</span></span><span class="sys-val"><span class="ko">17건</span><span class="en">17 cases</span> (<span class="ko">자동 보정</span><span class="en">auto-corrected</span>)</span></div>
+              <div class="sys-row"><span class="sys-name"><span class="ko">텔레매틱스 동기화율</span><span class="en">Telematics sync rate</span></span><span class="sys-val">98.0%</span></div>
+              <div class="sys-row"><span class="sys-name"><span class="ko">작업 이벤트 중복</span><span class="en">Job event duplicates</span></span><span class="sys-val" style="color:#86efac;"><span class="ko">0건</span><span class="en">0 cases</span></span></div>
+              <div class="sys-row"><span class="sys-name">QC↔TT <span class="ko">매핑 정합</span><span class="en">mapping integrity</span></span><span class="sys-val" style="color:#86efac;">100%</span></div>
+              <div class="sys-row"><span class="sys-name"><span class="ko">컨테이너 ID 미해석</span><span class="en">Unresolved container IDs</span></span><span class="sys-val"><span class="ko">4건</span><span class="en">4 cases</span></span></div>
+              <div style="margin-top:10px; padding:8px; background:var(--bg-soft); border-radius:4px; font-size:10px; color:var(--text-dim);">
+                <b style="color:var(--text);"><span class="ko">참고:</span><span class="en">Note:</span></b> <span class="ko">정합성 검증 룰 14종 적용 중</span><span class="en">14 integrity rules active</span> · <span class="ko">자동 복구</span><span class="en">auto-recovery</span> <span class="ko">23회</span><span class="en">23 times</span> / 24H
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h3><span class="material-symbols-outlined">timeline</span><span class="ko">항차·교대 컨텍스트</span><span class="en">Vessel · Shift Context</span></h3>
+              <div class="head-sub"><span class="ko">현재 + 다음 24시간</span><span class="en">Now + next 24H</span></div>
+            </div>
+            <div class="card-body">
+              <div style="margin-bottom:10px;">
+                <div style="font-size:10px; color:var(--text-dim); font-weight:600; text-transform:uppercase; letter-spacing:0.4px;"><span class="ko">현재 교대</span><span class="en">Current Shift</span></div>
+                <div style="font-family:Manrope; font-weight:800; font-size:14px; margin-top:2px;">S-1 (Day Shift)</div>
+                <div style="font-size:11px; color:var(--text-dim);">06:00 ~ 18:00 · <span class="ko">잔여</span><span class="en">left</span> 3h 28m · <span class="ko">인원</span><span class="en">crew</span> <span class="ko">42명</span><span class="en">42 people</span></div>
+              </div>
+              <div style="margin-bottom:10px;">
+                <div style="font-size:10px; color:var(--text-dim); font-weight:600; text-transform:uppercase; letter-spacing:0.4px;"><span class="ko">다음 교대 인계</span><span class="en">Next Shift Handover</span></div>
+                <div style="font-family:JetBrains Mono; font-weight:700; font-size:13px; margin-top:2px;">18:00 (3h 28m <span class="ko">뒤</span><span class="en">from now</span>)</div>
+                <div style="font-size:11px; color:var(--text-dim);"><span class="ko">재배차 대기열 사전 정렬</span><span class="en">Pre-sort redispatch queue</span>: 17:30 <span class="ko">시작 예정</span><span class="en">starting</span></div>
+              </div>
+              <div style="border-top:1px dashed var(--border-soft); padding-top:10px;">
+                <div style="font-size:10px; color:var(--text-dim); font-weight:600; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:6px;"><span class="ko">접안 일정 (24H)</span><span class="en">Berth Schedule (24H)</span></div>
+                <div class="gantt">
+                  <div class="gantt-axis" style="grid-column:1/-1;">
+                    <span></span>
+                    <div class="gantt-axis-line"><span>09:00</span><span>12:00</span><span>15:00</span><span>18:00</span><span>21:00</span><span>00:00</span><span>03:00</span><span>06:00</span></div>
+                  </div>
+                  <div class="gantt-row">
+                    <div class="gantt-berth">B7-9</div>
+                    <div class="gantt-track">
+                      <div class="gantt-block done" style="left:0; width:24%;">MAERSK SEMARANG (<span class="ko">양하</span><span class="en">Discharge</span>)</div>
+                      <div class="gantt-block curr" style="left:24%; width:18%;">▶ <span class="ko">진행 중</span><span class="en">In progress</span> (<span class="ko">적하</span><span class="en">Loading</span>)</div>
+                      <div class="gantt-block plan" style="left:62%; width:30%;">CMA CGM PUTRA</div>
+                    </div>
+                  </div>
+                  <div class="gantt-row">
+                    <div class="gantt-berth">B4-6</div>
+                    <div class="gantt-track">
+                      <div class="gantt-block done" style="left:0; width:42%;">ONE COMMITMENT</div>
+                      <div class="gantt-block plan" style="left:50%; width:42%;">EVERGREEN EVER GIVE</div>
+                    </div>
+                  </div>
+                  <div class="gantt-row">
+                    <div class="gantt-berth">B1-3</div>
+                    <div class="gantt-track">
+                      <div class="gantt-block plan" style="left:20%; width:32%;">COSCO BREEZE</div>
+                      <div class="gantt-block plan" style="left:55%; width:35%;">MSC HAMBURG</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /view-E -->
+
+
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+      <span class="item"><span class="dot g"></span>WP TOS Live</span>
+      <span class="sep">│</span>
+      <span class="item">CDC: 0.4s</span>
+      <span class="sep">│</span>
+      <span class="item">Kafka lag: 0</span>
+      <span class="sep">│</span>
+      <span class="item">Engine p99: 22ms</span>
+      <span class="sep">│</span>
+      <span class="item"><span class="dot g"></span>AI Active 99.4%</span>
+      <span class="sep">│</span>
+      <span class="item">Build: v0.4.1-poc · 2026-05-14</span>
+      <span class="spacer"></span>
+      <span class="item">Westports CT1 · Azure Malaysia West</span>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  // ── Live clock ──
+  function tickClock() {
+    const elapsed = Math.floor((Date.now() - window._t0) / 1000);
+    const d = new Date('2026-05-14T14:32:00+08:00');
+    d.setSeconds(d.getSeconds() + elapsed);
+    const pad = (n) => String(n).padStart(2, '0');
+    document.getElementById('clock').textContent =
+      `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())} MYT`;
+  }
+  window._t0 = Date.now();
+  setInterval(tickClock, 1000);
+
+  // ── Chart.js defaults for dark theme ──
+  Chart.defaults.font.family = 'Inter, sans-serif';
+  Chart.defaults.font.size = 10;
+  Chart.defaults.color = '#94a3b8';
+  Chart.defaults.borderColor = '#2a3654';
+
+  // ── Sparklines ──
+  function sparkline(id, data, color) {
+    const ctx = document.getElementById(id);
+    if (!ctx) return;
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: data.map((_, i) => i),
+        datasets: [{
+          data: data, borderColor: color, borderWidth: 1.5,
+          tension: 0.35, pointRadius: 0, fill: true,
+          backgroundColor: color + '30'
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+        scales: { x: { display: false }, y: { display: false } },
+        animation: false, elements: { line: { borderJoinStyle: 'round' } }
+      }
+    });
+  }
+
+  sparkline('sp-empty',  [0.95,0.93,0.91,0.89,0.88,0.86,0.85,0.84], '#86efac');
+  sparkline('sp-emptyr', [42.1,41.5,40.8,39.6,38.7,37.9,37.4,37.1], '#86efac');
+  sparkline('sp-craneq', [18.1,17.6,16.8,15.9,15.2,14.7,14.4,14.2], '#86efac');
+  sparkline('sp-mph',    [29.4,29.8,30.2,30.5,30.9,31.2,31.6,31.8], '#2dd4bf');
+  sparkline('sp-cycle',  [931,918,898,884,872,861,854,847], '#2dd4bf');
+  sparkline('sp-util',   [74.1,74.6,75.2,76.1,76.8,77.4,78.0,78.4], '#a78bfa');
+
+  // ── TT state donut ──
+  new Chart(document.getElementById('ttDonut'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Busy', '<span class="ko">공차</span><span class="en">Empty</span>', '<span class="ko">대기</span><span class="en">wait</span>', 'Idle', '<span class="ko">정비</span><span class="en">Maint</span>'],
+      datasets: [{
+        data: [23, 14, 4, 9, 0],
+        backgroundColor: ['#22c55e','#38bdf8','#f59e0b','#64748b','#ef4444'],
+        borderWidth: 2, borderColor: '#131b2e'
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      cutout: '68%',
+      plugins: { legend: { display: false }, tooltip: { enabled: true } },
+      animation: false
+    },
+    plugins: [{
+      id: 'centerText',
+      beforeDraw(chart) {
+        const { ctx, chartArea: { left, right, top, bottom } } = chart;
+        const cx = (left + right) / 2, cy = (top + bottom) / 2;
+        ctx.save();
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '800 17px Manrope';
+        ctx.fillStyle = '#e2e8f0';
+        ctx.fillText('50', cx, cy - 6);
+        ctx.font = '500 9px Inter';
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillText('TOTAL TT', cx, cy + 9);
+        ctx.restore();
+      }
+    }]
+  });
+
+  // ── Trend chart ──
+  new Chart(document.getElementById('trendChart'), {
+    type: 'line',
+    data: {
+      labels: ['S-7\n5/11 D','S-6\n5/11 N','S-5\n5/12 D','S-4\n5/12 N','S-3\n5/13 D','S-2\n5/13 N','S-1\n5/14 D','Now\n5/14'],
+      datasets: [
+        {
+          label: '<span class="ko">공차 이동 거리</span><span class="en">Empty travel dist.</span> (km)',
+          data: [0.96, 0.93, 0.91, 0.89, 0.88, 0.86, 0.85, 0.84],
+          borderColor: '#60a5fa', backgroundColor: '#60a5fa33',
+          borderWidth: 2, tension: 0.3, pointRadius: 3, pointBackgroundColor: '#60a5fa',
+          fill: true
+        },
+        {
+          label: 'Baseline',
+          data: [0.96,0.96,0.96,0.96,0.96,0.96,0.96,0.96],
+          borderColor: '#64748b', borderWidth: 1.5, borderDash: [4,4],
+          pointRadius: 0, fill: false
+        },
+        {
+          label: '<span class="ko">목표</span><span class="en">Target</span> (-10%)',
+          data: [0.864,0.864,0.864,0.864,0.864,0.864,0.864,0.864],
+          borderColor: '#22c55e', borderWidth: 1.5, borderDash: [2,3],
+          pointRadius: 0, fill: false
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: 'top', align: 'end',
+          labels: { boxWidth: 10, boxHeight: 2, font: { size: 10 }, padding: 8, color: '#cbd5e1' } },
+        tooltip: { mode: 'index', intersect: false }
+      },
+      scales: {
+        y: { beginAtZero: false, suggestedMin: 0.8, suggestedMax: 1.0,
+             ticks: { stepSize: 0.05, font: { size: 9 }, color: '#94a3b8' },
+             grid: { color: '#1f2940' } },
+        x: { ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { display: false } }
+      },
+      animation: false
+    }
+  });
+
+  // ── Dispatch bars ──
+  new Chart(document.getElementById('dispatchBar'), {
+    type: 'bar',
+    data: {
+      labels: Array.from({length: 24}, (_, i) => i + 'h'),
+      datasets: [{
+        data: [42,38,35,40,55,72,84,128,164,178,189,201,212,198,184,176,158,142,118,95,82,71,58,46],
+        backgroundColor: ctx => (ctx.dataIndex >= 14 && ctx.dataIndex <= 15) ? '#60a5fa' : '#475569',
+        borderRadius: 2, barPercentage: 0.85
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { enabled: true } },
+      scales: { x: { display: false }, y: { display: false } },
+      animation: false
+    }
+  });
+
+  // ── Util grid ──
+  const utilData = [
+    {id:'01', v:82},{id:'02', v:78},{id:'03', v:91},{id:'04', v:74},{id:'05', v:88},
+    {id:'06', v:79},{id:'07', v:85},{id:'08', v:73},{id:'09', v:86},{id:'10', v:80},
+    {id:'11', v:62},{id:'12', v:84},{id:'13', v:77},{id:'14', v:81},{id:'15', v:0,state:'idle'},
+    {id:'16', v:79},{id:'17', v:83},{id:'18', v:75},{id:'19', v:88},{id:'20', v:71},
+    {id:'21', v:87},{id:'22', v:42, state:'bad'},{id:'23', v:90},{id:'24', v:76},{id:'25', v:84},
+    {id:'26', v:80},{id:'27', v:78},{id:'28', v:82},{id:'29', v:89},{id:'30', v:75},
+    {id:'31', v:86},{id:'32', v:72},{id:'33', v:81},{id:'34', v:79},{id:'35', v:84},
+    {id:'36', v:0,state:'idle'},{id:'37', v:77},{id:'38', v:83},{id:'39', v:80},{id:'40', v:88},
+    {id:'41', v:74},{id:'42', v:78},{id:'43', v:85},{id:'44', v:81},{id:'45', v:79},
+    {id:'46', v:73},{id:'47', v:86},{id:'48', v:80},{id:'49', v:84},{id:'50', v:78}
+  ];
+  const ug = document.getElementById('utilGrid');
+  utilData.forEach(d => {
+    const cell = document.createElement('div');
+    let cls = 'util-cell';
+    if (d.state) cls += ' ' + d.state;
+    else if (d.v < 50) cls += ' bad';
+    else if (d.v < 70) cls += ' warn';
+    cell.className = cls;
+    cell.title = `TT-${d.id} · ${d.v}%`;
+    const fill = document.createElement('div');
+    fill.className = 'fill';
+    fill.style.height = (d.state === 'idle' ? 8 : Math.max(8, d.v)) + '%';
+    cell.appendChild(fill);
+    ug.appendChild(cell);
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // Tab switching
+  // ═══════════════════════════════════════════════════════════════
+  const tabs = document.querySelectorAll('.tab');
+  const sides = document.querySelectorAll('.side-item');
+  const views = document.querySelectorAll('.view');
+  const keyMap = ['A','B','C','D','E'];
+  const initialized = { A: true, B: false, C: false, D: false, E: false };
+
+  function activate(key) {
+    tabs.forEach((t, i) => t.classList.toggle('active', keyMap[i] === key));
+    sides.forEach((s, i) => {
+      if (i < 5) s.classList.toggle('active', keyMap[i] === key);
+    });
+    views.forEach(v => v.classList.remove('active'));
+    document.querySelector('.view-' + key).classList.add('active');
+
+    if (!initialized[key]) {
+      if (key === 'B') initViewB();
+      if (key === 'C') initViewC();
+      initialized[key] = true;
+    }
+  }
+  tabs.forEach((t, i) => t.addEventListener('click', () => activate(keyMap[i])));
+  sides.forEach((s, i) => {
+    if (i < 5) s.addEventListener('click', () => activate(keyMap[i]));
+  });
+
+  // Language toggle
+  function setLang(lang) {
+    document.body.setAttribute('data-lang', lang);
+    document.querySelectorAll('.lang-toggle .lang-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.lang === lang);
+    });
+  }
+  document.querySelectorAll('.lang-toggle .lang-btn').forEach(b => {
+    b.addEventListener('click', () => setLang(b.dataset.lang));
+  });
+  setLang('en');
+
+  // ═══════════════════════════════════════════════════════════════
+  // View B init — KPI Live trends
+  // ═══════════════════════════════════════════════════════════════
+  function miniTrend(id, data, color, baseline, target) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    new Chart(el, {
+      type: 'line',
+      data: {
+        labels: data.map((_, i) => i),
+        datasets: [
+          { data, borderColor: color, borderWidth: 2, tension: 0.3, pointRadius: 0, fill: true, backgroundColor: color + '33' },
+          baseline ? { data: data.map(() => baseline), borderColor: '#64748b', borderWidth: 1, borderDash: [3,3], pointRadius: 0, fill: false } : null,
+          target ? { data: data.map(() => target), borderColor: '#22c55e', borderWidth: 1, borderDash: [2,3], pointRadius: 0, fill: false } : null
+        ].filter(Boolean)
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+        scales: { x: { display: false }, y: { display: false } },
+        animation: false
+      }
+    });
+  }
+  function initViewB() {
+    miniTrend('b-trend-empty',  [0.96,0.93,0.91,0.89,0.88,0.86,0.85,0.84], '#86efac', 0.96, 0.864);
+    miniTrend('b-trend-emptyr', [42.1,41.5,40.8,39.6,38.7,37.9,37.4,37.1], '#86efac', 42.3, 40.3);
+    miniTrend('b-trend-craneq', [18.1,17.6,16.8,15.9,15.2,14.7,14.4,14.2], '#86efac', 17.4, 16.5);
+    miniTrend('b-trend-mph',    [29.4,29.8,30.2,30.5,30.9,31.2,31.6,31.8], '#2dd4bf', 29.8, 31.3);
+    miniTrend('b-trend-cycle',  [931,918,898,884,872,861,854,847], '#2dd4bf', 925, 879);
+    miniTrend('b-trend-util',   [74.1,74.6,75.2,76.1,76.8,77.4,78.0,78.4], '#a78bfa', 74.3, 76.0);
+
+    const hm = document.getElementById('heatmap');
+    if (!hm) return;
+    const days = ['5/08','5/09','5/10','5/11','5/12','5/13','5/14'];
+    function color(v) {
+      if (v < 0.80) return '#86efac';
+      if (v < 0.90) return '#60a5fa';
+      if (v < 1.00) return '#a78bfa';
+      if (v < 1.10) return '#fcd34d';
+      return '#fca5a5';
+    }
+    function v(day, hr) {
+      const base = 1.05 - day * 0.03;
+      const hrEffect = (hr >= 7 && hr <= 11) ? 0.05 : (hr >= 14 && hr <= 17) ? 0.04 : (hr >= 22 || hr <= 5) ? -0.05 : 0;
+      const noise = ((day*7 + hr) % 5 - 2) * 0.01;
+      return Math.max(0.70, base + hrEffect + noise);
+    }
+    let html = '';
+    days.forEach((d, di) => {
+      html += `<div class="hm-row-label">${d}</div>`;
+      for (let h = 0; h < 24; h++) {
+        const val = v(di, h);
+        html += `<div class="hm-cell" style="background:${color(val)};" title="${d} ${h}h"></div>`;
+      }
+    });
+    hm.innerHTML = html;
+    hm.style.display = 'grid';
+    hm.style.gridTemplateColumns = '50px repeat(24, 1fr)';
+    hm.style.gap = '2px';
+    hm.style.marginTop = '4px';
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // View C init — Latency histogram + AI ratio
+  // ═══════════════════════════════════════════════════════════════
+  function initViewC() {
+    new Chart(document.getElementById('latencyHist'), {
+      type: 'bar',
+      data: {
+        labels: ['<5','5-8','8-11','11-14','14-17','17-20','20-23','23-26','26-29','29+'],
+        datasets: [{
+          data: [12, 48, 92, 84, 64, 42, 22, 12, 6, 2],
+          backgroundColor: (ctx) => ctx.dataIndex >= 7 ? '#fcd34d' : ctx.dataIndex >= 5 ? '#60a5fa' : '#22c55e',
+          borderRadius: 3
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#1f2940' } },
+          x: { ticks: { color: '#94a3b8', font: { size: 9 } }, grid: { display: false } }
+        },
+        animation: false
+      }
+    });
+    new Chart(document.getElementById('aiRatio'), {
+      type: 'line',
+      data: {
+        labels: Array.from({length:24}, (_,i)=>i+'h'),
+        datasets: [{
+          data: [100,100,100,100,100,100,100,99.8,100,100,100,99.2,100,100,98.7,100,100,100,100,100,100,100,100,100].slice(0, 14).concat([99.4,100]),
+          borderColor: '#60a5fa', backgroundColor: 'rgba(96,165,250,0.15)',
+          borderWidth: 2, tension: 0.2, pointRadius: 2, fill: true,
+          pointBackgroundColor: (ctx) => ctx.raw < 100 ? '#fcd34d' : '#60a5fa'
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+        scales: {
+          y: { min: 95, max: 100.5, ticks: { color: '#94a3b8', font: { size: 10 }, stepSize: 1 }, grid: { color: '#1f2940' } },
+          x: { ticks: { color: '#94a3b8', font: { size: 9 } }, grid: { display: false } }
+        },
+        animation: false
+      }
+    });
+  }
+</script>
+</body>
+</html>
+                                                                                                                                   

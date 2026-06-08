@@ -1,0 +1,23 @@
+[Unit]
+Description=WP-TT GPS websocket SSH tunnel (127.0.0.1:9986 -> azure-wp-poc -> 172.21.30.72:9986)
+Documentation=https://internal/wp-tt-dashboard livemap
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+# Tailscale SSH auth (no key/password) to the azure box, which CAN reach the WSL GPS ws.
+# BatchMode=yes so it fails fast instead of ever hanging on a prompt; ExitOnForwardFailure
+# so a port clash exits (and Restart= retries) rather than running half-up.
+ExecStart=/usr/bin/ssh -N \
+  -o BatchMode=yes \
+  -o ExitOnForwardFailure=yes \
+  -o StrictHostKeyChecking=accept-new \
+  -o ServerAliveInterval=20 \
+  -o ServerAliveCountMax=3 \
+  -L 127.0.0.1:9986:172.21.30.72:9986 \
+  aiadmin@100.124.171.118
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

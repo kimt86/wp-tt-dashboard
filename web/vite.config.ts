@@ -1,0 +1,14 @@
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+// Dev server proxies /api -> the Rust axum API so the app uses same-origin paths.
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    host: "127.0.0.1",
+    port: 5173,
+    proxy: {
+      "/api": { target: "http://127.0.0.1:8080", changeOrigin: true },
+    },
+  },
+});

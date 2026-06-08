@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WP-TT KPI Snapshot (real data)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0a0f1d; --surface:#131b2e; --surface-2:#1a2438; --border:#2a3654; --border-soft:#1f2940;
+    --text:#e2e8f0; --text-dim:#94a3b8; --text-mute:#64748b;
+    --brand:#60a5fa; --good:#22c55e; --warn:#f59e0b; --bad:#ef4444; --purple:#a78bfa; --teal:#2dd4bf;
+    --good-bg:rgba(34,197,94,.15); --warn-bg:rgba(245,158,11,.15);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Inter','Malgun Gothic',sans-serif;background:var(--bg);color:var(--text);font-size:13px;padding:20px 24px 48px}
+  .mono{font-family:'JetBrains Mono',monospace}
+  h1{font-family:'Manrope',sans-serif;font-weight:800;font-size:20px;letter-spacing:-.4px}
+  h1 .accent{color:var(--brand)}
+  .sub{color:var(--text-dim);font-size:12px;margin-top:4px}
+  .sub .pill{background:var(--good-bg);color:#86efac;border:1px solid rgba(34,197,94,.35);padding:2px 8px;border-radius:999px;font-weight:600;margin-left:8px}
+  .grid{display:grid;gap:12px;margin-top:16px}
+  .kpis{grid-template-columns:repeat(6,1fr)}
+  @media(max-width:1100px){.kpis{grid-template-columns:repeat(3,1fr)}}
+  .kpi{background:var(--surface);border:1px solid var(--border);border-radius:.6rem;padding:12px 14px;min-height:108px;display:flex;flex-direction:column;gap:6px;position:relative}
+  .kpi.primary{border-left:3px solid var(--warn)}
+  .kpi .label{font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.4px}
+  .kpi .vrow{display:flex;align-items:baseline;gap:5px;margin-top:auto}
+  .kpi .val{font-family:'Manrope',sans-serif;font-size:26px;font-weight:800;letter-spacing:-.5px}
+  .kpi .unit{font-size:11px;color:var(--text-mute);font-weight:500}
+  .kpi .n{font-size:10px;color:var(--text-mute);font-family:'JetBrains Mono',monospace}
+  .cards{grid-template-columns:7fr 5fr}
+  @media(max-width:1100px){.cards{grid-template-columns:1fr}}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:.6rem;overflow:hidden}
+  .card h3{font-size:12px;font-weight:600;padding:10px 14px;border-bottom:1px solid var(--border-soft);background:var(--surface-2);display:flex;justify-content:space-between}
+  .card h3 .hint{color:var(--text-mute);font-weight:500;font-size:10px}
+  .card .body{padding:12px 14px}
+  .chart{position:relative;height:240px}
+  .chart.sm{height:200px}
+  table{width:100%;border-collapse:collapse;font-size:11px}
+  th,td{text-align:right;padding:5px 8px;border-bottom:1px solid var(--border-soft)}
+  th:first-child,td:first-child{text-align:left}
+  th{color:var(--text-mute);font-weight:600;font-size:10px;text-transform:uppercase}
+  td.mono{font-family:'JetBrains Mono',monospace;color:var(--text)}
+  .foot{margin-top:18px;color:var(--text-mute);font-size:10px;font-family:'JetBrains Mono',monospace}
+</style>
+</head>
+<body>
+  <h1>WP<span class="accent">·TT</span> KPI Snapshot</h1>
+  <div class="sub">실제 프로덕션 추출 데이터 · as-of <span id="asof" class="mono"></span><span class="pill">LIVE EXTRACT</span></div>
+
+  <div class="grid kpis" id="kpiStrip"></div>
+
+  <div class="grid cards" style="margin-top:12px">
+    <div class="card">
+      <h3>시간대별 크레인 대기시간 (초) <span class="hint">avg · p95, 24h</span></h3>
+      <div class="body"><div class="chart"><canvas id="craneqChart"></canvas></div></div>
+    </div>
+    <div class="card">
+      <h3>작업유형별 사이클 타임 중앙값 (분) <span class="hint">median</span></h3>
+      <div class="body"><div class="chart"><canvas id="cycleChart"></canvas></div></div>
+    </div>
+  </div>
+
+  <div class="grid cards" style="margin-top:12px">
+    <div class="card">
+      <h3>작업유형×시프트 공차 이동비율 (%) <span class="hint">상위</span></h3>
+      <div class="body"><div class="chart sm"><canvas id="emptyChart"></canvas></div></div>
+    </div>
+    <div class="card">
+      <h3>QC별 시간당 처리량 <span class="hint">상위 QC</span></h3>
+      <div class="body">
+        <table id="mphTable"><thead><tr><th>QC</th><th>MPH</th><th>Moves</th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot" id="foot"></div>
+
+<script>
+const DATA = __DATA__;
+
+// Internal K_ ids are never shown — only these display names appear in the UI.
+const META = {
+  K_EMPTY:   {name:'공차 이동거리/작업', unit:'km/Job', primary:true},
+  K_EMPTY_R: {name:'공차 이동 비율',     unit:'%'},
+  K_CRANE_Q: {name:'야드 핸드오버 대기',  unit:'s'},
+  K_MPH:     {name:'QC 시간당 처리량',   unit:'move/hr'},
+  K_CYCLE:   {name:'TT 사이클 타임',     unit:'s'},
+  K_UTIL:    {name:'TT 가동률',          unit:'%'},
+};
+const ORDER = ['K_EMPTY','K_EMPTY_R','K_CRANE_Q','K_MPH','K_CYCLE','K_UTIL'];
+
+document.getElementById('asof').textContent = DATA.as_of;
+
+// KPI strip
+const strip = document.getElementById('kpiStrip');
+for(const k of ORDER){
+  const m = META[k], v = DATA.headline[k], n = DATA.sample_n[k];
+  const el = document.createElement('div');
+  el.className = 'kpi' + (m.primary ? ' primary':'');
+  el.innerHTML = `<div class="label">${m.name}</div>
+    <div class="vrow"><span class="val">${v ?? '—'}</span><span class="unit">${m.unit}</span></div>
+    <div class="n">N ${n!=null ? Number(n).toLocaleString() : '—'}</div>`;
+  strip.appendChild(el);
+}
+
+Chart.defaults.font.family = 'Inter'; Chart.defaults.font.size = 10;
+Chart.defaults.color = '#94a3b8'; Chart.defaults.borderColor = '#1f2940';
+const noLegend = {plugins:{legend:{display:false}}};
+
+// K_CRANE_Q by hour
+new Chart(craneqChart, {type:'line',
+  data:{labels:DATA.crane_q_hour.map(r=>r.hour+'h'),
+    datasets:[
+      {label:'avg', data:DATA.crane_q_hour.map(r=>r.avg), borderColor:'#60a5fa', backgroundColor:'rgba(96,165,250,.12)', fill:true, tension:.3, pointRadius:0, borderWidth:2},
+      {label:'p95', data:DATA.crane_q_hour.map(r=>r.p95), borderColor:'#f59e0b', borderDash:[4,3], fill:false, tension:.3, pointRadius:0, borderWidth:1.5},
+    ]},
+  options:{maintainAspectRatio:false,plugins:{legend:{display:true,labels:{boxWidth:10}}},scales:{y:{beginAtZero:true}}}});
+
+// K_CYCLE median minutes by jobtype
+new Chart(cycleChart, {type:'bar',
+  data:{labels:DATA.cycle.map(r=>r.jobtype),
+    datasets:[{data:DATA.cycle.map(r=>+(r.med/60).toFixed(1)), backgroundColor:'#a78bfa'}]},
+  options:{maintainAspectRatio:false,...noLegend,scales:{y:{beginAtZero:true,title:{display:true,text:'min'}}}}});
+
+// K_EMPTY_R by jobtype×shift (top)
+const emp = DATA.empty.slice(0,8);
+new Chart(emptyChart, {type:'bar',
+  data:{labels:emp.map(r=>r.jobtype+'·'+r.shift),
+    datasets:[{data:emp.map(r=>r.ratio), backgroundColor:emp.map(r=>r.ratio>=53?'#ef4444':r.ratio>=48?'#f59e0b':'#22c55e')}]},
+  options:{maintainAspectRatio:false,...noLegend,indexAxis:'y',scales:{x:{beginAtZero:true,title:{display:true,text:'% empty'}}}}});
+
+// K_MPH per QC table
+const tb = document.querySelector('#mphTable tbody');
+for(const r of DATA.mph_qc.slice(0,12)){
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td>${r.qc}</td><td class="mono">${r.mph}</td><td class="mono">${Number(r.moves).toLocaleString()}</td>`;
+  tb.appendChild(tr);
+}
+
+const uc = DATA.util_crane.map(u=>`${u.type} ${u.pct}% (${u.n})`).join('  ·  ');
+document.getElementById('foot').textContent =
+  `크레인 가동률: ${uc}   |   실제 프로덕션 추출 데이터 (PostgreSQL)`;
+</script>
+</body>
+</html>

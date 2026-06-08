@@ -1,0 +1,80 @@
+//! wp-tt-dashboard read-only API (axum). Reads ONLY PostgreSQL (L1/L2) and, for the
+//! live map, subscribes to the WP-TT GPS websocket via the local SSH tunnel. This crate
+//! has NO Oracle/SSH access — it cannot reach production Oracle.
+
+mod agg;
+mod db;
+mod live;
+mod livemap;
+mod models;
+mod periods;
+mod routes;
+
+use std::sync::Arc;
+
+use axum::extract::FromRef;
+use axum::{routing::get, Router};
+use tower_http::cors::CorsLayer;
+use tower_http::services::{ServeDir, ServeFile};
+
+/// Combined app state. Existing handlers take `State<PgPool>`; the `FromRef` impls let
+/// both that and `State<Arc<LiveMap>>` be extracted from this one state.
+#[derive(Clone)]
+struct AppState {
+    pool: sqlx::PgPool,
+    livemap: Arc<livemap::LiveMap>,
+}
+
+impl FromRef<AppState> for sqlx::PgPool {
+    fn from_ref(s: &AppState) -> sqlx::PgPool {
+        s.pool.clone()
+    }
+}
+impl FromRef<AppState> for Arc<livemap::LiveMap> {
+    fn from_ref(s: &AppState) -> Arc<livemap::LiveMap> {
+        s.livemap.clone()
+    }
+}
+
+fn app(state: AppState) -> Router {
+    let api = Router::new()
+        .route("/api/kpis", get(routes::kpis))
+        .route("/api/kpis/:key/trend", get(routes::trend))
+        .route("/api/breakdown/qc", get(routes::breakdown_qc))
+        .route("/api/stats/:key", get(routes::stats))
+        .route("/api/live", get(live::live))
+        .route("/api/live/vessels", get(live::vessels))
+        .route("/api/livemap/positions", get(livemap::positions))
+        .route("/api/livemap/health", get(livemap::health))
+        .route("/api/health", get(routes::health))
+        .layer(CorsLayer::permissive()) // dev; tighten to the dashboard origin in prod
+        .with_state(state);
+
+    // Serve the built SPA (if present) and fall back to index.html for client routing.
+    let web_dist = std::env::var("WEB_DIST").unwrap_or_else(|_| "web/dist".to_string());
+    let index = format!("{web_dist}/index.html");
+    let spa = ServeDir::new(&web_dist).not_found_service(ServeFile::new(index));
+
+    api.fallback_service(spa)
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info".into()),
+        )
+        .init();
+
+    let pool = db::pool().await?;
+    let livemap = livemap::LiveMap::new();
+    livemap::spawn(livemap.clone()); // background GPS ingest (via local SSH tunnel)
+    let state = AppState { pool, livemap };
+
+    let addr = std::env::var("API_ADDR").unwrap_or_else(|_| "127.0.0.1:8080".to_string());
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    tracing::info!(%addr, "wp-api listening");
+    axum::serve(listener, app(state)).await?;
+    Ok(())
+}
