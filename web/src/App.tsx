@@ -404,7 +404,13 @@ export default function App() {
       <div className="header">
         <img className="brand-logo" src="/clt-logo-w.png" alt="CLT" />
         <span className="brand-div" />
-        <span className="logo">WP<span className="accent">·TT</span></span>
+        <span className="logo">TT <span className="accent">AiOps</span><span className="logo-sub">Platform</span></span>
+        <span className="site-chip" title={lang === "ko" ? "제품이 적용된 사이트" : "deployment site"}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11Z" /><circle cx="12" cy="10" r="2.5" />
+          </svg>
+          <span className="site-k">SITE</span>Westports Malaysia
+        </span>
         <span className="spacer" />
         <HealthPill health={health} lang={lang} />
         <span className="clock">{clock}</span>

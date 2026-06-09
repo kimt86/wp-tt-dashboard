@@ -2,7 +2,7 @@ export type Lang = "ko" | "en";
 
 const STRINGS: Record<Lang, Record<string, string>> = {
   ko: {
-    title: "운영 대시보드",
+    title: "TT AiOps Platform",
     live: "실시간 작업 지표",
     asOf: "기준",
     baselineWindow: "기준선",
@@ -29,7 +29,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     liveArea: "LIVE · 현재 쉬프트", shiftInfo: "현재 쉬프트", todayKpis: "오늘 누적 KPI", qcThroughput: "QC별 처리량", moves: "무브",
   },
   en: {
-    title: "Operations Dashboard",
+    title: "TT AiOps Platform",
     live: "Real-time operating metrics",
     asOf: "as-of",
     baselineWindow: "Baseline",
