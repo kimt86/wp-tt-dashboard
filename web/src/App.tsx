@@ -191,15 +191,17 @@ type CardSrc =
 
 function cardSrc(key: string, w: WsLive | null, ko: boolean): CardSrc {
   if (key === "K_UTIL") {
-    // True utilization EXCLUDES idle. The TOS session value (login − stops) counts manned-idle
-    // time as utilized → overstates, so it is not shown. websocket-only; "—" when feed is down.
-    const real = w && w.connected ? (w.tt_engaged_live ?? null) : null;
+    // TRUE utilization: of manned trucks, the fraction with an active job assignment
+    // (allocated→completed) — a truck queued at a crane with a job is utilized, NOT idle.
+    // Idle = manned but unassigned (awaiting dispatch). TOS session value is not shown.
+    const real = w && w.connected ? (w.tt_util_live ?? null) : null;
+    const moving = w?.tt_engaged_live;
     return {
       kind: "wsOnly",
       val: real != null ? `${real}%` : "—",
       title: ko
-        ? "진짜 가동률(유휴 제외) — 맨드(엔진ON) 트럭 중 실제 작업(이동·적재) 비율. TOS 세션 가동률(로그인−정지)은 유휴 대기를 가동으로 세 과대평가라 미표시. 빈 차 큐잉도 유휴로 세므로 하한값."
-        : "true utilization (idle excluded) — of manned trucks, the fraction actually working. The TOS session value counts idle-waiting as utilized (overstated), so it is not shown. A lower bound.",
+        ? `진짜 가동률 — 맨드(엔진ON) 트럭 중 작업 할당이 있는 비율. 할당~완료(크레인 전달) 사이는 멈춰 있어도(크레인 앞 큐잉 포함) 가동. 유휴 = 할당을 못 받고 대기하는 시간뿐. 할당 신호=container1/topos1/jobtype. (이 중 실제 이동·적재 중은 ${moving ?? "—"}%) TOS 세션값(유휴 포함)은 미표시.`
+        : `true utilization — of manned trucks, the fraction with an active job assignment. From allocation to completion (handover at the crane) the truck counts as utilized even while stopped (incl. queuing); idle = only time spent unassigned. Assignment signal = container1/topos1/jobtype. (Of these, ${moving ?? "—"}% are physically moving/carrying now.) The TOS session value is not shown.`,
     };
   }
   if (key === "K_CYCLE") {
@@ -274,7 +276,7 @@ function LiveCard({ c, lang, ws, extras }: { c: LiveKpi; lang: Lang; ws: WsLive 
       <div className={`kpi${c.tier === "PRIMARY" ? " primary" : ""}`} title={src.title}>
         <div className="label">{nm}<SourceBadge src="ws" ko={ko} /></div>
         <div className="vrow"><span className="val">{src.val}</span></div>
-        <div className="ws-sub mono">{ko ? "유휴 제외" : "idle excluded"}</div>
+        <div className="ws-sub mono">{ko ? "할당 기준" : "by assignment"}</div>
         <div className="n" style={{ marginTop: "auto" }}>{ko ? "websocket GPS" : "from websocket GPS"}</div>
       </div>
     );
@@ -333,7 +335,7 @@ function TodayCard({ c, lang, ws, extras }: { c: KpiCard; lang: Lang; ws: WsLive
       <div className={`kpi${c.tier === "PRIMARY" ? " primary" : ""}`} title={src.title}>
         <div className="label">{name(c, lang)}<SourceBadge src="ws" ko={ko} /></div>
         <div className="vrow"><span className="val">{src.val}</span></div>
-        <div className="ws-sub mono">{ko ? "유휴 제외" : "idle excluded"}</div>
+        <div className="ws-sub mono">{ko ? "할당 기준" : "by assignment"}</div>
         <div className="n" style={{ marginTop: "auto" }}>{ko ? "websocket GPS" : "from websocket GPS"}</div>
       </div>
     );

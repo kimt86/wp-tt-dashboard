@@ -344,11 +344,11 @@ pub struct PositionsOut {
     /// how full the rolling 1h window is, in minutes (0..=60). <60 ⇒ still settling.
     window_fill_min: u32,
     active_trucks: usize,
-    /// live K_UTIL (%) — manned/in-service TT fraction (engine on), comparable to the TOS
-    /// session-based K_UTIL (manned availability ~95%)
+    /// live K_UTIL (%) — TRUE utilization: of manned trucks, the fraction with an active job
+    /// assignment (allocated→completed, even while stopped). Idle = manned but unassigned.
     tt_util_live: Option<i64>,
-    /// engaged fraction (%) of manned trucks — moving/carrying now vs idle-waiting. The gap
-    /// to 100% is over-supply slack. A websocket-only signal (TOS cannot see it).
+    /// secondary (%) — of manned trucks, the fraction physically moving/carrying right now
+    /// (the remainder of the assigned ones are queued/waiting within their job).
     tt_engaged_live: Option<i64>,
     /// live K_QC_Q — quay cranes currently starving (idle, no truck) + their avg wait (s)
     qc_starving: usize,
@@ -618,20 +618,26 @@ pub async fn positions(State(lm): State<Arc<LiveMap>>) -> Json<PositionsOut> {
     } else { 0 };
 
     // ── live K_UTIL (TT utilization) ──
-    // TOS K_UTIL is *manned availability*: per-TT (logged-in − stop) / shift, i.e. the
-    // fraction of the shift a truck was manned and not broken down (~95%). To be COMPARABLE
-    // we must measure the same thing in real time: a truck is "utilized" when it is in
-    // service (engine on = operator aboard and running), NOT when it happens to be moving
-    // this instant. Engine-on maps almost 1:1 to the TOS manned fraction. The earlier
-    // "fraction moving right now" was a different quantity (it counts a manned truck queued
-    // at a crane as 0 while TOS counts it ~1), which is why it sat ~30pp below TOS.
+    // A truck is utilized from job ALLOCATION to COMPLETION (container handed to the crane) —
+    // even while stopped (queued at a crane, waiting to lift). Idle is ONLY the time a manned
+    // truck has NO assignment (awaiting dispatch). The GPS feed carries the live assignment:
+    // a carried container1, or a target job (topos1 destination / jobtype). So:
+    //   utilized = manned AND has-assignment ;  idle = manned AND no-assignment.
+    // This fixes the prior "moving/carrying now" proxy, which wrongly counted an assigned
+    // truck queued at a crane as idle. (TOS K_UTIL can't do this — it only subtracts formal
+    // stops, counting even unassigned manned time as utilized, so it overstates; not shown.)
     let fresh_tt = || map.values().filter(|p| p.cls == "TT" && (now - p.last_seen_ms) / 1000 <= STALE_AFTER_S);
     let total_tt = fresh_tt().count();
     let in_service = fresh_tt().filter(|p| p.engine == 1).count(); // manned (operator aboard)
-    let tt_util_live = (total_tt > 0).then(|| (in_service as f64 / total_tt as f64 * 100.0).round() as i64);
-    // separately, the genuinely-new websocket signal TOS cannot see: of the manned trucks,
-    // how many are actually engaged (moving/carrying) vs idle-waiting. The gap to 100% is
-    // the over-supply slack (manned trucks queued/staged with nothing to do right now).
+    let has_job = |p: &&Pos| {
+        p.container1.as_deref().is_some_and(|s| !s.is_empty())
+            || p.topos1.as_deref().is_some_and(|s| !s.is_empty())
+            || p.jobtype.as_deref().is_some_and(|s| !s.is_empty())
+    };
+    let assigned = fresh_tt().filter(|p| p.engine == 1).filter(has_job).count();
+    let tt_util_live = (in_service > 0).then(|| (assigned as f64 / in_service as f64 * 100.0).round() as i64);
+    // secondary context: of manned trucks, how many are physically moving/carrying right now
+    // (the rest with a job are queued/waiting within an assignment — still utilized above).
     let tt_engaged_live = (in_service > 0).then(|| (active_trucks as f64 / in_service as f64 * 100.0).round() as i64);
 
     // ── live K_QC_Q (QC waiting for a truck) ── direct starvation: a working quay crane
