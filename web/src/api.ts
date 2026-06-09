@@ -72,6 +72,26 @@ export interface VesselRow {
 }
 export interface VesselsResponse { shift: string; as_of: string; vessels: VesselRow[]; }
 
+// Live work pool (per-QC sequence + active move front), from the 90s extractor snapshot.
+export interface WpMove {
+  qc: string | null; queuename: string; vessel: string; jobtype: string | null;
+  yt_status: string | null; ytno: string | null; armgc: string | null;
+  etw_ts: string | null; contno: string | null; yt_topos: string | null;
+  from_pos: string | null; to_pos: string | null; twintandem: string | null;
+}
+export interface WpQueue {
+  queuename: string; vessel: string; voyage: string | null; disload: string | null;
+  seq: number | null; total: number; done: number; remaining: number;
+}
+export interface WpQc {
+  qc: string; vessels: string[]; active_moves: number; remaining: number;
+  queues: WpQueue[]; moves: WpMove[];
+}
+export interface WorkpoolResponse {
+  as_of: string | null; qc_count: number; active_moves: number; total_remaining: number;
+  qcs: WpQc[]; pool: WpMove[];
+}
+
 async function get<T>(path: string): Promise<T> {
   const r = await fetch(path);
   if (!r.ok) throw new Error(`${path}: ${r.status}`);
@@ -89,4 +109,5 @@ export const api = {
   health: () => get<HealthResponse>("/api/health"),
   live: () => get<LiveResponse>("/api/live"),
   liveVessels: () => get<VesselsResponse>("/api/live/vessels"),
+  workpool: () => get<WorkpoolResponse>("/api/workpool"),
 };

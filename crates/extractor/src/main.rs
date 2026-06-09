@@ -59,6 +59,12 @@ enum Command {
         #[arg(long)]
         date: Option<String>,
     },
+    /// Live work-pool snapshot (JOB_QUEUE_SCHEDULE + JOB_ORDER_LIST) → Postgres.
+    /// Refreshes the per-QC work queues + dispatchable moves; run ~every 90s.
+    Workpool {
+        #[arg(long, default_value = "oracle-prod")]
+        target: String,
+    },
 }
 
 fn parse_date(s: &str) -> Result<NaiveDate> {
@@ -149,6 +155,10 @@ async fn main() -> Result<()> {
             let pool = db::pool().await?;
             transform::run(&pool, date).await?;
             baseline::run(&pool, date).await?;
+        }
+        Command::Workpool { target } => {
+            let pool = db::pool().await?;
+            wp_extractor::workpool::tick_workpool(&pool, &target).await?;
         }
     }
     Ok(())

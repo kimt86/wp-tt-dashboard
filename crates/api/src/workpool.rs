@@ -1,0 +1,245 @@
+//! Live work pool: per-QC work-queue sequence + the active (in-flight) container moves
+//! that need / have a TT. Reads ONLY the Postgres snapshot tables (`live_workqueue`,
+//! `live_workpool`) that the extractor refreshes ~every 90s from TOS — the API crate
+//! never touches Oracle. The frontend fuses this with the live websocket PLC/GPS.
+
+use std::collections::BTreeMap;
+
+use axum::{extract::State, Json};
+use chrono::{DateTime, Utc};
+use serde::Serialize;
+use sqlx::PgPool;
+
+use crate::routes::AppError;
+
+#[derive(sqlx::FromRow)]
+struct QueueRow {
+    qc: String,
+    vessel: String,
+    voyage: Option<String>,
+    queuename: String,
+    disload: Option<String>,
+    seq: Option<i32>,
+    total_qty: Option<i32>,
+    comp_qty: Option<i32>,
+}
+
+#[derive(sqlx::FromRow)]
+struct MoveRow {
+    qc: Option<String>,
+    queuename: String,
+    vessel: String,
+    jobtype: Option<String>,
+    yt_status: Option<String>,
+    ytno: Option<String>,
+    armgc: Option<String>,
+    etw_ts: Option<DateTime<Utc>>,
+    contno: Option<String>,
+    yt_topos: Option<String>,
+    from_pos: Option<String>,
+    to_pos: Option<String>,
+    twintandem: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
+struct MoveOut {
+    qc: Option<String>,
+    queuename: String,
+    vessel: String,
+    jobtype: Option<String>,
+    yt_status: Option<String>,
+    ytno: Option<String>,
+    armgc: Option<String>,
+    etw_ts: Option<DateTime<Utc>>,
+    contno: Option<String>,
+    yt_topos: Option<String>,
+    from_pos: Option<String>,
+    to_pos: Option<String>,
+    twintandem: Option<String>,
+}
+
+#[derive(Serialize)]
+struct QueueOut {
+    queuename: String,
+    vessel: String,
+    voyage: Option<String>,
+    disload: Option<String>,
+    seq: Option<i32>,
+    total: i32,
+    done: i32,
+    remaining: i32,
+}
+
+#[derive(Serialize)]
+struct QcOut {
+    qc: String,
+    vessels: Vec<String>,
+    active_moves: usize,
+    remaining: i64,
+    queues: Vec<QueueOut>,
+    moves: Vec<MoveOut>,
+}
+
+#[derive(Serialize)]
+pub struct WorkpoolOut {
+    as_of: Option<DateTime<Utc>>,
+    qc_count: usize,
+    active_moves: usize,
+    total_remaining: i64,
+    qcs: Vec<QcOut>,
+    /// global active-move front, soonest ETW first (the urgent work), capped
+    pool: Vec<MoveOut>,
+}
+
+const POOL_CAP: usize = 80;
+
+/// `GET /api/workpool` — the live per-QC work pool (Postgres snapshot, ~90s fresh).
+pub async fn workpool(State(pool): State<PgPool>) -> Result<Json<WorkpoolOut>, AppError> {
+    let queues: Vec<QueueRow> = sqlx::query_as(
+        "SELECT qc, vessel, voyage, queuename, disload, seq, total_qty, comp_qty
+           FROM live_workqueue",
+    )
+    .fetch_all(&pool)
+    .await?;
+
+    let moves: Vec<MoveRow> = sqlx::query_as(
+        "SELECT qc, queuename, vessel, jobtype, yt_status, ytno, armgc, etw_ts,
+                contno, yt_topos, from_pos, to_pos, twintandem
+           FROM live_workpool",
+    )
+    .fetch_all(&pool)
+    .await?;
+
+    let as_of: Option<(Option<DateTime<Utc>>,)> =
+        sqlx::query_as("SELECT max(as_of_ts) FROM live_workpool")
+            .fetch_optional(&pool)
+            .await?;
+    let as_of = as_of.and_then(|r| r.0);
+
+    let to_move = |m: &MoveRow| MoveOut {
+        qc: m.qc.clone(),
+        queuename: m.queuename.clone(),
+        vessel: m.vessel.clone(),
+        jobtype: m.jobtype.clone(),
+        yt_status: m.yt_status.clone(),
+        ytno: m.ytno.clone(),
+        armgc: m.armgc.clone(),
+        etw_ts: m.etw_ts,
+        contno: m.contno.clone(),
+        yt_topos: m.yt_topos.clone(),
+        from_pos: m.from_pos.clone(),
+        to_pos: m.to_pos.clone(),
+        twintandem: m.twintandem.clone(),
+    };
+
+    // which QCs are "working now": have an active move, or a started queue (comp>0).
+    let mut active_qcs: BTreeMap<String, ()> = BTreeMap::new();
+    for m in &moves {
+        if let Some(qc) = m.qc.as_deref().filter(|s| !s.is_empty()) {
+            active_qcs.insert(qc.to_string(), ());
+        }
+    }
+    for q in &queues {
+        if q.comp_qty.unwrap_or(0) > 0 && !q.qc.is_empty() {
+            active_qcs.insert(q.qc.clone(), ());
+        }
+    }
+
+    // group queues + moves by QC
+    let mut q_by_qc: BTreeMap<String, Vec<&QueueRow>> = BTreeMap::new();
+    for q in &queues {
+        if active_qcs.contains_key(&q.qc) {
+            q_by_qc.entry(q.qc.clone()).or_default().push(q);
+        }
+    }
+    let mut m_by_qc: BTreeMap<String, Vec<&MoveRow>> = BTreeMap::new();
+    for m in &moves {
+        if let Some(qc) = m.qc.as_deref().filter(|s| !s.is_empty()) {
+            m_by_qc.entry(qc.to_string()).or_default().push(m);
+        }
+    }
+
+    let mut qcs: Vec<QcOut> = Vec::new();
+    for qc in active_qcs.keys() {
+        let mut qrows = q_by_qc.remove(qc).unwrap_or_default();
+        qrows.sort_by_key(|q| q.seq.unwrap_or(i32::MAX));
+        let mut mrows = m_by_qc.remove(qc).unwrap_or_default();
+        mrows.sort_by(|a, b| match (a.etw_ts, b.etw_ts) {
+            (Some(x), Some(y)) => x.cmp(&y),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => std::cmp::Ordering::Equal,
+        });
+
+        let remaining: i64 = qrows
+            .iter()
+            .map(|q| (q.total_qty.unwrap_or(0) - q.comp_qty.unwrap_or(0)).max(0) as i64)
+            .sum();
+        let mut vessels: Vec<String> = Vec::new();
+        for m in &mrows {
+            if !vessels.contains(&m.vessel) {
+                vessels.push(m.vessel.clone());
+            }
+        }
+        // fall back to queue vessels if no active moves
+        if vessels.is_empty() {
+            for q in &qrows {
+                if q.comp_qty.unwrap_or(0) > 0 && !vessels.contains(&q.vessel) {
+                    vessels.push(q.vessel.clone());
+                }
+            }
+        }
+
+        let queues_out: Vec<QueueOut> = qrows
+            .iter()
+            .map(|q| {
+                let total = q.total_qty.unwrap_or(0);
+                let done = q.comp_qty.unwrap_or(0);
+                QueueOut {
+                    queuename: q.queuename.clone(),
+                    vessel: q.vessel.clone(),
+                    voyage: q.voyage.clone(),
+                    disload: q.disload.clone(),
+                    seq: q.seq,
+                    total,
+                    done,
+                    remaining: (total - done).max(0),
+                }
+            })
+            .collect();
+        let moves_out: Vec<MoveOut> = mrows.iter().map(|m| to_move(m)).collect();
+
+        qcs.push(QcOut {
+            qc: qc.clone(),
+            vessels,
+            active_moves: moves_out.len(),
+            remaining,
+            queues: queues_out,
+            moves: moves_out,
+        });
+    }
+    // busiest QCs first (most active moves, then most remaining)
+    qcs.sort_by(|a, b| b.active_moves.cmp(&a.active_moves).then(b.remaining.cmp(&a.remaining)));
+
+    // global urgent front: active moves with a QC + ETW, soonest first, capped.
+    // (drops the few orphan rows whose queue is gone and whose ETW is stale)
+    let mut pool: Vec<MoveOut> = moves
+        .iter()
+        .filter(|m| m.etw_ts.is_some() && m.qc.as_deref().is_some_and(|s| !s.is_empty()))
+        .map(to_move)
+        .collect();
+    pool.sort_by_key(|m| m.etw_ts);
+    pool.truncate(POOL_CAP);
+
+    let active_moves = moves.len();
+    let total_remaining: i64 = qcs.iter().map(|q| q.remaining).sum();
+
+    Ok(Json(WorkpoolOut {
+        as_of,
+        qc_count: qcs.len(),
+        active_moves,
+        total_remaining,
+        qcs,
+        pool,
+    }))
+}

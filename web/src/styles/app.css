@@ -291,6 +291,9 @@ td.mono { font-family: "JetBrains Mono", monospace; color: var(--text); }
 .qc-task .assign .tt { font-weight: 700; color: var(--brand); background: rgba(96,165,250,0.12); padding: 1px 5px; border-radius: 3px; }
 .qc-task .assign .tt-status { font-size: 8px; color: var(--text-dim); margin-top: 2px; display: block; }
 .qc-task .assign .tt-none { font-size: 9px; color: var(--bad); font-weight: 600; }
+.qc-task .assign .tt .dot { display: inline-block; width: 6px; height: 6px; border-radius: 999px; vertical-align: middle; }
+.qc-more { display: block; width: 100%; font-size: 9px; color: var(--text-dim); text-align: center; padding: 4px 0; font-family: "JetBrains Mono", monospace; background: var(--bg-soft); border: 1px solid var(--border-soft); border-radius: var(--radius-md); cursor: pointer; transition: color .12s, border-color .12s; }
+.qc-more:hover { color: var(--brand); border-color: var(--brand); }
 .type-dsc { color: var(--info); }
 .type-lod { color: var(--purple); }
 .type-shf { color: var(--warn); }

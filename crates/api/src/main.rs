@@ -9,6 +9,7 @@ mod livemap;
 mod models;
 mod periods;
 mod routes;
+mod workpool;
 
 use std::sync::Arc;
 
@@ -47,6 +48,7 @@ fn app(state: AppState) -> Router {
         .route("/api/live/vessels", get(live::vessels))
         .route("/api/livemap/positions", get(livemap::positions))
         .route("/api/livemap/health", get(livemap::health))
+        .route("/api/workpool", get(workpool::workpool))
         .route("/api/health", get(routes::health))
         .layer(CorsLayer::permissive()) // dev; tighten to the dashboard origin in prod
         .with_state(state);
