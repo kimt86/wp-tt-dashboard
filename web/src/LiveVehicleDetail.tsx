@@ -49,6 +49,26 @@ const DSP: Record<string, { ko: string; en: string; color: string; bg: string }>
   empty_travel: { ko: "공차 주행 중", en: "Empty traveling", color: "#475569", bg: "rgba(100,116,139,0.12)" },
 };
 
+// localized dispatch detail, built from structured fields (not the backend's Korean
+// dispatch_reason). The state label already conveys the gist; this adds RTG distance.
+function dispatchWhy(v: SelVeh, ko: boolean): string | null {
+  if (v.dispatch === "soon_idle") {
+    if (v.nearest_rtg_m != null) {
+      const m = Math.round(v.nearest_rtg_m);
+      return ko ? `블록 RTG 근접 ${m}m` : `block RTG ${m}m`;
+    }
+    return ko ? "안벽 핸드오버 · PLC" : "quay handover · PLC";
+  }
+  if (v.dispatch === "wait_rtg") {
+    if (v.nearest_rtg_m != null) {
+      const m = Math.round(v.nearest_rtg_m);
+      return ko ? `RTG 대기 (최근접 ${m}m)` : `waiting RTG (nearest ${m}m)`;
+    }
+    return ko ? "RTG 미관측" : "no RTG nearby";
+  }
+  return null; // idle/empty_travel/delivering — the state label is enough
+}
+
 const EQUIP_KO: Record<string, string> = { TT: "야드트럭", RTG: "야드크레인", C: "안벽크레인", TC: "트랜스퍼크레인" };
 function equipLabel(cls: string, ko: boolean): string {
   return ko ? (EQUIP_KO[cls] ?? cls) : cls;
@@ -91,7 +111,7 @@ export function LiveVehicleDetail({ v, lang, onClose }: { v: SelVeh; lang: Lang;
         <div className="lvd-state" style={{ color: ST_COLOR[st] }}>● {ko ? ST_TXT[st].ko : ST_TXT[st].en}</div>
         {dsp && (
           <div className="lvd-dispatch" style={{ color: dsp.color, borderColor: dsp.color, background: dsp.bg }}>
-            {ko ? dsp.ko : dsp.en}{v.dispatch_reason ? <span className="lvd-dsp-why"> · {v.dispatch_reason}</span> : null}
+            {ko ? dsp.ko : dsp.en}{dispatchWhy(v, ko) ? <span className="lvd-dsp-why"> · {dispatchWhy(v, ko)}</span> : null}
           </div>
         )}
         <div className="lvd-rel mono">{relTime(v.age_s, ko)}</div>

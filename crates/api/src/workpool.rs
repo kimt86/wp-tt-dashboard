@@ -58,6 +58,33 @@ struct MoveOut {
     twintandem: Option<String>,
 }
 
+#[derive(sqlx::FromRow)]
+struct CandidateRow {
+    qc: Option<String>,
+    queuename: String,
+    vessel: String,
+    jobtype: Option<String>,
+    src_block: Option<String>,
+    rtg: Option<String>,
+    n: i32,
+}
+
+#[derive(Serialize)]
+struct CandidateOut {
+    qc: Option<String>,
+    queuename: String,
+    vessel: String,
+    jobtype: Option<String>,
+    /// load: source yard block (pickup); discharge: null (pickup = the QC)
+    src_block: Option<String>,
+    rtg: Option<String>,
+    n: i32,
+    /// derived urgency: moves the QC must still do before reaching this work
+    /// (0 = the QC is working this queue right now)
+    moves_until: i64,
+    active: bool,
+}
+
 #[derive(Serialize)]
 struct QueueOut {
     queuename: String,
@@ -89,6 +116,10 @@ pub struct WorkpoolOut {
     qcs: Vec<QcOut>,
     /// global active-move front, soonest ETW first (the urgent work), capped
     pool: Vec<MoveOut>,
+    /// candidate job pool — UNASSIGNED demand needing a truck, urgency-ranked.
+    /// discharge grouped by QC, load grouped by source block (pickup location).
+    candidates: Vec<CandidateOut>,
+    candidate_total: i64,
 }
 
 const POOL_CAP: usize = 80;
@@ -223,16 +254,79 @@ pub async fn workpool(State(pool): State<PgPool>) -> Result<Json<WorkpoolOut>, A
 
     // global urgent front: active moves with a QC + ETW, soonest first, capped.
     // (drops the few orphan rows whose queue is gone and whose ETW is stale)
-    let mut pool: Vec<MoveOut> = moves
+    let mut front: Vec<MoveOut> = moves
         .iter()
         .filter(|m| m.etw_ts.is_some() && m.qc.as_deref().is_some_and(|s| !s.is_empty()))
         .map(to_move)
         .collect();
-    pool.sort_by_key(|m| m.etw_ts);
-    pool.truncate(POOL_CAP);
+    front.sort_by_key(|m| m.etw_ts);
+    front.truncate(POOL_CAP);
 
     let active_moves = moves.len();
     let total_remaining: i64 = qcs.iter().map(|q| q.remaining).sum();
+
+    // ── candidate job pool (unassigned demand), urgency-ranked ──
+    let cand_rows: Vec<CandidateRow> = sqlx::query_as(
+        "SELECT qc, queuename, vessel, jobtype, src_block, rtg, n FROM live_candidate",
+    )
+    .fetch_all(&pool)
+    .await?;
+
+    // per-QC queue list (queuename, seq, done, total) for deriving urgency
+    struct QInfo { queuename: String, seq: i32, done: i32, total: i32 }
+    let mut qc_queues: BTreeMap<String, Vec<QInfo>> = BTreeMap::new();
+    for q in &queues {
+        qc_queues.entry(q.qc.clone()).or_default().push(QInfo {
+            queuename: q.queuename.clone(),
+            seq: q.seq.unwrap_or(i32::MAX),
+            done: q.comp_qty.unwrap_or(0),
+            total: q.total_qty.unwrap_or(0),
+        });
+    }
+
+    let candidate_total: i64 = cand_rows.iter().map(|c| c.n as i64).sum();
+    let mut candidates: Vec<CandidateOut> = cand_rows
+        .iter()
+        .map(|c| {
+            // "moves until this work is reached" = remaining in the QC's active queue(s)
+            // + total of not-yet-started queues that come before this one. 0 if this is
+            // the queue the QC is working right now.
+            let (mut moves_until, mut active) = (i64::MAX, false);
+            if let Some(qc) = c.qc.as_deref() {
+                if let Some(qs) = qc_queues.get(qc) {
+                    if let Some(mine) = qs.iter().find(|q| q.queuename == c.queuename) {
+                        let active_rem: i64 = qs.iter()
+                            .filter(|q| q.done > 0 && q.done < q.total)
+                            .map(|q| (q.total - q.done) as i64)
+                            .sum();
+                        if mine.done > 0 && mine.done < mine.total {
+                            active = true;
+                            moves_until = 0;
+                        } else {
+                            let before: i64 = qs.iter()
+                                .filter(|q| q.done == 0 && q.seq < mine.seq)
+                                .map(|q| q.total as i64)
+                                .sum();
+                            moves_until = active_rem + before;
+                        }
+                    }
+                }
+            }
+            CandidateOut {
+                qc: c.qc.clone(),
+                queuename: c.queuename.clone(),
+                vessel: c.vessel.clone(),
+                jobtype: c.jobtype.clone(),
+                src_block: c.src_block.clone(),
+                rtg: c.rtg.clone(),
+                n: c.n,
+                moves_until,
+                active,
+            }
+        })
+        .collect();
+    // soonest-needed first (active queues first), then larger demand
+    candidates.sort_by(|a, b| a.moves_until.cmp(&b.moves_until).then(b.n.cmp(&a.n)));
 
     Ok(Json(WorkpoolOut {
         as_of,
@@ -240,6 +334,8 @@ pub async fn workpool(State(pool): State<PgPool>) -> Result<Json<WorkpoolOut>, A
         active_moves,
         total_remaining,
         qcs,
-        pool,
+        pool: front,
+        candidates,
+        candidate_total,
     }))
 }

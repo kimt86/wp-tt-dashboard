@@ -87,9 +87,15 @@ export interface WpQc {
   qc: string; vessels: string[]; active_moves: number; remaining: number;
   queues: WpQueue[]; moves: WpMove[];
 }
+export interface WpCandidate {
+  qc: string | null; queuename: string; vessel: string; jobtype: string | null;
+  src_block: string | null; rtg: string | null; n: number;
+  moves_until: number; active: boolean;
+}
 export interface WorkpoolResponse {
   as_of: string | null; qc_count: number; active_moves: number; total_remaining: number;
   qcs: WpQc[]; pool: WpMove[];
+  candidates: WpCandidate[]; candidate_total: number;
 }
 
 async function get<T>(path: string): Promise<T> {

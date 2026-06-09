@@ -1,9 +1,14 @@
-//! Live work-pool snapshot extract. Pulls the current per-QC work-queue plan
-//! (JOB_QUEUE_SCHEDULE) and the live container moves still to do (JOB_ORDER_LIST)
-//! from TOS Oracle and full-replaces two Postgres snapshot tables every ~90s. This is
-//! the ONLY path that brings the work pool into Postgres; the API crate can't reach
-//! Oracle. Unlike the KPI extracts this is "live now" (no date window) — bounded
-//! instead by status (live only) + a recent CRE_DT to keep the scan small.
+//! Live work-pool snapshot extract. Two bounded Oracle scans per ~90s tick:
+//!   1. JOB_QUEUE_SCHEDULE → live_workqueue (per-QC queue plan + progress).
+//!   2. JOB_ORDER_LIST (A + Q) → split in Rust into:
+//!        - live_workpool  (A = dispatched in-flight moves, the QC task cards)
+//!        - live_candidate (Q = UNASSIGNED demand, aggregated: discharge by QC,
+//!                          load by source block — the dispatch candidate pool)
+//! This is the ONLY path that brings the work pool into Postgres; the API crate can't
+//! reach Oracle. "Live now" (no date window) — bounded by status + recent CRE_DT to
+//! keep the scan small and Oracle-friendly.
+
+use std::collections::HashMap;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, NaiveDateTime, Utc};
@@ -110,35 +115,86 @@ async fn src_workqueue(pool: &PgPool, target: &str, date: chrono::NaiveDate, as_
     .map(|_| ())
 }
 
+/// Block prefix of a yard code: "10X-16" → "10X" (matches livemap's centroid keys).
+fn block_prefix(s: &str) -> &str {
+    s.split('-').next().unwrap_or(s).trim()
+}
+
 async fn src_workpool(pool: &PgPool, target: &str, date: chrono::NaiveDate, as_of: DateTime<Utc>) -> Result<()> {
     run_logged(pool, "WORKPOOL", date, |_| async move {
         let raw = Toolbox::from_env(target)?.run_sql(SQL_WORKPOOL).await?;
         let rows: Vec<MoveRow> = parse_rows(&raw).context("parsing workpool rows")?;
+
+        // candidate (unassigned) aggregation: key = (queue, vessel, jobtype, src_block);
+        // value = (count, representative rtg). Discharge groups by QC (src_block = None,
+        // pickup = the crane); load groups by source block (pickup varies per container).
+        let mut cand: HashMap<(String, String, String, Option<String>), (i64, Option<String>)> =
+            HashMap::new();
+
         let mut tx = pool.begin().await?;
         sqlx::query("DELETE FROM live_workpool").execute(&mut *tx).await?;
+        sqlx::query("DELETE FROM live_candidate").execute(&mut *tx).await?;
+
+        let mut active = 0u64;
         for r in &rows {
-            let etw_ts = r.etw_dt.as_deref().and_then(parse_etw);
-            sqlx::query(
-                "INSERT INTO live_workpool
-                   (queuename, vessel, voyage, jobtype, jobstatus, yt_status, ytno, armgc,
-                    etw_ts, etw_raw, contno, msnseq, yt_topos, from_pos, to_pos, twintandem, as_of_ts)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)",
-            )
-            .bind(&r.queuename).bind(&r.vessel).bind(&r.voyage)
-            .bind(&r.jobtype).bind(&r.jobstatus).bind(&r.yt_status).bind(&r.ytno).bind(&r.armgc)
-            .bind(etw_ts).bind(&r.etw_dt).bind(&r.contno).bind(&r.msnseq).bind(&r.yt_topos)
-            .bind(&r.from_pos).bind(&r.to_pos).bind(&r.twintandem).bind(as_of)
-            .execute(&mut *tx).await.context("insert live_workpool")?;
+            match r.jobstatus.as_deref() {
+                Some("A") => {
+                    let etw_ts = r.etw_dt.as_deref().and_then(parse_etw);
+                    sqlx::query(
+                        "INSERT INTO live_workpool
+                           (queuename, vessel, voyage, jobtype, jobstatus, yt_status, ytno, armgc,
+                            etw_ts, etw_raw, contno, msnseq, yt_topos, from_pos, to_pos, twintandem, as_of_ts)
+                         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)",
+                    )
+                    .bind(&r.queuename).bind(&r.vessel).bind(&r.voyage)
+                    .bind(&r.jobtype).bind(&r.jobstatus).bind(&r.yt_status).bind(&r.ytno).bind(&r.armgc)
+                    .bind(etw_ts).bind(&r.etw_dt).bind(&r.contno).bind(&r.msnseq).bind(&r.yt_topos)
+                    .bind(&r.from_pos).bind(&r.to_pos).bind(&r.twintandem).bind(as_of)
+                    .execute(&mut *tx).await.context("insert live_workpool")?;
+                    active += 1;
+                }
+                // unassigned demand → candidate pool (only truly unassigned: no truck yet)
+                Some("Q") if r.ytno.as_deref().unwrap_or("").is_empty() => {
+                    let jt = r.jobtype.clone().unwrap_or_default();
+                    let src_block = if jt == "LD" {
+                        r.yt_topos.as_deref().map(|t| block_prefix(t).to_string()).filter(|s| !s.is_empty())
+                    } else {
+                        None // discharge: pickup is the QC, not a yard block
+                    };
+                    let e = cand
+                        .entry((r.queuename.clone(), r.vessel.clone(), jt, src_block))
+                        .or_insert((0, None));
+                    e.0 += 1;
+                    if e.1.is_none() {
+                        e.1 = r.armgc.clone().filter(|s| !s.is_empty());
+                    }
+                }
+                _ => {}
+            }
         }
+
+        for ((queuename, vessel, jobtype, src_block), (n, rtg)) in &cand {
+            sqlx::query(
+                "INSERT INTO live_candidate (queuename, vessel, jobtype, src_block, rtg, n, as_of_ts)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7)",
+            )
+            .bind(queuename).bind(vessel).bind(jobtype).bind(src_block).bind(rtg)
+            .bind(*n as i32).bind(as_of)
+            .execute(&mut *tx).await.context("insert live_candidate")?;
+        }
+
         // Attach the QC from the clean current queue snapshot (unique per vessel+queue),
         // avoiding the Oracle-side fan-out against reused historic queuenames.
-        sqlx::query(
-            "UPDATE live_workpool wp SET qc = wq.qc
-               FROM live_workqueue wq
-              WHERE wq.vessel = wp.vessel AND wq.queuename = wp.queuename",
-        )
-        .execute(&mut *tx).await.context("attach qc to live_workpool")?;
+        for t in ["live_workpool", "live_candidate"] {
+            sqlx::query(&format!(
+                "UPDATE {t} x SET qc = wq.qc
+                   FROM live_workqueue wq
+                  WHERE wq.vessel = x.vessel AND wq.queuename = x.queuename"
+            ))
+            .execute(&mut *tx).await.with_context(|| format!("attach qc to {t}"))?;
+        }
         tx.commit().await?;
+        tracing::info!(active, candidates = cand.len(), "workpool: active moves + candidate groups");
         Ok(rows.len() as u64)
     })
     .await

@@ -6,7 +6,7 @@
 // remain visual mocks (future AI-dispatch panels).
 import { useEffect, useState } from "react";
 import { type Lang } from "./i18n";
-import { api, type WorkpoolResponse, type WpMove, type WpQc } from "./api";
+import { api, type WorkpoolResponse, type WpQc, type WpCandidate } from "./api";
 
 const ko = (lang: Lang) => lang === "ko";
 
@@ -78,7 +78,22 @@ const kindChip = (jt: string | null) => (jt === "DS" ? "dsc" : jt === "LD" ? "lo
 const kindLabel = (jt: string | null) => (jt === "DS" ? "DSC" : jt === "LD" ? "LOD" : "SHF");
 
 // ───────────────────────── live vehicle pool ─────────────────────────
-type LiveTT = { id: string; cls: string; dispatch?: string; jobtype?: string; topos1?: string; dispatch_reason?: string; swappable?: boolean; dest_remaining_m?: number };
+type LiveTT = { id: string; cls: string; dispatch?: string; jobtype?: string; topos1?: string; dispatch_reason?: string; swappable?: boolean; dest_remaining_m?: number; nearest_rtg_m?: number };
+
+// localized "why" for a soon-idle TT (built from structured fields, not the
+// backend's Korean dispatch_reason — so EN mode shows no Korean).
+function soonWhy(d: LiveTT, lang: Lang): string {
+  if (d.nearest_rtg_m != null) {
+    const m = Math.round(d.nearest_rtg_m);
+    return ko(lang) ? `블록 RTG 근접 ${m}m` : `block RTG ${m}m`;
+  }
+  return ko(lang) ? "안벽 핸드오버 · PLC" : "quay handover · PLC";
+}
+// localized dispatch-state label for tooltips
+function dspTitle(dispatch: string | undefined, lang: Lang): string | undefined {
+  if (!dispatch || !DSP_META[dispatch]) return undefined;
+  return ko(lang) ? DSP_META[dispatch].ko : DSP_META[dispatch].en;
+}
 
 function LiveDispatchPool({ lang, snap, err }: { lang: Lang; snap: Snap | null; err: boolean }) {
   const tts = ((snap?.devices ?? []) as LiveTT[]).filter((d) => d.cls === "TT");
@@ -93,8 +108,8 @@ function LiveDispatchPool({ lang, snap, err }: { lang: Lang; snap: Snap | null; 
   return (
     <section className="tcard lvp">
       <div className="tcard-head">
-        <h3>{ko(lang) ? "실시간 배차 풀 (차량)" : "Live Dispatch Pool (vehicles)"}
-          <span className="h3-sub">{ko(lang) ? "websocket GPS/PLC · standalone" : "from websocket GPS/PLC"}</span></h3>
+        <h3>{ko(lang) ? "TT 배차 풀" : "Dispatch TT Pool"}
+          <span className="h3-sub">{ko(lang) ? "websocket GPS/PLC · 차량(공급)" : "websocket GPS/PLC · vehicles (supply)"}</span></h3>
         <div className="head-sub">
           <span className={`pill ${snap?.connected ? "good" : "bad"}`}><span className="dot" />{snap?.connected ? "LIVE" : (err ? "OFF" : "…")}</span>
           <span className="muted">{ageS != null ? `⟳ ${ageS}s` : ""}</span>
@@ -129,7 +144,7 @@ function LiveDispatchPool({ lang, snap, err }: { lang: Lang; snap: Snap | null; 
                   <span className="lvp-id mono">{d.id}</span>
                   {d.jobtype && <span className={`lvp-job type-${d.jobtype.toLowerCase()}`}>{d.jobtype}</span>}
                   {d.topos1 && <span className="lvp-dest mono">→{d.topos1}</span>}
-                  <span className="lvp-why">{d.dispatch_reason}</span>
+                  <span className="lvp-why">{soonWhy(d, lang)}</span>
                 </div>
               ))}
             </div>
@@ -226,7 +241,7 @@ function QcCol({ q, lang, ttState, working }: { q: WpQc; lang: Lang; ttState: Ma
               </div>
             </div>
             <div className="assign">
-              {m.ytno ? <span className="tt" title={tt?.dispatch_reason}>{dot && <span className="dot" style={{ background: dot, marginRight: 4 }} />}{m.ytno}</span> : <span className="tt-none">{ko(lang) ? "미배차" : "Unassigned"}</span>}
+              {m.ytno ? <span className="tt" title={dspTitle(tt?.dispatch, lang)}>{dot && <span className="dot" style={{ background: dot, marginRight: 4 }} />}{m.ytno}</span> : <span className="tt-none">{ko(lang) ? "미배차" : "Unassigned"}</span>}
               {tt?.dispatch && <span className="tt-status">{ko(lang) ? DSP_META[tt.dispatch]?.ko : DSP_META[tt.dispatch]?.en}</span>}
             </div>
           </div>
@@ -241,72 +256,88 @@ function QcCol({ q, lang, ttState, working }: { q: WpQc; lang: Lang; ttState: Ma
   );
 }
 
-// ───────────────────────── live urgent job front ─────────────────────────
-function LiveJobPool({ lang, wp, snap }: { lang: Lang; wp: WorkpoolResponse | null; snap: Snap | null }) {
-  const ttState = new Map<string, Dev>();
-  for (const d of snap?.devices ?? []) if (d.cls === "TT") ttState.set(d.id, d);
-  const pool = (wp?.pool ?? []).slice(0, 24);
+// ───────────────────────── candidate job pool (unassigned demand, grouped by QC) ─────
+// The work that actually needs dispatching: jobs with NO truck yet. Grouped per QC; the
+// QC's urgency = how soon it reaches this work (지금=working now / 곧=soon / 대기=later).
+// Each QC shows its demand split by pickup: discharge picks up AT the QC, load picks up
+// at source yard blocks (distance varies → shown per block).
+type CandGroup = {
+  qc: string; vessel: string; total: number; urg: "now" | "soon" | "later";
+  ds: number; loads: WpCandidate[];
+};
+const URG_META: Record<string, { ko: string; en: string; color: string }> = {
+  now: { ko: "지금", en: "Now", color: "#ef4444" },
+  soon: { ko: "곧", en: "Soon", color: "#f59e0b" },
+  later: { ko: "대기", en: "Later", color: "#64748b" },
+};
+
+function LiveCandidatePool({ lang, wp }: { lang: Lang; wp: WorkpoolResponse | null }) {
+  const cands = wp?.candidates ?? [];
+  const total = wp?.candidate_total ?? 0;
+
+  // group candidates by QC (load candidates use their destination QC)
+  const byQc = new Map<string, WpCandidate[]>();
+  for (const c of cands) {
+    const k = c.qc ?? "—";
+    (byQc.get(k) ?? byQc.set(k, []).get(k)!).push(c);
+  }
+  const groups: CandGroup[] = [...byQc.entries()].map(([qc, list]) => {
+    const ds = list.filter((c) => c.jobtype === "DS").reduce((a, c) => a + c.n, 0);
+    const loads = list.filter((c) => c.jobtype === "LD" && c.src_block).sort((a, b) => b.n - a.n);
+    const sum = list.reduce((a, c) => a + c.n, 0);
+    const minMoves = Math.min(...list.map((c) => (c.active ? 0 : c.moves_until)));
+    const urg: CandGroup["urg"] = list.some((c) => c.active) ? "now" : minMoves < 25 ? "soon" : "later";
+    const vessel = (list.find((c) => c.jobtype === "DS") ?? list[0]).vessel;
+    return { qc, vessel, total: sum, urg, ds, loads };
+  });
+  const rank = { now: 0, soon: 1, later: 2 };
+  groups.sort((a, b) => rank[a.urg] - rank[b.urg] || b.total - a.total);
+  const shown = groups.slice(0, 16);
+
   return (
     <section className="tcard">
       <div className="tcard-head">
-        <h3>{ko(lang) ? "임박 작업 프론트" : "Imminent Work Front"}<span className="h3-sub">{ko(lang) ? "ETW 시급순" : "by ETW urgency"}</span></h3>
-        <div className="head-sub"><span className="muted">{ko(lang) ? `상위 ${pool.length}` : `top ${pool.length}`}</span></div>
+        <h3>{ko(lang) ? "후보 작업 풀" : "Candidate Job Pool"}
+          <span className="h3-sub">{ko(lang) ? "미배정 수요 · QC별" : "unassigned demand · by QC"}</span></h3>
+        <div className="head-sub"><span className="muted">{ko(lang) ? `트럭 ${total.toLocaleString()} 필요` : `${total.toLocaleString()} trucks needed`}</span></div>
       </div>
       <div className="tcard-body">
-        <div className="jpool">
-          {pool.length === 0 && <div className="lvp-empty">{ko(lang) ? "데이터 없음" : "no data"}</div>}
-          {pool.map((m: WpMove, i) => {
-            const etw = etwLabel(m.etw_ts, lang);
-            const tt = m.ytno ? ttState.get(m.ytno) : undefined;
-            const dot = tt?.dispatch ? DSP_META[tt.dispatch]?.color : undefined;
+        <div className="cand-note">{ko(lang)
+          ? "아직 트럭이 안 붙은 작업을 QC별로. 시급도 — 🔴지금(작업 중) · 🟠곧 · ⚪대기. 양하는 QC에서, 적하는 출발 블록에서 픽업."
+          : "unassigned work, per QC. Urgency — 🔴Now (working) · 🟠Soon · ⚪Later. Discharge picks up at the QC, load at the source block."}</div>
+        <div className="cg-list">
+          {shown.length === 0 && <div className="lvp-empty">{ko(lang) ? "미배정 작업 없음" : "none unassigned"}</div>}
+          {shown.map((g) => {
+            const u = URG_META[g.urg];
             return (
-              <div className="jrow" key={`${m.contno}-${i}`}>
-                <span className="jrank mono">{i + 1}</span>
-                <span className="jqc">{m.qc}</span>
-                <span className="jid"><span className={`type-${kindChip(m.jobtype)}`}>{kindLabel(m.jobtype)}</span> <span className="mono">{m.contno ?? "—"}</span></span>
-                <span className="jsize mono" title={tt?.dispatch_reason}>{dot && <span className="dot" style={{ background: dot, marginRight: 4 }} />}{m.ytno ?? "—"}</span>
-                {etw && <span className={`jetw ${etw.cls}`}>ETW {etw.text}</span>}
+              <div className="cg-card" key={g.qc}>
+                <div className="cg-head">
+                  <span className="cg-dot" style={{ background: u.color }} />
+                  <span className="cg-qc">{g.qc}</span>
+                  <span className="cg-vsl">{g.vessel}</span>
+                  <span className="cg-urg" style={{ color: u.color, borderColor: u.color }}>{ko(lang) ? u.ko : u.en}</span>
+                  <span className="cg-total">{g.total}<small>{ko(lang) ? "대" : ""}</small></span>
+                </div>
+                <div className="cg-chips">
+                  {g.ds > 0 && (
+                    <span className="cg-chip ds" title={ko(lang) ? "양하 — QC에서 픽업" : "discharge — pick up at QC"}>
+                      <span className="type-dsc">DSC</span> {g.ds} · {ko(lang) ? "QC" : "@QC"}
+                    </span>
+                  )}
+                  {g.loads.slice(0, 5).map((l) => (
+                    <span className="cg-chip ld" key={l.src_block} title={ko(lang) ? `적하 — 블록 ${l.src_block}에서 픽업${l.rtg ? ` (${l.rtg})` : ""}` : `load — pick up at block ${l.src_block}${l.rtg ? ` (${l.rtg})` : ""}`}>
+                      <span className="type-lod">LOD</span> {l.src_block} {l.n}
+                    </span>
+                  ))}
+                  {g.loads.length > 5 && <span className="cg-more">+{g.loads.length - 5}</span>}
+                </div>
               </div>
             );
           })}
         </div>
-      </div>
-    </section>
-  );
-}
-
-// ───────────────────────── status distribution (live) ─────────────────────────
-function StatusDistribution({ lang, snap }: { lang: Lang; snap: Snap | null }) {
-  const counts = snap?.dispatch_counts ?? {};
-  const STATUS = DSP_ORDER.map((k) => ({ key: k, color: DSP_META[k].color, ko: DSP_META[k].ko, en: DSP_META[k].en, n: counts[k] ?? 0 }));
-  const total = STATUS.reduce((a, s) => a + s.n, 0);
-  let acc = 0;
-  const stops = STATUS.filter((s) => s.n > 0).map((s) => {
-    const from = (acc / (total || 1)) * 100; acc += s.n; const to = (acc / (total || 1)) * 100;
-    return `${s.color} ${from}% ${to}%`;
-  });
-  const grad = total > 0 ? `conic-gradient(${stops.join(", ")})` : "conic-gradient(#222d44 0% 100%)";
-  return (
-    <section className="tcard">
-      <div className="tcard-head">
-        <h3>{ko(lang) ? "TT 상태 분포 (라이브)" : "TT Status Distribution (live)"}</h3>
-        <div className="head-sub"><span className="muted">{ko(lang) ? `총 ${total}대` : `Total ${total} units`}</span></div>
-      </div>
-      <div className="tcard-body">
-        <div className="donut-wrap">
-          <div className="donut" style={{ background: grad }}>
-            <div className="donut-hole"><span className="dn">{total}</span><span className="dl">{ko(lang) ? "대" : "units"}</span></div>
-          </div>
-          <div className="legend-list">
-            {STATUS.map((s) => (
-              <div className="legend-item" key={s.key}>
-                <span className="swatch" style={{ background: s.color }} />
-                <span className="name">{ko(lang) ? s.ko : s.en}</span>
-                <span className="val">{s.n}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        {groups.length > shown.length && (
+          <div className="cand-note" style={{ marginTop: 8 }}>{ko(lang) ? `+${groups.length - shown.length} QC 더` : `+${groups.length - shown.length} more QC`}</div>
+        )}
       </div>
     </section>
   );
@@ -318,11 +349,8 @@ export default function TtPage({ lang }: { lang: Lang }) {
   return (
     <div className="content tt-page">
       <LiveDispatchPool lang={lang} snap={snap} err={err} />
+      <LiveCandidatePool lang={lang} wp={wp} />
       <LiveQcSequence lang={lang} wp={wp} snap={snap} />
-      <div className="grid tt-two">
-        <LiveJobPool lang={lang} wp={wp} snap={snap} />
-        <StatusDistribution lang={lang} snap={snap} />
-      </div>
     </div>
   );
 }
