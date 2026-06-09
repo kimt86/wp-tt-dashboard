@@ -91,6 +91,12 @@
   .pill-row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
   .foot{font-size:12px;color:var(--muted);text-align:center;padding:20px}
   @media(max-width:900px){.layout{grid-template-columns:1fr}nav.toc{display:none}.g3,.g2{grid-template-columns:1fr}}
+/* ===== dark mode ===== invert the light theme uniformly; hero / code blocks /
+     table headers are double-inverted so they keep their original dark color. This
+     also flips inline light styles automatically (no per-element edits). ===== */
+  html{filter:invert(1) hue-rotate(180deg)}
+  .hero,pre,th{filter:invert(1) hue-rotate(180deg)}
+  ::selection{background:#1e6feb;color:#fff}
 </style>
 </head>
 <body>

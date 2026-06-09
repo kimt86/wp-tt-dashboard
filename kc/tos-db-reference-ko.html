@@ -73,6 +73,12 @@
   hr.soft{border:0;border-top:1px solid var(--line);margin:18px 0}
   .foot{font-size:12px;color:var(--muted);text-align:center;padding:18px}
   @media(max-width:920px){.layout{grid-template-columns:1fr}nav.toc{display:none}.g3,.g2{grid-template-columns:1fr}}
+/* ===== dark mode ===== invert the light theme uniformly; hero / code blocks /
+     table headers are double-inverted so they keep their original dark color. This
+     also flips inline light styles automatically (no per-element edits). ===== */
+  html{filter:invert(1) hue-rotate(180deg)}
+  .hero,pre,th{filter:invert(1) hue-rotate(180deg)}
+  ::selection{background:#1e6feb;color:#fff}
 </style>
 </head>
 <body>
@@ -90,6 +96,7 @@
   <a href="#mch">3.2 MCH_OPERATION</a>
   <a href="#vss">3.3 VSS_STATISTICS</a>
   <a href="#wt">3.4 작업시간·장비 마스터</a>
+  <a href="#live-job">3.5 라이브 작업지시 (작업풀)</a>
   <a class="sec" href="#codes">4 · 코드·의미 사전</a>
   <a href="#codes">4.1 작업종류 / 장비</a>
   <a href="#pos">4.2 위치·블록·POINT_TYPE</a>
@@ -116,6 +123,7 @@
   <h2>개요 · 데이터 아키텍처</h2>
   <p>데이터는 두 원천에서 나와 <strong>Postgres 3-tier</strong>로 흐릅니다. 대시보드/API는 <strong>Postgres만</strong> 읽고, <strong>prod Oracle은 추출기(extractor) 크레이트만</strong> 건드립니다(읽기전용·인덱스레인지·<span class="mono">FETCH FIRST</span>·<span class="mono">NO_PARALLEL</span>, 승인된 <span class="mono">remote-toolbox-sql</span> 경유).</p>
   <pre><span class="c">TOS Oracle  ──(추출기: 일/교대 틱, 캡·인덱스레인지)──▶  Postgres L0 raw_*  ──▶ L1 kpi_daily ──▶ L2 baseline</span>
+<span class="c">TOS Oracle  ──(추출기: 작업풀 90s 틱)────────────────▶  Postgres live_workqueue/live_workpool  ※라이브 작업 풀</span>
 <span class="c">websocket   ──(SSH 터널 → API 인제스트, ctab/wpt_gps)──▶ 메모리(라이브맵·배차)  ※DB 미적재</span>
 <span class="c">대시보드/API ──읽기──▶ Postgres only          ※Oracle 직접 접근 절대 금지</span></pre>
   <div class="note key"><p><span class="h">왜 이렇게</span>source Oracle은 <strong>운영 라이브</strong> DB라 부하를 최소화해야 합니다. 추출기는 정해진 시각(야간 01:30 MYT 권위·교대 틱 경량)에만, 날짜 인덱스로 좁혀, 출력만 <span class="mono">FETCH FIRST</span>로 잘라 가져옵니다. 한 번 가져온 날은 Postgres에 영구 누적 → 같은 과거 날짜를 다시 스캔하지 않습니다.</p></div>
@@ -210,6 +218,26 @@
     <tr><td><span class="mono">CDY_MACHINE</span>: CDY_MCHN_CODE, CDY_MCHN_TYPE</td><td>장비 마스터. TYPE='YT'(야드트럭)로 TT 필터, QC/YC 등.</td></tr>
   </table>
   <div class="note"><p>추출 SQL: <span class="mono">e3a_k_util_tt_merged</span>(YT 가동률, 세션-정지 병합). 로드 LOW(~10K).</p></div>
+
+  <h3 id="live-job">3.5 라이브 작업지시 — 작업 풀 <span class="b b-tos">현재 진행/대기</span></h3>
+  <p>위 3.1~3.4는 <strong>완료된</strong> 작업의 이력입니다. 반면 <strong>지금 이 순간 처리해야 할 작업</strong>(라이브 작업 풀)은 두 테이블에 살아있습니다 — 계속 갱신(<span class="mono">UPD_DT</span>=현재)되는 운영 테이블. 90초 주기로 추출해 대시보드 TT 페이지의 QC 시퀀스/배차 화면을 채웁니다. 자세한 설계는 <a href="./work-pool-ko.html" style="color:var(--accent)">라이브 작업 풀</a> 문서 참조.</p>
+  <table class="t-col">
+    <tr><th style="width:215px">컬럼</th><th>의미 · 예</th></tr>
+    <tr><td colspan="2" style="background:#eef4ff;font-weight:700;color:var(--primary-2)"><span class="mono">JOB_ORDER_LIST</span> — 개별 컨테이너 move (HISTORY의 라이브 판; 단, 완료행도 보관되므로 라이브만 필터 필수)</td></tr>
+    <tr><td><span class="mono">JOB_ODR_JOBSTATUS</span></td><td><b>작업 상태</b> — <span class="b b-key">A</span>활성(배차됨·진행중) · <span class="b b-key">Q</span>대기(백로그) · <span class="b b-key">P</span>계획 · <span class="b b-key">B</span>차단 · <span class="b" style="background:#e2e8f0;color:#475569">C</span>완료. 라이브 = A/Q/P/B + <span class="mono">COMPDATE IS NULL</span>.</td></tr>
+    <tr><td><span class="mono">JOB_ODR_QUEUENAME</span></td><td>큐 이름(예 <span class="mono">34H-D</span>=베이34 선창 양하, <span class="mono">42D-L</span>=베이42 갑판 적하). 큐 스케줄과의 <b>조인 키</b>. 주의: 항차마다 재사용됨(과거판 다수).</td></tr>
+    <tr><td><span class="mono">JOB_ODR_YTNO</span></td><td><b>배정된 TT</b>(예 <span class="mono">TT1153</span>). GPS device id와 일치 → 라이브 위치/상태 머지. 활성 작업은 전부 배정됨.</td></tr>
+    <tr><td><span class="mono">JOB_ODR_ETW_DT</span></td><td><b>ETW = 크레인 준비 시각</b>(YYYYMMDDHH24MISS[mmm], MYT). <span class="mono">ETW − 현재</span> = 작업 시급도. <b>예측 연구의 ②목표를 TOS가 라이브로 제공</b>.</td></tr>
+    <tr><td><span class="mono">JOB_ODR_ARMGC</span> / <span class="mono">JOB_ODR_CONTNO</span></td><td>야드크레인(RTG) / 컨테이너 번호.</td></tr>
+    <tr><td><span class="mono">JOB_ODR_YT_TOPOS</span> · <span class="mono">CRNT_PSN_IDX_NO1</span> · <span class="mono">YT_TO_PSN_IDX_NO1</span></td><td>야드 블록-베이(예 <span class="mono">10Q-0405</span>) · 출발 위치 · 도착 위치.</td></tr>
+    <tr><td><span class="mono">JOB_ODR_TWINTANDEM</span> · <span class="mono">SWAP_FLG</span> · <span class="mono">CRE_DT</span></td><td>트윈/탠덤 · 스왑 플래그 · 생성시각(스캔 경계 <span class="mono">≥ SYSDATE−2</span>로 stale 고아 제거).</td></tr>
+    <tr><td colspan="2" style="background:#eef4ff;font-weight:700;color:var(--primary-2)"><span class="mono">JOB_QUEUE_SCHEDULE</span> — QC별 작업 큐 계획 (작고 깨끗, 한 큐당 1행)</td></tr>
+    <tr><td><span class="mono">JOB_QUE_CRANENO</span></td><td><b>QC(안벽크레인)</b> — 실제 id <span class="mono">C11..C55 · M·Z · DC##</span>. <span class="mono">C##</span>는 websocket GPS/PLC 크레인 id와 직접 매칭.</td></tr>
+    <tr><td><span class="mono">JOB_QUE_QUEUENAME</span> / <span class="mono">JOB_QUE_VESSEL</span></td><td>큐 이름(=LIST의 조인 키) / 선박. (선박·큐이름) <b>유일</b> — 그래서 QC는 Postgres에서 이 깨끗한 스냅샷으로 붙임(Oracle 조인은 과거 큐와 fan-out).</td></tr>
+    <tr><td><span class="mono">JOB_QUE_DISLOAD</span> / <span class="mono">JOB_QUE_SEQ</span></td><td>양하(D)/적하(L) / QC가 큐를 처리하는 순서.</td></tr>
+    <tr><td><span class="mono">JOB_QUE_TOTALQTY</span> / <span class="mono">COMPQTY</span> / <span class="mono">PLANQTY</span></td><td>총 / 완료 / 계획 물량. <b>잔여(백로그) = TOTAL − COMP</b>. (개별 대기 move는 ETW/순서 없는 묶음이라, 깊이는 이 차이로 표시.)</td></tr>
+  </table>
+  <div class="note good"><p><span class="h">왜 중요</span>QC id(C##)가 TOS 계획 ↔ websocket PLC(크레인이 물리적으로 도는 중) ↔ GPS(배정 TT 실위치)를 한데 묶어, <strong>"계획 + 실측"이 융합된 라이브 QC 시퀀스</strong>가 됩니다. 로드 = 90초마다 bounded 2쿼리(큐 ~725행 + 활성 move ~130행, ~1–3s).</p></div>
 </section>
 
 <!-- 4 -->
@@ -334,6 +362,7 @@
     <tr><td>L1 rollup</td><td><span class="mono">kpi_daily</span>(kpi_key,snapshot_date,value,sample_n,…) · <span class="mono">kpi_breakdown_qc</span></td><td>KPI별 일 권위 값(트렌드·이력의 소스). 야간 확정 / 틱 잠정.</td></tr>
     <tr><td>L2 stats</td><td><span class="mono">kpi_baseline</span>(4주 롤링 + Welch t-test)</td><td>기준선·유의성.</td></tr>
     <tr><td>LIVE</td><td><span class="mono">kpi_shift · kpi_shift_history · vessel_shift · vessel_qc_shift · util_tt_shift</span></td><td>현재 교대 누적(틱이 채움) → "오늘"을 Oracle 재스캔 없이 합산.</td></tr>
+    <tr><td>작업풀</td><td><span class="mono">live_workqueue · live_workpool</span></td><td>라이브 작업 풀 스냅샷(90초 full-replace). API <span class="mono">/api/workpool</span> → TT 페이지. <a href="./work-pool-ko.html" style="color:var(--accent)">상세</a>.</td></tr>
   </table>
   <h4>기간 합산 (agg.rs)</h4>
   <p>범위 [from,to] = <strong>과거일 raw_*</strong>(분자/분모 정확) + <strong>터미널-오늘은 kpi_shift</strong>에서 폴드(제2 Oracle 스캔 0). 6개는 합/비율로 정확 결합, K_UTIL은 raw 재계산. 일/주/월 이력도 동일 원리(<span class="mono">/api/kpis/history</span>).</p>
@@ -342,6 +371,7 @@
   <ul>
     <li><b>야간(01:30 MYT)</b> <span class="mono">wp-nightly</span> — 어제 권위 전체 추출 + transform + baseline(~32s, 1회 풀스캔).</li>
     <li><b>교대 틱</b> <span class="mono">wp-shift-t1</span>(~3분: MPH/QC대기/가동률+선박, LOW) · <span class="mono">wp-shift-t2</span>(~15분: 공차/사이클/크레인대기, JOB_ORDER_HISTORY).</li>
+    <li><b>작업풀 틱</b> <span class="mono">wp-workpool</span>(90초: 라이브 작업지시 2테이블 → live_workqueue/live_workpool, bounded).</li>
     <li><span class="mono">enable-linger</span>로 로그아웃 후 생존.</li>
   </ul>
 </section>

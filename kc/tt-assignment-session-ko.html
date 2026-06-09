@@ -253,6 +253,14 @@
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   }
   @page { size: 960px 600px; margin: 0; }
+/* ===== dark mode (screen only; print/PDF stays light for the customer deck) =====
+     invert the light theme uniformly; table headers are double-inverted to keep their
+     original color. Also flips inline light styles automatically. */
+  @media screen {
+    html{filter:invert(1) hue-rotate(180deg)}
+    th{filter:invert(1) hue-rotate(180deg)}
+    ::selection{background:#1e6feb;color:#fff}
+  }
 </style>
 </head>
 <body>
