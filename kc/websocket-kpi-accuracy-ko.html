@@ -115,7 +115,7 @@
   <h2>30초 요약 — 무엇이 어떻게 정확해지나</h2>
   <table>
     <tr><th style="width:120px">KPI</th><th>TOS의 문제 (실시간/측정)</th><th>websocket 보정 → 어떻게 정확해지나</th><th style="width:70px">상태</th></tr>
-    <tr><td><b>TT 사이클</b></td><td><b>아예 다른 양</b>을 잼 — 컨테이너 작업 생애 span(≈40분), 트럭 운반 사이클 아님</td><td>GPS로 <b>실제 트럭 사이클</b>(배달→배달 간격) 측정 ≈ 6–10분. "올바른 것"을 잼</td><td><span class="b b-done">완료</span></td></tr>
+    <tr><td><b>TT 사이클</b></td><td><b>아예 다른 양</b>을 잼 — 컨테이너 작업 생애 span(≈40분), 트럭 운반 사이클 아님</td><td>GPS로 <b>실제 트럭 사이클</b>(배달→배달 간격) 측정 ≈ 10–15분(실측 중앙값 ~13분, n=264, 전체 1h 윈도우). "올바른 것"을 잼</td><td><span class="b b-done">완료</span></td></tr>
     <tr><td><b>K_MPH</b></td><td>3분마다 당김 + 가동시간 정시버킷(거침)</td><td>크레인 PLC 사이클을 초당 카운트 → 실시간 QC 처리량</td><td><span class="b b-done">완료</span></td></tr>
     <tr><td><b>K_QC_Q</b></td><td>유휴갭 <span class="mono">HAVING≥10</span>로 교대 중 과소</td><td>크레인 유휴 + 무트럭을 직접 감지 → 기아 실시간</td><td><span class="b b-done">완료</span></td></tr>
     <tr><td><b>K_UTIL</b></td><td>로그인 세션 기준(논다고 빠지지 않음)</td><td>현재 비유휴(작업중) 트럭 비율 — 즉시 교차검증</td><td><span class="b b-done">완료</span></td></tr>
@@ -129,7 +129,7 @@
   <h2>정확도는 "어떻게" 올라가나 — 두 메커니즘</h2>
   <div class="grid g2">
     <div class="card"><h4>① 신선도 (freshness)</h4><p>TOS는 교대 틱이 <b>3–15분</b>마다 당기고, 가동시간을 <b>정시 단위</b>로 셉니다. websocket은 <b>GPS ~3초·PLC ~1초</b>라, "지금 이 순간"의 처리량·대기·가동을 실시간으로 보여줍니다. → K_MPH·K_QC_Q·K_UTIL.</p></div>
-    <div class="card"><h4>② 올바른 양 (correctness)</h4><p>더 본질적 — TOS의 "TT 사이클"이 사실 <b>컨테이너 처리 생애 span</b>을 재고 있었습니다(≈40분). GPS는 <b>실제 트럭 운반 루프</b>를 직접 관측해 ≈6–10분의 옳은 값을 줍니다. 신선함을 넘어 <b>맞는 것을 잼</b>.</p></div>
+    <div class="card"><h4>② 올바른 양 (correctness)</h4><p>더 본질적 — TOS의 "TT 사이클"이 사실 <b>컨테이너 처리 생애 span</b>을 재고 있었습니다(≈40분). GPS는 <b>실제 트럭 운반 루프</b>를 직접 관측해 ≈10–15분(실측 ~13분)의 옳은 값을 줍니다. 신선함을 넘어 <b>맞는 것을 잼</b>.</p></div>
   </div>
   <div class="note"><p><span class="h">원칙 — 대체가 아니라 보정</span>websocket 값은 <b>실시간 추정·교차검증</b>이고, 과거/권위 보고는 야간 TOS 확정값을 씁니다. 화면에서 <b>⚡(실시간)</b>으로 명확히 구분 표시합니다. GPS는 정밀 타임스탬프·권위가 없는 대신, "지금 무엇이 일어나는가"를 직접 봅니다.</p></div>
 </section>
@@ -147,7 +147,7 @@
     </div>
     <div class="col good">
       <h4>실제 TT 사이클 (GPS)</h4>
-      <div class="big">≈ 6–10 분</div>
+      <div class="big">≈ 10–15 분</div>
       <p><b>트럭이 배달→배달까지 한 바퀴</b> 도는 시간. GPS로 직접 관측. 픽업→운반→핸드오버→공차복귀→다음픽업.</p>
     </div>
   </div>

@@ -105,7 +105,7 @@ function SmallCard({ c, trend, lang, extras }: { c: KpiCard; trend?: TrendRespon
   const dl = deltaLabel(c);
   return (
     <div className={`kpi${c.tier === "PRIMARY" ? " primary" : ""}`}>
-      <div className="label">{name(c, lang)}</div>
+      <div className="label">{name(c, lang)}<SourceBadge src="tos" ko={lang === "ko"} /></div>
       <div className="vrow">
         <span className="val">{fmtValue(c.value, c.unit)}</span>
         <span className="unit">{c.unit}</span>
@@ -161,8 +161,9 @@ function fmtCycle(s: number | null | undefined): string {
   if (s == null) return "—";
   return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
 }
-function LiveWsStrip({ lang }: { lang: Lang }) {
-  const ko = lang === "ko";
+// poll the per-second websocket feed (shared by the KPI cards so each can show its live
+// counterpart inline next to the TOS value).
+function useWsLive(): WsLive | null {
   const [w, setW] = useState<WsLive | null>(null);
   useEffect(() => {
     let alive = true;
@@ -172,53 +173,86 @@ function LiveWsStrip({ lang }: { lang: Lang }) {
     const id = setInterval(poll, 5000);
     return () => { alive = false; clearInterval(id); };
   }, []);
-  if (!w || !w.connected) return null;
-  // median of per-truck delivery-to-delivery intervals. Each delivery is GPS-movement-
-  // validated (the truck actually drove the box ≥150m) — a container1 change with no
-  // movement is a TOS re-assignment, not a delivery, and is rejected (counted as artifact).
-  // Little's-law W is unreliable here (empty_travel over-counts L), so it is not shown.
-  // Median includes some inter-delivery idle → an upper bound on the active cycle, but far
-  // closer to a real truck cycle than the TOS handling span (~40m).
-  const cyc = w.tt_cycle_median_s ?? null;
-  const haveCyc = cyc != null;
-  const need = w.tt_cycle_min_samples ?? 20;
-  const fill = w.window_fill_min ?? 60;
-  const filling = fill < 60; // rolling 1h window not yet full → still settling
-  const spread = haveCyc && w.tt_cycle_p25_s != null && w.tt_cycle_p75_s != null
-    ? `${fmtCycle(w.tt_cycle_p25_s)}–${fmtCycle(w.tt_cycle_p75_s)}` : "";
-  // never show the median as a lone scalar: always bind n + IQR (and a window-filling hint).
-  const cycSub = haveCyc
-    ? `n=${w.tt_cycle_samples}${spread ? ` · ${spread}` : ""}${filling ? ` · ${ko ? `윈도우 ${fill}/60분` : `win ${fill}/60m`}` : ""}`
-    : "";
-  const chips: { lbl: string; val: string; sub?: string; title: string }[] = [
-    { lbl: ko ? "TT 배달간격" : "TT interval",
-      val: haveCyc ? fmtCycle(cyc) : (ko ? `수집중 ${w.tt_cycle_samples ?? 0}/${need}` : `…${w.tt_cycle_samples ?? 0}/${need}`),
-      sub: cycSub,
-      title: ko ? `트럭 연속 배달 간격의 중앙값(n≥${need}부터 표시). 배달은 GPS 이동(≥150m)으로 검증 — 안 움직인 container1 변경은 재배정 잡음으로 제외(최근1h 잡음 ${w.tt_artifacts_60m ?? 0}건, 그중 100–150m 근접 ${w.tt_artifacts_near_60m ?? 0}건). 유휴 포함이라 활성 사이클의 상한. TOS '작업 처리 시간'(생애 span ~40분)과 다른 값.` : `median truck delivery-to-delivery interval (shown from n≥${need}); each delivery is GPS-movement-validated (≥150m), stationary container1 changes rejected as re-assignment noise (${w.tt_artifacts_60m ?? 0} in last 1h, of which ${w.tt_artifacts_near_60m ?? 0} in the 100–150m near band). Includes some idle → upper bound on the cycle, distinct from the TOS ~40m handling span` },
-    { lbl: ko ? "비유휴" : "Active", val: w.tt_util_live != null ? `${w.tt_util_live}%` : "—",
-      title: ko ? "현재 비유휴(작업중) 트럭 비율 — TOS 세션 가동률(로그인 기준)과는 다른 즉시 지표" : "non-idle truck fraction now — distinct from TOS session-based utilization" },
-    { lbl: ko ? "QC 처리량" : "QC mph", val: w.crane_mph_live != null ? `${w.crane_mph_live}/h` : "—",
-      title: ko ? "PLC 사이클 기반 실시간 QC 평균 처리량" : "live avg QC throughput from PLC cycles" },
-    { lbl: ko ? "QC 대기" : "QC wait", val: (w.qc_starving ?? 0) > 0 ? `${w.qc_starving}${ko ? "대" : ""} · ${w.qc_wait_live_s}s` : (ko ? "없음" : "none"),
-      title: ko ? "지금 트럭을 기다리는(유휴+무트럭) 가동 QC 수와 평균 대기" : "quay cranes idle now with no truck (count · avg wait)" },
-  ];
+  return w;
+}
+
+// What data source(s) a KPI card shows, and which leads.
+//  • "wsMain"  — the websocket value IS the headline (K_CYCLE: the TOS value is a ~40m
+//                handling span, hidden per request; the real truck cycle comes from GPS).
+//  • "dual"    — TOS leads, websocket shown as an auxiliary "live" line. The lower-variation
+//                value is the headline; TOS shift/daily aggregates are far smoother than the
+//                per-second feed, so TOS leads on K_UTIL/K_MPH/K_QC_Q.
+//  • "tos"     — TOS only (no websocket counterpart).
+type CardSrc =
+  | { kind: "tos" }
+  | { kind: "wsMain"; label: string; val: string; sub?: string; title: string }
+  | { kind: "dual"; auxVal: string; auxTitle: string };
+
+function cardSrc(key: string, w: WsLive | null, ko: boolean): CardSrc {
+  if (key === "K_CYCLE") {
+    // GPS-movement-validated median truck delivery interval (the real cycle), replacing the
+    // mislabeled TOS handling span. Always bound to n + IQR + window-fill, never a lone scalar.
+    const cyc = w?.tt_cycle_median_s ?? null;
+    const have = cyc != null;
+    const need = w?.tt_cycle_min_samples ?? 20;
+    const n = w?.tt_cycle_samples ?? 0;
+    const fill = w?.window_fill_min ?? 60;
+    const spread = have && w?.tt_cycle_p25_s != null && w?.tt_cycle_p75_s != null
+      ? `${fmtCycle(w.tt_cycle_p25_s)}–${fmtCycle(w.tt_cycle_p75_s)}` : "";
+    return {
+      kind: "wsMain",
+      label: ko ? "TT 사이클 타임" : "TT Cycle Time",
+      val: have ? fmtCycle(cyc) : (ko ? `수집중 ${n}/${need}` : `…${n}/${need}`),
+      sub: have ? `n=${n}${spread ? ` · ${spread}` : ""}${fill < 60 ? ` · ${ko ? `윈도우 ${fill}/60분` : `win ${fill}/60m`}` : ""}` : "",
+      title: ko
+        ? `트럭 연속 배달 간격의 중앙값 — websocket GPS로 산출(이동 ≥150m 검증, n≥${need}부터). 유휴 포함이라 활성 사이클의 상한. TOS '작업 처리 시간'(생애 span ~40분)과 다른 값.`
+        : `median truck delivery-to-delivery interval from the websocket GPS feed (movement-validated ≥150m, shown from n≥${need}); upper bound incl. idle, distinct from the TOS ~40m handling span`,
+    };
+  }
+  if (!w || !w.connected) return { kind: "tos" };
+  if (key === "K_UTIL" && w.tt_util_live != null)
+    return { kind: "dual", auxVal: `${w.tt_util_live}%`, auxTitle: ko ? "실시간 비유휴 트럭 비율 (websocket GPS) — TOS 세션 가동률과 다른 즉시 지표" : "live non-idle truck fraction (websocket GPS) — distinct from TOS session utilization" };
+  if (key === "K_MPH" && w.crane_mph_live != null)
+    return { kind: "dual", auxVal: `${w.crane_mph_live}/h`, auxTitle: ko ? "실시간 QC 평균 처리량 (PLC 사이클)" : "live avg QC throughput (PLC cycles)" };
+  if (key === "K_QC_Q")
+    return { kind: "dual", auxVal: (w.qc_starving ?? 0) > 0 ? `${w.qc_starving}${ko ? "대" : ""} · ${w.qc_wait_live_s}s` : (ko ? "없음" : "none"), auxTitle: ko ? "지금 트럭을 기다리는(유휴·무트럭) 가동 QC 수 · 평균 대기 (websocket)" : "quay cranes waiting for a truck now — count · avg wait (websocket)" };
+  return { kind: "tos" };
+}
+
+// small source chip on each KPI card: TOS DB vs websocket vs both.
+function SourceBadge({ src, ko }: { src: "tos" | "ws" | "dual"; ko: boolean }) {
+  if (src === "ws") return <span className="src-badge ws" title={ko ? "websocket 실시간 GPS/PLC로 산출" : "computed from the live websocket GPS/PLC feed"}>⚡ WS</span>;
+  if (src === "dual") return <span className="src-badge dual" title={ko ? "TOS DB(메인) + websocket 실시간(보조)" : "TOS DB (main) + websocket live (auxiliary)"}>TOS<span className="sb-plus">+⚡</span></span>;
+  return <span className="src-badge tos" title={ko ? "TOS DB 기반" : "from TOS DB"}>TOS</span>;
+}
+
+// auxiliary live row shown under the TOS headline on a dual-source card.
+function WsAux({ val, title, ko }: { val: string; title: string; ko: boolean }) {
   return (
-    <div className="ws-strip" title={ko ? "websocket 초단위 신호로 산출한 실시간 보정값" : "live values from the per-second websocket feed"}>
-      <span className="ws-strip-lbl">⚡ {ko ? "websocket 실시간" : "live (websocket)"}</span>
-      {chips.map((c) => (
-        <span className="ws-chip" key={c.lbl} title={c.title}>
-          <span className="ws-chip-l">{c.lbl}</span>
-          <span className="ws-chip-v">{c.val}</span>
-          {c.sub && <span className="ws-chip-s">{c.sub}</span>}
-        </span>
-      ))}
+    <div className="ws-aux" title={title}>
+      <span className="ws-aux-b">⚡</span>
+      <span className="ws-aux-l">{ko ? "실시간" : "live"}</span>
+      <span className="ws-aux-v mono">{val}</span>
     </div>
   );
 }
 
-function LiveCard({ c, lang, extras }: { c: LiveKpi; lang: Lang; extras?: KExtra[] }) {
+function LiveCard({ c, lang, ws, extras }: { c: LiveKpi; lang: Lang; ws: WsLive | null; extras?: KExtra[] }) {
   const s = t(lang);
-  const nm = lang === "ko" ? c.name_ko : c.name_en;
+  const ko = lang === "ko";
+  const src = cardSrc(c.key, ws, ko);
+  // K_CYCLE: the websocket truck cycle is the whole card (TOS handling span hidden).
+  if (src.kind === "wsMain") {
+    return (
+      <div className={`kpi${c.tier === "PRIMARY" ? " primary" : ""}`} title={src.title}>
+        <div className="label">{src.label}<SourceBadge src="ws" ko={ko} /></div>
+        <div className="vrow"><span className="val">{src.val}</span></div>
+        {src.sub && <div className="ws-sub mono">{src.sub}</div>}
+        <div className="n" style={{ marginTop: "auto" }}>{ko ? "websocket GPS" : "from websocket GPS"}</div>
+      </div>
+    );
+  }
+  const nm = ko ? c.name_ko : c.name_en;
   const imp = c.delta_abs == null || !c.direction ? null : (c.direction === "LOWER_BETTER" ? c.delta_abs < 0 : c.delta_abs > 0);
   const deltaTxt = c.delta_abs == null ? null : (() => {
     const arrow = c.delta_abs > 0 ? "▲" : "▼";
@@ -228,9 +262,10 @@ function LiveCard({ c, lang, extras }: { c: LiveKpi; lang: Lang; extras?: KExtra
   })();
   return (
     <div className={`kpi${c.tier === "PRIMARY" ? " primary" : ""}`}>
-      <div className="label">{nm}</div>
+      <div className="label">{nm}<SourceBadge src={src.kind === "dual" ? "dual" : "tos"} ko={ko} /></div>
       <div className="vrow"><span className="val">{fmtValue(c.value, c.unit)}</span><span className="unit">{c.unit}</span></div>
       <KpiExtras extras={extras} />
+      {src.kind === "dual" && <WsAux val={src.auxVal} title={src.auxTitle} ko={ko} />}
       {deltaTxt
         ? <div className={`delta ${imp ? "good" : "bad"}`}>{deltaTxt}<span className="vs">{s.vsPrevShift}</span></div>
         : <div className="delta" style={{ color: "var(--text-mute)" }}>{s.noPrevShift}</div>}
@@ -267,15 +302,28 @@ function VesselPanel({ vessels, lang, onSelect }: { vessels: VesselRow[]; lang: 
 }
 
 // Today-cumulative KPI card (full-day-so-far, vs previous period). Mirrors LiveCard.
-function TodayCard({ c, lang, extras }: { c: KpiCard; lang: Lang; extras?: KExtra[] }) {
+function TodayCard({ c, lang, ws, extras }: { c: KpiCard; lang: Lang; ws: WsLive | null; extras?: KExtra[] }) {
   const s = t(lang);
+  const ko = lang === "ko";
+  const src = cardSrc(c.key, ws, ko);
+  if (src.kind === "wsMain") {
+    return (
+      <div className={`kpi${c.tier === "PRIMARY" ? " primary" : ""}`} title={src.title}>
+        <div className="label">{src.label}<SourceBadge src="ws" ko={ko} /></div>
+        <div className="vrow"><span className="val">{src.val}</span></div>
+        {src.sub && <div className="ws-sub mono">{src.sub}</div>}
+        <div className="n" style={{ marginTop: "auto" }}>{ko ? "websocket GPS" : "from websocket GPS"}</div>
+      </div>
+    );
+  }
   const imp = isImprovement(c);
   const dl = deltaLabel(c);
   return (
     <div className={`kpi${c.tier === "PRIMARY" ? " primary" : ""}`}>
-      <div className="label">{name(c, lang)}</div>
+      <div className="label">{name(c, lang)}<SourceBadge src={src.kind === "dual" ? "dual" : "tos"} ko={ko} /></div>
       <div className="vrow"><span className="val">{fmtValue(c.value, c.unit)}</span><span className="unit">{c.unit}</span></div>
       <KpiExtras extras={extras} />
+      {src.kind === "dual" && <WsAux val={src.auxVal} title={src.auxTitle} ko={ko} />}
       {dl
         ? <div className={`delta ${imp ? "good" : "bad"}`}>{dl}<span className="vs">{s.vsBaseline}</span></div>
         : <div className="delta" style={{ color: "var(--text-mute)" }}>{s.baselinePending}</div>}
@@ -331,6 +379,7 @@ function VesselQcModal({ vessel, lang, onClose }: { vessel: VesselRow; lang: Lan
 function LiveTab({ lang }: { lang: Lang }) {
   const s = t(lang);
   const { live, vessels, today } = useLive();
+  const ws = useWsLive();
   const [selKey, setSelKey] = useState<string | null>(null);
   if (!live) return <div className="loading">{s.loading}</div>;
   const shiftName = (s as Record<string, string>)["shift_" + live.shift];
@@ -350,14 +399,13 @@ function LiveTab({ lang }: { lang: Lang }) {
       {/* 현재 쉬프트 KPI 7개 */}
       <div className="section-title">{s.shiftKpis}<span className="section-sub">{s.vsPrevShift}</span></div>
       <div className="grid kpi-strip">
-        {live.kpis.map((c) => <LiveCard key={c.key} c={c} lang={lang} extras={distanceExtras(live.kpis, c.key, lang)} />)}
+        {live.kpis.map((c) => <LiveCard key={c.key} c={c} lang={lang} ws={ws} extras={distanceExtras(live.kpis, c.key, lang)} />)}
       </div>
-      <LiveWsStrip lang={lang} />
 
       {/* 오늘 누적 KPI 7개 */}
       <div className="section-title" style={{ marginTop: 18 }}>{s.todayKpis}<span className="section-sub">{s.vsBaseline}</span></div>
       <div className="grid kpi-strip">
-        {(today?.kpis ?? []).map((c) => <TodayCard key={c.key} c={c} lang={lang} extras={distanceExtras(today?.kpis ?? [], c.key, lang)} />)}
+        {(today?.kpis ?? []).map((c) => <TodayCard key={c.key} c={c} lang={lang} ws={ws} extras={distanceExtras(today?.kpis ?? [], c.key, lang)} />)}
       </div>
 
       {/* 현재 작업 중인 선박 (카드 클릭 → QC별 처리량 팝업) */}

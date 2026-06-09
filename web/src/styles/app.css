@@ -125,15 +125,21 @@ body {
   padding: 10px 12px; min-height: 120px; display: flex; flex-direction: column; gap: 4px; position: relative; overflow: hidden;
 }
 .kpi.primary { border-left: 3px solid var(--warn); }
-/* websocket live cross-check strip */
-.ws-strip { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px;
-  padding: 7px 12px; background: rgba(245,158,11,0.06); border: 1px solid rgba(245,158,11,0.25); border-radius: var(--radius-lg); }
-.ws-strip-lbl { font-size: 10.5px; font-weight: 800; color: #fbbf24; letter-spacing: 0.02em; margin-right: 4px; }
-.ws-chip { display: inline-flex; align-items: baseline; gap: 5px; padding: 2px 9px; border-radius: 999px;
-  background: var(--surface-2); border: 1px solid var(--border); }
-.ws-chip-l { font-size: 10px; color: var(--text-mute); }
-.ws-chip-v { font-size: 12px; font-weight: 800; color: var(--text); font-family: "JetBrains Mono", monospace; }
-.ws-chip-s { font-size: 9px; color: var(--text-faint); font-family: "JetBrains Mono", monospace; }
+/* per-card data-source badge (TOS DB vs websocket) */
+.src-badge { float: right; font-size: 8.5px; font-weight: 800; letter-spacing: 0.02em; line-height: 1;
+  padding: 2px 5px; border-radius: 5px; vertical-align: top; white-space: nowrap; }
+.src-badge.tos { color: #a5b4fc; background: rgba(99,102,241,0.13); border: 1px solid rgba(99,102,241,0.3); }
+.src-badge.ws { color: #fbbf24; background: rgba(245,158,11,0.13); border: 1px solid rgba(245,158,11,0.35); }
+.src-badge.dual { color: #a5b4fc; background: rgba(99,102,241,0.13); border: 1px solid rgba(99,102,241,0.3); }
+.src-badge.dual .sb-plus { color: #fbbf24; margin-left: 1px; }
+/* auxiliary websocket "live" line under a TOS headline (dual-source cards) */
+.ws-aux { display: flex; align-items: baseline; gap: 5px; margin: 1px 0 2px; padding: 2px 6px;
+  background: rgba(245,158,11,0.07); border: 1px solid rgba(245,158,11,0.22); border-radius: 6px; }
+.ws-aux-b { font-size: 9px; }
+.ws-aux-l { font-size: 9.5px; color: #fbbf24; font-weight: 700; }
+.ws-aux-v { font-size: 11px; font-weight: 800; color: var(--text); margin-left: auto; }
+/* sub-line under the websocket-main cycle value (n · IQR · window) */
+.ws-sub { font-size: 9px; color: var(--text-faint); font-family: "JetBrains Mono", monospace; margin-top: 1px; }
 /* extra sub-values inside the distance / ratio cards (loaded, total, loaded-ratio) */
 .kpi-extras { display: flex; flex-direction: column; gap: 1px; margin: 1px 0 2px; padding-top: 3px; border-top: 1px dashed var(--border-soft); }
 .kpi-extra { display: flex; justify-content: space-between; align-items: baseline; font-size: 10.5px; }
