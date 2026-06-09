@@ -11,6 +11,16 @@ import { LiveVehicleDetail, type SelVeh } from "./LiveVehicleDetail";
 
 const ESRI = "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 
+// Map rotation. The Westports quay (QC line) runs ~NNE–SSW (azimuth ~30°); a bearing of
+// 300° lays that berth line horizontal with the sea toward the top and the terminal below.
+// The user can free-rotate (compass / right-drag); we persist their last bearing.
+const QUAY_BEARING = 300;
+const BEARING_KEY = "wp-map-bearing";
+function initialBearing(): number {
+  try { const v = Number(localStorage.getItem(BEARING_KEY)); if (Number.isFinite(v)) return v; } catch { /* ignore */ }
+  return QUAY_BEARING;
+}
+
 type Pt = [number, number, number, number, number]; // [t, lat, lon, speed, engine]
 type Device = { id: string; cls: string; pts: Pt[] };
 type Replay = { meta: { window_s: number; center: [number, number]; n_devices: number }; devices: Device[] };
@@ -229,10 +239,13 @@ export default function LiveMapPage({ lang }: { lang: Lang }) {
     const map = new maplibregl.Map({
       container: mapEl.current,
       style: { version: 8, sources: { esri: { type: "raster", tiles: [ESRI], tileSize: 256 } }, layers: [{ id: "esri", type: "raster", source: "esri" }] },
-      center: [101.2919, 2.9263], zoom: 14.3, attributionControl: false, preserveDrawingBuffer: true,
+      center: [101.2919, 2.9263], zoom: 14.3, bearing: initialBearing(), attributionControl: false, preserveDrawingBuffer: true,
     } as maplibregl.MapOptions);
     mapRef.current = map;
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+    // compass = free user rotation (drag the needle / right-click-drag) + click to reset north
+    map.addControl(new maplibregl.NavigationControl({ showCompass: true }), "bottom-right");
+    // persist the user's last rotation so the map opens at the same orientation next time
+    map.on("rotateend", () => { try { localStorage.setItem(BEARING_KEY, String(Math.round(map.getBearing() * 10) / 10)); } catch { /* ignore */ } });
     const ro = new ResizeObserver(() => map.resize());
     ro.observe(mapEl.current);
 
@@ -428,6 +441,13 @@ export default function LiveMapPage({ lang }: { lang: Lang }) {
           ))}
         </div>
         <span className="spacer" />
+        <button
+          className="map-rotate"
+          onClick={() => { const m = mapRef.current; if (m) { m.easeTo({ bearing: QUAY_BEARING, duration: 500 }); try { localStorage.setItem(BEARING_KEY, String(QUAY_BEARING)); } catch { /* ignore */ } } }}
+          title={ko ? "선석을 수평으로 정렬 (바다 위 · 터미널 아래)" : "Align quay horizontal (sea up, terminal down)"}
+        >
+          ⟲ {ko ? "선석 수평" : "Align quay"}
+        </button>
         <button
           className={`map-live ${liveActive ? "on" : "off"}`}
           onClick={() => setUseLive((v) => !v)}
