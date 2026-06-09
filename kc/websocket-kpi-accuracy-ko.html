@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>websocket로 KPI 정확도 향상 — 선별·방안·구현 (TT AiOps Platform · 2026-06)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --primary:#001b44; --primary-2:#002f6c; --accent:#1e6feb;
+    --ink:#16202c; --ink-2:#3c4654; --muted:#6b7787; --line:#e3e8ef; --line-2:#cdd5e0;
+    --bg:#eef1f5; --card:#ffffff; --soft:#f4f6f9; --soft-2:#eef2f7;
+    --good:#15803d; --good-bg:#dcfce7; --warn:#b45309; --warn-bg:#fef3c7; --bad:#b91c1c; --bad-bg:#fee2e2;
+    --amber:#b45309; --ws:#86198f; --tos:#3730a3;
+    --r:10px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Inter','Malgun Gothic','Apple SD Gothic Neo',sans-serif;color:var(--ink);background:var(--bg);line-height:1.7;-webkit-font-smoothing:antialiased}
+  .layout{display:grid;grid-template-columns:240px 1fr;gap:34px;max-width:1340px;margin:0 auto;padding:0 28px}
+  nav.toc{position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;padding:24px 8px 24px 0;font-size:13px}
+  nav.toc .brand{font-family:'Manrope';font-weight:800;font-size:14px;color:var(--primary);letter-spacing:-.02em}
+  nav.toc .brandsub{font-size:11px;color:var(--muted);margin:2px 0 14px}
+  nav.toc a{display:block;color:var(--ink-2);text-decoration:none;padding:5px 10px;border-radius:7px;border-left:2px solid transparent;margin-bottom:1px}
+  nav.toc a:hover{background:var(--soft-2);color:var(--primary)}
+  nav.toc a.sec{font-weight:700;color:var(--primary);margin-top:11px}
+  nav.toc .home{font-size:11px;color:var(--accent);text-decoration:none;display:inline-block;margin-bottom:10px}
+  main{padding:34px 0 120px;min-width:0}
+  .hero{background:linear-gradient(135deg,#3a1d05,#b45309);color:#fff;border-radius:16px;padding:34px 40px;margin-bottom:26px;box-shadow:0 10px 30px rgba(58,29,5,.22)}
+  .hero .tag{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#fde2b0;font-weight:600}
+  .hero h1{font-family:'Manrope';font-weight:800;font-size:30px;letter-spacing:-.03em;line-height:1.2;margin:9px 0 10px}
+  .hero p{color:#fbe6cf;font-size:14.5px;font-weight:300;max-width:840px}
+  .hero .meta{margin-top:15px;font-size:12px;color:#f3d49b}
+  .hero .meta b{color:#fff;font-weight:600}
+  section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:28px 32px;margin-bottom:20px;scroll-margin-top:16px}
+  .kicker{font-size:11.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--amber)}
+  h2{font-family:'Manrope';font-weight:800;font-size:23px;color:var(--primary);letter-spacing:-.02em;margin:6px 0 14px;padding-bottom:11px;border-bottom:2px solid var(--soft-2)}
+  h3{font-family:'Manrope';font-weight:700;font-size:16.5px;color:var(--primary-2);margin:22px 0 8px}
+  h4{font-weight:700;font-size:13.5px;color:var(--ink);margin:15px 0 6px}
+  p{font-size:14px;color:var(--ink-2);margin-bottom:10px}
+  ul,ol{padding-left:20px;margin-bottom:10px}
+  li{font-size:14px;color:var(--ink-2);margin-bottom:5px}
+  strong{color:var(--ink);font-weight:600}
+  code,.mono{font-family:'JetBrains Mono',monospace;font-size:.86em;background:var(--soft-2);padding:1px 6px;border-radius:5px;color:#0b3b8c}
+  .note{border-left:3px solid var(--amber);background:var(--soft);border-radius:0 10px 10px 0;padding:12px 16px;margin:14px 0}
+  .note.good{border-left-color:var(--good);background:var(--good-bg)}
+  .note.warn{border-left-color:var(--warn);background:var(--warn-bg)}
+  .note.bad{border-left-color:var(--bad);background:var(--bad-bg)}
+  .note.key{border-left-color:var(--amber);background:#fff7ed}
+  .note p{margin:0;font-size:13.5px}
+  .note .h{font-weight:700;color:var(--ink);display:block;margin-bottom:3px}
+  table{width:100%;border-collapse:separate;border-spacing:0;margin:13px 0;font-size:12.5px}
+  th{font-family:'Manrope';font-weight:700;font-size:11.5px;background:var(--amber);color:#fff;text-align:left;padding:8px 11px}
+  th:first-child{border-radius:9px 0 0 0}th:last-child{border-radius:0 9px 0 0}
+  td{padding:7px 11px;border-bottom:1px solid var(--line);color:var(--ink-2);vertical-align:top}
+  tr:nth-child(even) td{background:var(--soft)}
+  tbody tr:hover td{background:#fff7ed}
+  td .mono{font-size:11px}
+  .b{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:700;white-space:nowrap}
+  .b-hi{background:#dcfce7;color:#15803d}.b-md{background:#fef3c7;color:#92400e}.b-lo{background:#e2e8f0;color:#475569}
+  .b-ws{background:#fae8ff;color:#86198f}.b-tos{background:#e0e7ff;color:#3730a3}.b-done{background:#dcfce7;color:#15803d}.b-plan{background:#dbeafe;color:#1e40af}
+  pre{background:#0b1727;color:#d7e3f4;border-radius:10px;padding:13px 15px;overflow-x:auto;font-family:'JetBrains Mono',monospace;font-size:11.5px;line-height:1.6;margin:11px 0}
+  pre .k{color:#7cc4ff}pre .s{color:#9ae6b4}pre .n{color:#fbbf72}pre .c{color:#64748b}
+  .grid{display:grid;gap:13px;margin:13px 0}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
+  .card{background:var(--soft);border:1px solid var(--line);border-radius:11px;padding:14px 16px}
+  .card h4{margin:0 0 5px;color:var(--primary-2)}.card p{font-size:12.5px;margin:0}
+  .card .big{font-family:'Manrope';font-weight:800;font-size:24px;color:var(--primary);letter-spacing:-.02em}
+  .card .unit{font-size:12px;color:var(--muted);font-weight:600}
+  hr.soft{border:0;border-top:1px solid var(--line);margin:18px 0}
+  .foot{font-size:12px;color:var(--muted);text-align:center;padding:18px}
+  @media(max-width:920px){.layout{grid-template-columns:1fr}nav.toc{display:none}.g3,.g2{grid-template-columns:1fr}}
+  /* ===== dark mode ===== */
+  html{filter:invert(1) hue-rotate(180deg)}
+  .hero,pre,th{filter:invert(1) hue-rotate(180deg)}
+  ::selection{background:#b45309;color:#fff}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav class="toc">
+  <a class="home" href="./index.html">← 지식센터</a>
+  <div class="brand">websocket로 KPI 정확도 향상</div>
+  <div class="brandsub">TT AiOps Platform · 2026-06</div>
+  <a class="sec" href="#tldr">한눈에 요약</a>
+  <a href="#why">1 · TOS의 한계 (어디가 부정확)</a>
+  <a href="#select">2 · KPI별 향상 가능성 (선별)</a>
+  <a href="#impl">3 · 구현 — 실시간 K_MPH</a>
+  <a href="#next">4 · 다음 단계 (K_QC_Q·K_UTIL)</a>
+  <a href="#limit">5 · 주의 · 한계</a>
+</nav>
+
+<main>
+<div class="hero">
+  <div class="tag">TT AiOps Platform · KPI Accuracy</div>
+  <h1>websocket로 KPI 정확도 향상</h1>
+  <p>KPI의 권위적 원천은 <b>TOS</b>지만, TOS는 몇 분마다 당겨오고 시간 단위로 버킷팅되어 <b>실시간 해상도가 거칠고 교대 중 잠정값이 과소</b>합니다. websocket(초단위 GPS/PLC)을 활용하면 이 실시간 구간의 정확도를 끌어올릴 수 있습니다. 이 문서는 <b>어떤 KPI가 향상 가능한지 선별</b>하고, <b>방안·구현 계획</b>을 세우고, 첫 구현(<b>실시간 K_MPH</b>)을 기록합니다.</p>
+  <div class="meta">기준 <b>2026-06-09</b> · 원칙: websocket은 TOS를 <b>대체하지 않고 교차검증/실시간 보완</b> · 야간 TOS 확정값이 최종 권위</div>
+</div>
+
+<!-- TLDR -->
+<section id="tldr">
+  <div class="kicker">한눈에</div>
+  <h2>30초 요약</h2>
+  <div class="grid g3">
+    <div class="card"><h4>원칙</h4><p>websocket = <b>실시간 추정·교차검증</b>. TOS = <b>권위·최종 확정</b>. 둘을 나란히 두어 "지금 이 순간"의 정확도를 올림.</p></div>
+    <div class="card"><h4>선별</h4><p>크레인 PLC/GPS로 향상 가능: <b>K_MPH</b>(처리량)·<b>K_QC_Q</b>(QC 대기)가 1순위. 공차·사이클은 GPS 노이즈로 효과 낮음.</p></div>
+    <div class="card"><h4>구현됨</h4><p><b>실시간 K_MPH</b> — 크레인 PLC 적재→비움 전이를 세어 QC별 시간당 처리량. 화면에 TOS와 교차검증.</p></div>
+  </div>
+  <div class="note key"><p><span class="h">핵심</span>TOS K_MPH는 완료 move를 <b>3분마다</b> 당기고 가동시간을 <b>정시 단위(시간 버킷)</b>로 세어, "지금 크레인이 얼마나 빠른가"가 거칩니다. PLC는 <b>초당 1회</b> 들어오고 적재 전이가 곧 move라, 그 자리에서 실시간 처리량을 잴 수 있습니다.</p></div>
+</section>
+
+<!-- 1 why -->
+<section id="why">
+  <div class="kicker">Part 1</div>
+  <h2>TOS의 한계 — 실시간 구간이 부정확한 지점</h2>
+  <p>TOS 값은 과거 확정일엔 정확하지만, <strong>진행 중인 교대(오늘)</strong>에선 다음 이유로 거칠거나 과소합니다(<a href="./kpi-computation-ko.html" style="color:var(--accent)">KPI 산출</a> 참조).</p>
+  <table>
+    <tr><th style="width:200px">한계</th><th>내용 · 영향 KPI</th></tr>
+    <tr><td>당기는 주기</td><td>교대 틱이 <b>3~15분</b>마다 → 그 사이는 정지. "현재 처리량/대기"가 최대 수분 지연. (전 KPI)</td></tr>
+    <tr><td>가동시간 시간버킷</td><td>K_MPH의 <span class="mono">active_hours = COUNT(DISTINCT 시)</span> — 한 시간에 10분만 일해도 1시간. <b>순간 처리율을 과소평가</b>. (K_MPH)</td></tr>
+    <tr><td>유휴갭 임계</td><td>K_QC_Q는 QC당 유휴갭 <span class="mono">HAVING ≥ 10</span> 필요 → 부분 교대에선 미달해 <b>과소/누락</b>. (K_QC_Q)</td></tr>
+    <tr><td>잠정(provisional)</td><td>오늘 값은 야간 확정 전까지 잠정. (전 KPI)</td></tr>
+  </table>
+  <div class="note"><p><span class="h">반대로 websocket은</span>장비당 <b>GPS ~3초 · 크레인 PLC ~1초</b>로 연속 관측. "지금 이 순간"의 처리량·대기·가동을 거의 실시간으로 잴 수 있습니다(<a href="./websocket-data-ko.html" style="color:var(--accent)">websocket 데이터</a>).</p></div>
+</section>
+
+<!-- 2 select -->
+<section id="select">
+  <div class="kicker">Part 2</div>
+  <h2>KPI별 향상 가능성 — 선별</h2>
+  <table>
+    <tr><th style="width:140px">KPI</th><th style="width:80px">가능성</th><th>websocket 신호 · 방안</th></tr>
+    <tr><td><b>K_MPH</b> QC 처리량</td><td><span class="b b-hi">높음</span></td><td><b>크레인 PLC 적재→비움 전이 = 1 move.</b> 롤링 1시간 카운트 → 실시간 move/hr. 정시버킷 문제 없음. <b>구현됨(§3)</b>.</td></tr>
+    <tr><td><b>K_QC_Q</b> QC 대기</td><td><span class="b b-hi">높음</span></td><td>크레인이 move를 마치고 다음 픽업까지 idle인데 <b>크레인에 TT가 없음</b>(GPS) → "트럭 대기"를 직접 측정. HAVING 과소 문제 회피. <b>계획(§4)</b>.</td></tr>
+    <tr><td><b>K_UTIL</b> TT 가동률</td><td><span class="b b-md">중간</span></td><td>TT GPS 시동 ON + (적재 or 작업 향해 이동) = 가동. 실시간 가동률. TOS 세션도 비교적 권위적이라 보완 성격. <b>계획(§4)</b>.</td></tr>
+    <tr><td><b>K_CYCLE</b> 사이클타임</td><td><span class="b b-lo">낮음</span></td><td>GPS 사이클 위상으로 추정 가능하나 TOS가 정확한 이벤트 타임스탬프 보유 → 신선도만 이득.</td></tr>
+    <tr><td><b>K_EMPTY/_R</b> 공차거리</td><td><span class="b b-lo">낮음</span></td><td>GPS 경로적분은 정확도 ~10m·3초 샘플로 <b>노이즈가 커</b> TOS 기록 거리보다 부정확. 권장 안 함.</td></tr>
+  </table>
+  <div class="note good"><p><span class="h">결론</span><b>크레인 PLC 기반의 K_MPH·K_QC_Q</b>가 명확한 정확도 향상 대상입니다 — 신호가 깨끗(PLC ~1초·적재 전이가 곧 move/핸드오버)하고, TOS의 실시간 약점(정시버킷·HAVING)을 정확히 메웁니다. GPS 경로 기반(공차/사이클)은 노이즈로 역효과라 제외.</p></div>
+</section>
+
+<!-- 3 impl -->
+<section id="impl">
+  <div class="kicker">Part 3</div>
+  <h2>구현 — 실시간 K_MPH (PLC 사이클)</h2>
+  <p>크레인 PLC의 <b>하중(load)</b>은 컨테이너를 들면 ≥1t, 내려놓으면 ~0이 됩니다. <strong>적재→비움 전이 한 번 = move 한 번</strong>입니다(양하: 선박→TT 드롭 / 적하: TT→선박 드롭).</p>
+  <pre><span class="c">// API 인제스트 (livemap.rs) — 크레인당</span>
+PLC load 수신 (~1초):
+  laden = 이력관성(<span class="n">≥1.0t</span> 적재 · <span class="n">&lt;0.5t</span> 비움)   <span class="c">// 경계 떨림 방지(hysteresis)</span>
+  if 직전 laden && 지금 비움:  moves.push(now)    <span class="c">// 드롭 = move 완료</span>
+  moves에서 1시간 지난 것 제거
+
+mph(QC) = round( 최근1시간 moves 수 / 관측경과h )   <span class="c">// 재시작 직후 윈도우 미충전 보정</span>
+함대 = 일한 크레인들의 mph 평균   <span class="c">// 종일 논 크레인은 평균에서 제외</span></pre>
+  <h4>노출 · 화면</h4>
+  <ul>
+    <li>API <span class="mono">/api/livemap/positions</span> — 크레인 PLC에 <span class="mono">mph</span>(최근 1h move) + <span class="mono">last_move_age_s</span>, 그리고 함대 <span class="mono">crane_mph_live · crane_moves_60m · cranes_working</span> 추가.</li>
+    <li>대시보드 <b>TT 페이지 · QC 작업 시퀀스</b>: QC 헤더에 <b>⚡N/h</b>(실시간 처리량), 패널 헤더에 <b>⚡ 함대 평균 move/h</b>를 TOS와 교차검증으로 표시.</li>
+  </ul>
+  <div class="note"><p><span class="h">콜드스타트 보정</span>처리량은 "최근 1시간 move"인데 재시작 직후엔 1시간이 안 차 과소합니다. 그래서 <b>실제 관측 경과시간(최대 1h)으로 나눠</b> 제대로 된 시간당 비율로 환산합니다 — 가동 ~10분이면 그 비율을 1시간으로 외삽(초기엔 다소 노이즈).</p></div>
+  <div class="note good"><p><span class="h">실측 검증</span>재시작 후 데이터가 쌓이자 크레인 18대에서 정상적으로 move가 집계되고 QC별·함대 처리량이 실시간 갱신됨을 확인. TOS K_MPH(정시버킷)보다 "지금 이 순간"을 더 잘 반영합니다.</p></div>
+</section>
+
+<!-- 4 next -->
+<section id="next">
+  <div class="kicker">Part 4</div>
+  <h2>다음 단계</h2>
+  <table>
+    <tr><th style="width:150px">대상</th><th>방안</th><th style="width:80px">상태</th></tr>
+    <tr><td><b>K_QC_Q</b> 실시간</td><td>크레인이 move 후 idle이면서 <b>핸드오버 위치에 TT 없음</b>(GPS topos1==크레인 & 근접 TT 0)인 구간을 "트럭 대기"로 누적. PLC 해상도로 측정 → HAVING 과소 회피. 다른 대기(선박·트윈)와 구분 튜닝 필요.</td><td><span class="b b-plan">계획</span></td></tr>
+    <tr><td><b>K_UTIL</b> 실시간</td><td>TT GPS 시동 ON + (container1 있음 or 작업 향해 이동) = 가동. 함대 가동률 실시간. TOS 세션과 교차검증.</td><td><span class="b b-plan">계획</span></td></tr>
+    <tr><td>융합 보정</td><td>과거=TOS 권위, 오늘=websocket 실시간으로 "오늘 누적"의 잠정 과소를 보정(블렌딩).</td><td><span class="b b-plan">검토</span></td></tr>
+  </table>
+</section>
+
+<!-- 5 limits -->
+<section id="limit">
+  <div class="kicker">Part 5</div>
+  <h2>주의 · 한계</h2>
+  <ul>
+    <li><b>TOS가 최종 권위.</b> websocket 값은 실시간 추정·교차검증이고, 야간 TOS 확정값이 최종 KPI입니다. 둘을 혼동하지 않게 화면에서 "⚡실시간"으로 명확히 구분.</li>
+    <li><b>트윈/탠덤 과소.</b> 한 번의 스프레더 사이클로 2개를 드는 트윈리프트는 PLC 전이가 1회라 move 1로 셈 → 실제보다 약간 과소(약 20% 트윈). TOS는 정확.</li>
+    <li><b>PLC는 C/M/Z만.</b> RTG(야드크레인)는 PLC가 없어 야드측 처리량/대기는 이 방식으로 못 잼.</li>
+    <li><b>콜드스타트.</b> API 재시작 후 ~10여 분은 외삽이라 노이즈. 1시간 지나면 정확.</li>
+    <li><b>경계 떨림.</b> 하중 임계는 hysteresis(1.0/0.5t)로 떨림을 막았으나, 비정상 하중 신호가 있으면 오집계 가능 → 모니터링.</li>
+  </ul>
+</section>
+
+<div class="foot">CLT Port Group · Digital Team — websocket로 KPI 정확도 향상 · 2026-06-09 · 구현: livemap.rs(PLC 사이클) + TtPage(교차검증) · TT AiOps Platform · 내부 공유용</div>
+
+</main>
+</div>
+</body>
+</html>

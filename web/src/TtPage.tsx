@@ -14,9 +14,13 @@ const ko = (lang: Lang) => lang === "ko";
 type Dev = {
   id: string; cls: string; speed?: number; age_s?: number;
   dispatch?: string; dispatch_reason?: string; arrival?: string; topos1?: string;
-  plc?: { is_loaded: boolean; age_s: number };
+  plc?: { is_loaded: boolean; age_s: number; mph?: number; last_move_age_s?: number };
 };
-type Snap = { connected: boolean; as_of: string | null; dispatch_counts?: Record<string, number>; devices: Dev[] };
+type Snap = {
+  connected: boolean; as_of: string | null; dispatch_counts?: Record<string, number>;
+  crane_mph_live?: number | null; crane_moves_60m?: number; cranes_working?: number;
+  devices: Dev[];
+};
 
 function usePositions(ms = 3000) {
   const [snap, setSnap] = useState<Snap | null>(null);
@@ -175,15 +179,20 @@ const QC_CAP = 12;     // columns shown
 const MOVE_CAP = 5;    // active move cards per QC
 
 function LiveQcSequence({ lang, wp, snap }: { lang: Lang; wp: WorkpoolResponse | null; snap: Snap | null }) {
-  // fuse: live crane PLC (cycling now) + per-TT dispatch state
+  // fuse: live crane PLC (cycling now + live move/hr) + per-TT dispatch state
   const ttState = new Map<string, Dev>();
   const craneFresh = new Map<string, boolean>();
+  const craneMph = new Map<string, number>(); // websocket live move/hr per crane (PLC cycle count)
   for (const d of snap?.devices ?? []) {
     if (d.cls === "TT") ttState.set(d.id, d);
-    else if (d.plc) craneFresh.set(d.id, (d.plc.age_s ?? 999) <= 120);
+    else if (d.plc) {
+      craneFresh.set(d.id, (d.plc.age_s ?? 999) <= 120);
+      if (d.plc.mph != null && d.plc.mph > 0) craneMph.set(d.id, d.plc.mph);
+    }
   }
   const qcs = (wp?.qcs ?? []).slice(0, QC_CAP);
   const ageS = wp?.as_of ? Math.max(0, Math.round((Date.now() - Date.parse(wp.as_of)) / 1000)) : null;
+  const fleetMph = snap?.crane_mph_live ?? null;
 
   return (
     <section className="tcard">
@@ -192,6 +201,12 @@ function LiveQcSequence({ lang, wp, snap }: { lang: Lang; wp: WorkpoolResponse |
           <span className="h3-sub">{ko(lang) ? "TOS 작업지시 + PLC/GPS 융합" : "TOS job orders fused with PLC/GPS"}</span></h3>
         <div className="head-sub">
           <span className="pill good">{ko(lang) ? "가동 QC" : "Working QC"} {wp?.qc_count ?? 0}</span>
+          {fleetMph != null && (
+            <span className="pill" style={{ borderColor: "#f59e0b", color: "#fbbf24", background: "rgba(245,158,11,0.10)" }}
+              title={ko(lang) ? "websocket PLC 사이클로 계산한 실시간 QC 평균 처리량 (TOS K_MPH 교차검증)" : "live avg QC throughput from PLC cycles (cross-check for TOS K_MPH)"}>
+              ⚡ {fleetMph.toFixed(0)} {ko(lang) ? "move/h (실시간)" : "mv/h live"}
+            </span>
+          )}
           <span className="muted">{ko(lang) ? `잔여 ${(wp?.total_remaining ?? 0).toLocaleString()} move` : `${(wp?.total_remaining ?? 0).toLocaleString()} moves left`}</span>
           <span className="muted">{ageS != null ? `⟳ ${ageS}s` : ""}</span>
         </div>
@@ -199,7 +214,7 @@ function LiveQcSequence({ lang, wp, snap }: { lang: Lang; wp: WorkpoolResponse |
       <div className="tcard-body">
         {qcs.length === 0 && <div className="lvp-empty">{ko(lang) ? "가동 중인 QC 없음" : "no working QC"}</div>}
         <div className="qc-panel">
-          {qcs.map((q) => <QcCol key={q.qc} q={q} lang={lang} ttState={ttState} working={craneFresh.get(q.qc) ?? false} />)}
+          {qcs.map((q) => <QcCol key={q.qc} q={q} lang={lang} ttState={ttState} working={craneFresh.get(q.qc) ?? false} mph={craneMph.get(q.qc)} />)}
         </div>
         {(wp?.qcs.length ?? 0) > QC_CAP && (
           <div className="lvp-note">{ko(lang) ? `+${(wp!.qcs.length - QC_CAP)} QC 더 (작업량 적은 순 생략)` : `+${wp!.qcs.length - QC_CAP} more QC (fewer active moves)`}</div>
@@ -209,7 +224,7 @@ function LiveQcSequence({ lang, wp, snap }: { lang: Lang; wp: WorkpoolResponse |
   );
 }
 
-function QcCol({ q, lang, ttState, working }: { q: WpQc; lang: Lang; ttState: Map<string, Dev>; working: boolean }) {
+function QcCol({ q, lang, ttState, working, mph }: { q: WpQc; lang: Lang; ttState: Map<string, Dev>; working: boolean; mph?: number }) {
   const [open, setOpen] = useState(false);
   const tot = q.queues.reduce((a, x) => a + x.total, 0);
   const done = q.queues.reduce((a, x) => a + x.done, 0);
@@ -221,7 +236,9 @@ function QcCol({ q, lang, ttState, working }: { q: WpQc; lang: Lang; ttState: Ma
       <div className="qc-head">
         <span className={`id ${working ? "busy" : "idle"}`}><span className="dot" />{q.qc}
           <span className="qc-vessel">{q.vessels.join(" · ") || "—"}</span></span>
-        <span className="mph">{ko(lang) ? "잔여" : "rem"} <span className="v">{q.remaining}</span></span>
+        {mph != null
+          ? <span className="mph" title={ko(lang) ? "PLC 실시간 처리량 (최근 1시간 move)" : "live throughput from PLC (moves in last hour)"}>⚡<span className="v">{mph}</span>/h</span>
+          : <span className="mph">{ko(lang) ? "잔여" : "rem"} <span className="v">{q.remaining}</span></span>}
       </div>
       <div className="qc-progress"><span>{q.active_moves} {ko(lang) ? "작업중" : "active"}{working ? (ko(lang) ? " · PLC 가동" : " · PLC live") : ""}</span><span className="mono">{done.toLocaleString()} / {tot.toLocaleString()}</span></div>
       <div className="qc-progress-bar"><div className="fill" style={{ width: `${pct}%` }} /></div>

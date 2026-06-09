@@ -10,7 +10,7 @@
 //! NOTE: this is the ONE outbound network client in the API crate, and it talks ONLY to
 //! the local tunnel endpoint — no Oracle/SSH access, cannot reach the production DB.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -58,6 +58,12 @@ struct Pos {
 
 /// Crane PLC state from the `ctab` zone (`plc_data`). Dynamic equipment only
 /// (C/M/Z prefixes). Keyed by crane id, which matches the GPS device id.
+///
+/// We also count *completed moves* from the hook-load signal: each laden→empty
+/// transition (the crane set a container down and released) is one move. Counting
+/// those over a rolling hour gives a live, per-second-fresh per-QC throughput
+/// (move/hr) — a websocket cross-check that refines the coarse TOS K_MPH (whose
+/// active_hours is bucketed to whole hours). See `kc/websocket-kpi-accuracy`.
 #[derive(Clone, Default)]
 struct Plc {
     load_t: Option<f64>, // hook load in metric tons
@@ -66,7 +72,21 @@ struct Plc {
     hpos: Option<f64>, // hoist position (crane-local axis)
     tpos: Option<f64>, // trolley position
     last_seen_ms: i64,
+    laden: bool,             // current laden state (hysteresis-debounced)
+    moves: VecDeque<i64>,    // pickup (rising-edge) timestamps, pruned to 1h
+    last_move_ms: i64,
 }
+
+// Hook-load thresholds (tons). Empty hook reads ~0 / slightly negative; a loaded
+// spreader reads several tons. Hysteresis (laden ≥2t / empty <0.5t) keeps the state
+// from flapping. We count a move on the empty→laden RISING edge (a pickup), and a
+// min gap of 40s between counted moves absorbs any mid-cycle flicker (one spreader
+// cycle can't complete in <40s) while still counting every real move (cycles are
+// ~60–120s apart). Rising-edge + gap is robust to a noisy load signal.
+const PLC_LADEN_T: f64 = 2.0;
+const PLC_EMPTY_T: f64 = 0.5;
+const MIN_MOVE_GAP_MS: i64 = 40_000;
+const MOVE_WINDOW_MS: i64 = 3_600_000; // 1 hour → move count == move/hr
 
 /// Learned position of a yard block/bay code, accumulated from the GPS of TTs observed
 /// ARRIVED there. Lets us estimate "how far is an empty TT from its assigned pickup" with
@@ -228,6 +248,11 @@ struct PlcOut {
     #[serde(skip_serializing_if = "Option::is_none")]
     tpos: Option<f64>,
     age_s: i64,
+    /// completed moves in the last hour (= live move/hr) counted from the PLC
+    mph: u32,
+    /// seconds since this crane's last completed move (None if never seen)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_move_age_s: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -239,6 +264,11 @@ pub struct PositionsOut {
     messages: u64,
     /// TT dispatch-state counts (idle/empty_travel/delivering/soon_idle/wait_rtg)
     dispatch_counts: HashMap<&'static str, usize>,
+    /// websocket-derived live K_MPH cross-check: total crane moves in the last hour,
+    /// the number of cranes that worked in that window, and their average move/hr.
+    crane_moves_60m: u32,
+    cranes_working: usize,
+    crane_mph_live: Option<f64>,
     devices: Vec<DeviceOut>,
 }
 
@@ -356,6 +386,13 @@ fn classify_tt(
 /// `GET /api/livemap/positions` — active device fixes (age ≤ 120s).
 pub async fn positions(State(lm): State<Arc<LiveMap>>) -> Json<PositionsOut> {
     let now = Utc::now().timestamp_millis();
+    // observation window for the live move/hr rate: capped at 1h, but right after a
+    // restart we've collected less, so divide the move count by the actual elapsed
+    // hours (min 1 min) instead of a full hour — otherwise the rate reads far too low
+    // until the 1h ring fills.
+    let started = lm.started_ms.load(Ordering::Relaxed) as i64;
+    let obs_h = (((now - started) as f64) / 3_600_000.0).clamp(0.1, 1.0);
+    let rate = |moves: usize| ((moves as f64 / obs_h).round()) as u32;
     let map = lm.devices.read().await;
     let plc = lm.plc.read().await;
     let centroids = lm.centroids.read().await;
@@ -395,6 +432,8 @@ pub async fn positions(State(lm): State<Arc<LiveMap>>) -> Json<PositionsOut> {
                     hpos: c.hpos,
                     tpos: c.tpos,
                     age_s: pa.max(0),
+                    mph: rate(c.moves.iter().filter(|&&tm| now - tm <= MOVE_WINDOW_MS).count()),
+                    last_move_age_s: (c.last_move_ms != 0).then(|| (now - c.last_move_ms) / 1000),
                 })
             });
             Some(DeviceOut {
@@ -435,6 +474,20 @@ pub async fn positions(State(lm): State<Arc<LiveMap>>) -> Json<PositionsOut> {
             *dispatch_counts.entry(s).or_default() += 1;
         }
     }
+    // fleet live K_MPH cross-check: count moves/hr per crane, average over the cranes
+    // that actually worked in the window (a crane idle all hour shouldn't drag the mean).
+    let mut crane_moves_60m = 0u32;
+    let mut cranes_working = 0usize;
+    for c in plc.values() {
+        let m = c.moves.iter().filter(|&&tm| now - tm <= MOVE_WINDOW_MS).count() as u32;
+        if m > 0 {
+            crane_moves_60m += m;
+            cranes_working += 1;
+        }
+    }
+    let crane_mph_live = (cranes_working > 0)
+        .then(|| (crane_moves_60m as f64 / cranes_working as f64 / obs_h * 10.0).round() / 10.0);
+
     let last_ms = lm.last_msg_ms.load(Ordering::Relaxed);
     let as_of = (last_ms != 0).then(|| DateTime::from_timestamp_millis(last_ms as i64)).flatten();
     Json(PositionsOut {
@@ -444,6 +497,9 @@ pub async fn positions(State(lm): State<Arc<LiveMap>>) -> Json<PositionsOut> {
         count: devices.len(),
         messages: lm.messages.load(Ordering::Relaxed),
         dispatch_counts,
+        crane_moves_60m,
+        cranes_working,
+        crane_mph_live,
         devices,
     })
 }
@@ -738,15 +794,36 @@ async fn ingest_ctab(lm: &Arc<LiveMap>, text: &str) {
     let Some(crane) = g.get("crane").and_then(|x| x.as_str()).filter(|s| !s.is_empty()) else {
         return;
     };
-    let plc = Plc {
-        load_t: g.get("load").and_then(num),
-        lock: g.get("lock").and_then(parse_bool),
-        land: g.get("land").and_then(parse_bool),
-        hpos: g.get("hpos").and_then(num),
-        tpos: g.get("tpos").and_then(num),
-        last_seen_ms: Utc::now().timestamp_millis(),
+    let now = Utc::now().timestamp_millis();
+    let load = g.get("load").and_then(num);
+    // hysteresis: laden ≥1.0t, empty <0.5t; otherwise keep prior state
+    let mut map = lm.plc.write().await;
+    let e = map.entry(crane.to_string()).or_default();
+    let now_laden = match load {
+        Some(t) if t >= PLC_LADEN_T => true,
+        Some(t) if t < PLC_EMPTY_T => false,
+        _ => e.laden,
     };
-    lm.plc.write().await.insert(crane.to_string(), plc);
+    if !e.laden && now_laden {
+        // empty→laden = a pickup. Count it as a move unless it's a flicker within one
+        // cycle of the last counted move.
+        let since_last = if e.last_move_ms == 0 { i64::MAX } else { now - e.last_move_ms };
+        if since_last >= MIN_MOVE_GAP_MS {
+            e.moves.push_back(now);
+            e.last_move_ms = now;
+            while e.moves.front().is_some_and(|&f| now - f > MOVE_WINDOW_MS) {
+                e.moves.pop_front();
+            }
+        }
+    }
+    e.laden = now_laden;
+    e.load_t = load;
+    e.lock = g.get("lock").and_then(parse_bool);
+    e.land = g.get("land").and_then(parse_bool);
+    e.hpos = g.get("hpos").and_then(num);
+    e.tpos = g.get("tpos").and_then(num);
+    e.last_seen_ms = now;
+    drop(map);
     lm.plc_messages.fetch_add(1, Ordering::Relaxed);
 }
 
