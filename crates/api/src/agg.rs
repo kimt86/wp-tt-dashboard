@@ -79,11 +79,12 @@ pub async fn aggregate(pool: &PgPool, from: NaiveDate, to: NaiveDate) -> Result<
         let (vw, w, nt) = t("K_EMPTY_R");
         m.insert("K_EMPTY_R", finish(num + vw / 100.0, den + w, nr + nt, 4, 100.0));
     }
-    // K_CYCLE (s): weighted mean, weight = jobs.
+    // K_CYCLE (s): real TT cycle (raw_k_tt_cycle), weighted median, weight = samples.
+    // (The container handling span lives in raw_k_cycle, kept internally, not displayed.)
     {
         let (num, den, nr) = raw_nd(pool,
-            "SELECT sum(avg_sec*jobs)::float8, sum(jobs)::float8, sum(jobs)::int8
-               FROM raw_k_cycle WHERE snapshot_date BETWEEN $1 AND $2", from, raw_to).await?;
+            "SELECT sum(med_sec*samples)::float8, sum(samples)::float8, sum(samples)::int8
+               FROM raw_k_tt_cycle WHERE snapshot_date BETWEEN $1 AND $2", from, raw_to).await?;
         let (vw, w, nt) = t("K_CYCLE");
         m.insert("K_CYCLE", finish(num + vw, den + w, nr + nt, 1, 1.0));
     }

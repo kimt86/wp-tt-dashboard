@@ -107,8 +107,8 @@ function SmallCard({ c, trend, lang, extras }: { c: KpiCard; trend?: TrendRespon
     <div className={`kpi${c.tier === "PRIMARY" ? " primary" : ""}`}>
       <div className="label">{name(c, lang)}<SourceBadge src="tos" ko={lang === "ko"} /></div>
       <div className="vrow">
-        <span className="val">{fmtValue(c.value, c.unit)}</span>
-        <span className="unit">{c.unit}</span>
+        <span className="val">{mainValue(c.key, c.value, c.unit).val}</span>
+        <span className="unit">{mainValue(c.key, c.value, c.unit).unit}</span>
       </div>
       <KpiExtras extras={extras} />
       {dl ? (
@@ -177,39 +177,33 @@ function useWsLive(): WsLive | null {
 }
 
 // What data source(s) a KPI card shows, and which leads.
-//  • "wsMain"  — the websocket value IS the headline (K_CYCLE: the TOS value is a ~40m
-//                handling span, hidden per request; the real truck cycle comes from GPS).
-//  • "dual"    — TOS leads, websocket shown as an auxiliary "live" line. The lower-variation
-//                value is the headline; TOS shift/daily aggregates are far smoother than the
-//                per-second feed, so TOS leads on K_UTIL/K_MPH/K_QC_Q.
-//  • "tos"     — TOS only (no websocket counterpart).
+//  • "dual"    — TOS leads (headline = c.value), websocket shown as an auxiliary "live"
+//                line. The lower-variation value is the headline; TOS shift/daily aggregates
+//                are smoother than the per-second feed, so TOS leads on
+//                K_UTIL/K_MPH/K_QC_Q/K_CYCLE (the TOS truck-cycle approximation).
+//  • "tos"     — TOS only (no websocket counterpart, or the ws feed is down).
 type CardSrc =
   | { kind: "tos" }
-  | { kind: "wsMain"; label: string; val: string; sub?: string; title: string }
   | { kind: "dual"; auxVal: string; auxTitle: string };
 
 function cardSrc(key: string, w: WsLive | null, ko: boolean): CardSrc {
   if (key === "K_CYCLE") {
-    // GPS-movement-validated median truck delivery interval (the real cycle), replacing the
-    // mislabeled TOS handling span. Always bound to n + IQR + window-fill, never a lone scalar.
+    // Truck cycle. Headline = TOS approximation (raw_k_tt_cycle: per-truck consecutive
+    // QC-move interval, ~14m), lower-variation and always available. Live GPS cycle (~13m,
+    // the same quantity, movement-validated) rides along as the ⚡ aux. Both agree; "—"
+    // when the TOS value has no data. The ~40m container handling span is kept internal.
     const cyc = w?.tt_cycle_median_s ?? null;
-    const have = cyc != null;
-    const need = w?.tt_cycle_min_samples ?? 20;
-    const n = w?.tt_cycle_samples ?? 0;
-    const fill = w?.window_fill_min ?? 60;
-    const spread = have && w?.tt_cycle_p25_s != null && w?.tt_cycle_p75_s != null
-      ? `${fmtCycle(w.tt_cycle_p25_s)}–${fmtCycle(w.tt_cycle_p75_s)}` : "";
-    return {
-      kind: "wsMain",
-      label: ko ? "TT 사이클 타임" : "TT Cycle Time",
-      // no data yet (ws down or < n samples) → "—" per request, not a misleading number
-      val: have ? fmtCycle(cyc) : "—",
-      sub: have ? `n=${n}${spread ? ` · ${spread}` : ""}${fill < 60 ? ` · ${ko ? `윈도우 ${fill}/60분` : `win ${fill}/60m`}` : ""}`
-                : (n > 0 ? (ko ? `수집중 ${n}/${need}` : `collecting ${n}/${need}`) : ""),
-      title: ko
-        ? `트럭 연속 배달 간격의 중앙값 — websocket GPS로 산출(이동 ≥150m 검증, n≥${need}부터). 데이터 없으면 —. 유휴 포함이라 활성 사이클의 상한. TOS '작업 처리 시간'(생애 span ~40분)은 내부 보관·미표출.`
-        : `median truck delivery-to-delivery interval from the websocket GPS feed (movement-validated ≥150m, shown from n≥${need}); "—" when no data. Upper bound incl. idle; the TOS ~40m handling span is kept internally, not shown`,
-    };
+    if (w?.connected && cyc != null) {
+      const n = w.tt_cycle_samples ?? 0;
+      return {
+        kind: "dual",
+        auxVal: fmtCycle(cyc),
+        auxTitle: ko
+          ? `실시간 GPS 트럭 사이클 — container1 변경을 이동 ≥150m로 검증(n=${n}). TOS(MCH_OPERATION) 근사 ~14분과 일치하는 독립 측정.`
+          : `live GPS truck cycle — container1 changes movement-validated ≥150m (n=${n}); an independent measure agreeing with the TOS (MCH_OPERATION) ~14m approximation.`,
+      };
+    }
+    return { kind: "tos" };
   }
   if (!w || !w.connected) return { kind: "tos" };
   if (key === "K_UTIL" && w.tt_util_live != null) {
@@ -249,21 +243,17 @@ function WsAux({ val, title, ko }: { val: string; title: string; ko: boolean }) 
   );
 }
 
+// the cycle KPI is stored in seconds but reads as a duration; everything else uses fmtValue.
+function mainValue(key: string, value: number | null, unit: string): { val: string; unit: string } {
+  if (key === "K_CYCLE") return { val: value != null ? fmtCycle(value) : "—", unit: "" };
+  return { val: fmtValue(value, unit), unit };
+}
+
 function LiveCard({ c, lang, ws, extras }: { c: LiveKpi; lang: Lang; ws: WsLive | null; extras?: KExtra[] }) {
   const s = t(lang);
   const ko = lang === "ko";
   const src = cardSrc(c.key, ws, ko);
-  // K_CYCLE: the websocket truck cycle is the whole card (TOS handling span hidden).
-  if (src.kind === "wsMain") {
-    return (
-      <div className={`kpi${c.tier === "PRIMARY" ? " primary" : ""}`} title={src.title}>
-        <div className="label">{src.label}<SourceBadge src="ws" ko={ko} /></div>
-        <div className="vrow"><span className="val">{src.val}</span></div>
-        {src.sub && <div className="ws-sub mono">{src.sub}</div>}
-        <div className="n" style={{ marginTop: "auto" }}>{ko ? "websocket GPS" : "from websocket GPS"}</div>
-      </div>
-    );
-  }
+  const mv = mainValue(c.key, c.value, c.unit);
   const nm = ko ? c.name_ko : c.name_en;
   const imp = c.delta_abs == null || !c.direction ? null : (c.direction === "LOWER_BETTER" ? c.delta_abs < 0 : c.delta_abs > 0);
   const deltaTxt = c.delta_abs == null ? null : (() => {
@@ -275,7 +265,7 @@ function LiveCard({ c, lang, ws, extras }: { c: LiveKpi; lang: Lang; ws: WsLive 
   return (
     <div className={`kpi${c.tier === "PRIMARY" ? " primary" : ""}`}>
       <div className="label">{nm}<SourceBadge src={src.kind === "dual" ? "dual" : "tos"} ko={ko} /></div>
-      <div className="vrow"><span className="val">{fmtValue(c.value, c.unit)}</span><span className="unit">{c.unit}</span></div>
+      <div className="vrow"><span className="val">{mv.val}</span><span className="unit">{mv.unit}</span></div>
       <KpiExtras extras={extras} />
       {src.kind === "dual" && <WsAux val={src.auxVal} title={src.auxTitle} ko={ko} />}
       {deltaTxt
@@ -318,22 +308,13 @@ function TodayCard({ c, lang, ws, extras }: { c: KpiCard; lang: Lang; ws: WsLive
   const s = t(lang);
   const ko = lang === "ko";
   const src = cardSrc(c.key, ws, ko);
-  if (src.kind === "wsMain") {
-    return (
-      <div className={`kpi${c.tier === "PRIMARY" ? " primary" : ""}`} title={src.title}>
-        <div className="label">{src.label}<SourceBadge src="ws" ko={ko} /></div>
-        <div className="vrow"><span className="val">{src.val}</span></div>
-        {src.sub && <div className="ws-sub mono">{src.sub}</div>}
-        <div className="n" style={{ marginTop: "auto" }}>{ko ? "websocket GPS" : "from websocket GPS"}</div>
-      </div>
-    );
-  }
+  const mv = mainValue(c.key, c.value, c.unit);
   const imp = isImprovement(c);
   const dl = deltaLabel(c);
   return (
     <div className={`kpi${c.tier === "PRIMARY" ? " primary" : ""}`}>
       <div className="label">{name(c, lang)}<SourceBadge src={src.kind === "dual" ? "dual" : "tos"} ko={ko} /></div>
-      <div className="vrow"><span className="val">{fmtValue(c.value, c.unit)}</span><span className="unit">{c.unit}</span></div>
+      <div className="vrow"><span className="val">{mv.val}</span><span className="unit">{mv.unit}</span></div>
       <KpiExtras extras={extras} />
       {src.kind === "dual" && <WsAux val={src.auxVal} title={src.auxTitle} ko={ko} />}
       {dl

@@ -109,9 +109,9 @@ async fn main() -> Result<()> {
             }
             let today = Local::now().date_naive();
             let kpis: &[&str] = match tier.as_str() {
-                "t1" => &["k_mph_realtime", "k_qc_q"],
+                "t1" => &["k_mph_realtime", "k_qc_q", "k_tt_cycle"],
                 "t2" => &["k_empty", "k_cycle", "k_crane_q", "k_crane_q_hour"],
-                "all" => &["k_mph_realtime", "k_qc_q", "k_empty", "k_cycle", "k_crane_q", "k_crane_q_hour"],
+                "all" => &["k_mph_realtime", "k_qc_q", "k_tt_cycle", "k_empty", "k_cycle", "k_crane_q", "k_crane_q_hour"],
                 other => anyhow::bail!("unknown --tier '{other}' (t1|t2|all)"),
             };
             let pool = db::pool().await?;
@@ -187,6 +187,7 @@ async fn run_kpi(pool: &sqlx::PgPool, kpi: &str, date: NaiveDate, target: &str) 
         "k_util_crane" => step!("k_util_crane", kpis::k_util_crane::extract(pool, date, target)),
         "k_mph_realtime" => step!("k_mph_realtime", kpis::k_mph_realtime::extract(pool, date, target)),
         "k_qc_q" => step!("k_qc_q", kpis::k_qc_q::extract(pool, date, target)),
+        "k_tt_cycle" => step!("k_tt_cycle", kpis::k_tt_cycle::extract(pool, date, target)),
         "k_mph_voyage" => step!("k_mph_voyage", kpis::k_mph_voyage::extract(pool, date, target)),
         "k_empty" => step!("k_empty", kpis::k_empty::extract(pool, date, target)),
         "k_cycle" => step!("k_cycle", kpis::k_cycle::extract(pool, date, target)),
@@ -198,6 +199,7 @@ async fn run_kpi(pool: &sqlx::PgPool, kpi: &str, date: NaiveDate, target: &str) 
             step!("k_util_crane", kpis::k_util_crane::extract(pool, date, target));
             step!("k_mph_realtime", kpis::k_mph_realtime::extract(pool, date, target));
             step!("k_qc_q", kpis::k_qc_q::extract(pool, date, target));
+            step!("k_tt_cycle", kpis::k_tt_cycle::extract(pool, date, target));
             step!("k_mph_voyage", kpis::k_mph_voyage::extract(pool, date, target));
             // heavier JOB_ORDER_HISTORY range scans
             step!("k_empty", kpis::k_empty::extract(pool, date, target));

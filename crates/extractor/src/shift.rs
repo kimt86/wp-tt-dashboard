@@ -18,7 +18,7 @@ const SQL_UTIL: &str = include_str!("../sql/e3a_k_util_tt_merged.sql");
 const SQL_MPH: &str = include_str!("../sql/c07_k_mph_realtime.sql");
 const SQL_QCQ: &str = include_str!("../sql/f2_k_qc_q.sql");
 const SQL_EMPTY: &str = include_str!("../sql/e4_k_empty_decomposition.sql");
-const SQL_CYCLE: &str = include_str!("../sql/e3b_k_cycle_refined_v2.sql");
+const SQL_TT_CYCLE: &str = include_str!("../sql/c10_k_tt_cycle.sql");
 const SQL_CRANEQ: &str = include_str!("../sql/c08_k_crane_q.sql");
 
 fn sum<T: Copy + Into<f64>>(it: impl Iterator<Item = Option<T>>) -> f64 {
@@ -51,6 +51,8 @@ pub async fn tick_shift(pool: &PgPool, target: &str, tier: &str) -> Result<()> {
         // one MCH_OPERATION fetch produces both K_MPH and the vessel panel (zero extra query)
         step!("mph+vessels", src_mph_vessels(pool, target, date, sh, start, end));
         step!("qc_q", src_qcq(pool, target, date, sh, start, end));
+        // TT cycle is now also an MCH_OPERATION query (cheap) → refresh it on the fast tier
+        step!("cycle", src_cycle(pool, target, date, sh, start, end));
         step!("voyage_plan", crate::vessel::extract_voyage_plan(pool, target, date));
     }
     if want_util {
@@ -58,7 +60,6 @@ pub async fn tick_shift(pool: &PgPool, target: &str, tier: &str) -> Result<()> {
     }
     if want_heavy {
         step!("empty", src_empty(pool, target, date, sh, start, end));
-        step!("cycle", src_cycle(pool, target, date, sh, start, end));
         step!("crane_q", src_craneq(pool, target, date, sh, start, end));
     }
 
@@ -209,14 +210,16 @@ async fn src_empty(pool: &PgPool, target: &str, date: NaiveDate, sh: Shift, star
 }
 
 async fn src_cycle(pool: &PgPool, target: &str, date: NaiveDate, sh: Shift, start: NaiveDateTime, end: NaiveDateTime) -> Result<()> {
+    // Displayed K_CYCLE is the REAL TT cycle (MCH_OPERATION per-truck QC-move interval),
+    // not the container handling span. One aggregate row; value = median, weight = samples.
     run_logged(pool, "K_CYCLE_SHIFT", date, |_| async move {
-        let sql = params::render_shift(SQL_CYCLE, date, start, end, Some(TimeCol::JobHist))?;
-        let rows: Vec<crate::kpis::k_cycle::Row> = fetch(target, &sql).await?;
-        let num = sum(rows.iter().map(|r| match (r.avg_sec, r.jobs) { (Some(a), Some(j)) => Some(a*j), _ => None }));
-        let jobs = sum(rows.iter().map(|r| r.jobs));
-        let value = if jobs > 0.0 { Some((num/jobs*10.0).round()/10.0) } else { None };
-        // weight = jobs (= sample_n)
-        upsert_shift(pool, date, sh, "K_CYCLE", "s", value, Some(jobs as i64), Some(jobs), start, end).await?;
+        let sql = params::render_shift(SQL_TT_CYCLE, date, start, end, Some(TimeCol::MchOper))?;
+        let rows: Vec<crate::kpis::k_tt_cycle::Row> = fetch(target, &sql).await?;
+        let r = rows.first();
+        let samples = r.and_then(|x| x.samples).unwrap_or(0.0);
+        let value = r.and_then(|x| x.med_sec).filter(|_| samples > 0.0);
+        // weight = samples (= sample_n)
+        upsert_shift(pool, date, sh, "K_CYCLE", "s", value, Some(samples as i64), Some(samples), start, end).await?;
         Ok(rows.len() as u64)
     }).await.map(|_| ())
 }

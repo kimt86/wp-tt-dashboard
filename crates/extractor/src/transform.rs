@@ -47,11 +47,12 @@ async fn kpi_daily(pool: &PgPool, date: NaiveDate, provisional: bool) -> Result<
         provisional,
     ).await?;
 
-    // K_CYCLE — jobs-weighted mean cycle seconds.
+    // K_CYCLE — real TT cycle (per-truck QC-move interval, MCH_OPERATION), samples-weighted
+    // median seconds. The container handling span stays in raw_k_cycle (internal, not shown).
     upsert_daily(
-        pool, date, "K_CYCLE", "s", "jobs-weighted mean(avg_sec)",
-        "SELECT round(sum(avg_sec*jobs)/nullif(sum(jobs),0), 1), sum(jobs)::int
-           FROM raw_k_cycle WHERE snapshot_date = $1 HAVING sum(jobs) > 0",
+        pool, date, "K_CYCLE", "s", "samples-weighted median(med_sec) from raw_k_tt_cycle",
+        "SELECT round(sum(med_sec*samples)/nullif(sum(samples),0), 1), sum(samples)::int
+           FROM raw_k_tt_cycle WHERE snapshot_date = $1 HAVING sum(samples) > 0",
         provisional,
     ).await?;
 
