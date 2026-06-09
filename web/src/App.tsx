@@ -67,7 +67,39 @@ function HealthPill({ health, lang }: { health: HealthResponse | null; lang: Lan
 
 function name(c: KpiCard, lang: Lang) { return lang === "ko" ? c.name_ko : c.name_en; }
 
-function SmallCard({ c, trend, lang }: { c: KpiCard; trend?: TrendResponse; lang: Lang }) {
+// Extra sub-values shown inside the distance/ratio cards (no new cards, no backend
+// change). Loaded + total travel and loaded-ratio are exact functions of the two
+// existing KPIs — empty distance E (km/Job) and empty ratio R (%):
+//   total = E·100/R · loaded = total − E · loaded-ratio = 100 − R
+type KExtra = { label: string; value: string };
+function distanceExtras(items: { key: string; value: number | null }[], key: string, lang: Lang): KExtra[] | undefined {
+  if (key !== "K_EMPTY" && key !== "K_EMPTY_R") return undefined;
+  const E = items.find((x) => x.key === "K_EMPTY")?.value ?? null;     // empty km/Job
+  const R = items.find((x) => x.key === "K_EMPTY_R")?.value ?? null;   // empty ratio %
+  if (E == null || R == null || R <= 0) return undefined;
+  const ko = lang === "ko";
+  if (key === "K_EMPTY") {
+    const total = (E * 100) / R;
+    const loaded = total - E;
+    return [
+      { label: ko ? "적재 거리" : "Loaded", value: `${loaded.toFixed(2)} km/Job` },
+      { label: ko ? "전체 거리" : "Total", value: `${total.toFixed(2)} km/Job` },
+    ];
+  }
+  return [{ label: ko ? "적재 비율" : "Loaded", value: `${(100 - R).toFixed(1)} %` }];
+}
+function KpiExtras({ extras }: { extras?: KExtra[] }) {
+  if (!extras || extras.length === 0) return null;
+  return (
+    <div className="kpi-extras">
+      {extras.map((e) => (
+        <div className="kpi-extra" key={e.label}><span className="kx-l">{e.label}</span><span className="kx-v mono">{e.value}</span></div>
+      ))}
+    </div>
+  );
+}
+
+function SmallCard({ c, trend, lang, extras }: { c: KpiCard; trend?: TrendResponse; lang: Lang; extras?: KExtra[] }) {
   const s = t(lang);
   const imp = isImprovement(c);
   const dl = deltaLabel(c);
@@ -78,6 +110,7 @@ function SmallCard({ c, trend, lang }: { c: KpiCard; trend?: TrendResponse; lang
         <span className="val">{fmtValue(c.value, c.unit)}</span>
         <span className="unit">{c.unit}</span>
       </div>
+      <KpiExtras extras={extras} />
       {dl ? (
         <div className={`delta ${imp ? "good" : "bad"}`}>{dl}<span className="vs">{s.vsBaseline}</span></div>
       ) : (
@@ -113,7 +146,7 @@ function useLive() {
   return { live, vessels, today };
 }
 
-function LiveCard({ c, lang }: { c: LiveKpi; lang: Lang }) {
+function LiveCard({ c, lang, extras }: { c: LiveKpi; lang: Lang; extras?: KExtra[] }) {
   const s = t(lang);
   const nm = lang === "ko" ? c.name_ko : c.name_en;
   const imp = c.delta_abs == null || !c.direction ? null : (c.direction === "LOWER_BETTER" ? c.delta_abs < 0 : c.delta_abs > 0);
@@ -127,6 +160,7 @@ function LiveCard({ c, lang }: { c: LiveKpi; lang: Lang }) {
     <div className={`kpi${c.tier === "PRIMARY" ? " primary" : ""}`}>
       <div className="label">{nm}</div>
       <div className="vrow"><span className="val">{fmtValue(c.value, c.unit)}</span><span className="unit">{c.unit}</span></div>
+      <KpiExtras extras={extras} />
       {deltaTxt
         ? <div className={`delta ${imp ? "good" : "bad"}`}>{deltaTxt}<span className="vs">{s.vsPrevShift}</span></div>
         : <div className="delta" style={{ color: "var(--text-mute)" }}>{s.noPrevShift}</div>}
@@ -163,7 +197,7 @@ function VesselPanel({ vessels, lang, onSelect }: { vessels: VesselRow[]; lang: 
 }
 
 // Today-cumulative KPI card (full-day-so-far, vs previous period). Mirrors LiveCard.
-function TodayCard({ c, lang }: { c: KpiCard; lang: Lang }) {
+function TodayCard({ c, lang, extras }: { c: KpiCard; lang: Lang; extras?: KExtra[] }) {
   const s = t(lang);
   const imp = isImprovement(c);
   const dl = deltaLabel(c);
@@ -171,6 +205,7 @@ function TodayCard({ c, lang }: { c: KpiCard; lang: Lang }) {
     <div className={`kpi${c.tier === "PRIMARY" ? " primary" : ""}`}>
       <div className="label">{name(c, lang)}</div>
       <div className="vrow"><span className="val">{fmtValue(c.value, c.unit)}</span><span className="unit">{c.unit}</span></div>
+      <KpiExtras extras={extras} />
       {dl
         ? <div className={`delta ${imp ? "good" : "bad"}`}>{dl}<span className="vs">{s.vsBaseline}</span></div>
         : <div className="delta" style={{ color: "var(--text-mute)" }}>{s.baselinePending}</div>}
@@ -245,13 +280,13 @@ function LiveTab({ lang }: { lang: Lang }) {
       {/* 현재 쉬프트 KPI 7개 */}
       <div className="section-title">{s.shiftKpis}<span className="section-sub">{s.vsPrevShift}</span></div>
       <div className="grid kpi-strip">
-        {live.kpis.map((c) => <LiveCard key={c.key} c={c} lang={lang} />)}
+        {live.kpis.map((c) => <LiveCard key={c.key} c={c} lang={lang} extras={distanceExtras(live.kpis, c.key, lang)} />)}
       </div>
 
       {/* 오늘 누적 KPI 7개 */}
       <div className="section-title" style={{ marginTop: 18 }}>{s.todayKpis}<span className="section-sub">{s.vsBaseline}</span></div>
       <div className="grid kpi-strip">
-        {(today?.kpis ?? []).map((c) => <TodayCard key={c.key} c={c} lang={lang} />)}
+        {(today?.kpis ?? []).map((c) => <TodayCard key={c.key} c={c} lang={lang} extras={distanceExtras(today?.kpis ?? [], c.key, lang)} />)}
       </div>
 
       {/* 현재 작업 중인 선박 (카드 클릭 → QC별 처리량 팝업) */}
@@ -319,7 +354,7 @@ function HistoryTab({ lang }: { lang: Lang }) {
           <>
             <div className="section-title">{s.headline}</div>
             <div className="grid kpi-strip">
-              {kpis.map((c) => <SmallCard key={c.key} c={c} trend={data.trends[c.key]} lang={lang} />)}
+              {kpis.map((c) => <SmallCard key={c.key} c={c} trend={data.trends[c.key]} lang={lang} extras={distanceExtras(kpis, c.key, lang)} />)}
             </div>
 
             <div className="section-title" style={{ marginTop: 18 }}>{s.qcBreakdown}<span className="section-sub">{data.breakdown?.as_of}</span></div>
