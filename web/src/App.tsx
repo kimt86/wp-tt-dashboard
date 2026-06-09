@@ -206,16 +206,18 @@ function cardSrc(key: string, w: WsLive | null, ko: boolean): CardSrc {
     return { kind: "tos" };
   }
   if (!w || !w.connected) return { kind: "tos" };
-  if (key === "K_UTIL" && w.tt_util_live != null) {
-    // ws util now measures the SAME thing as TOS (manned/in-service fraction) → comparable.
-    // The engaged-now figure is appended as the websocket-only slack signal.
-    const eng = w.tt_engaged_live;
+  if (key === "K_UTIL" && w.tt_engaged_live != null) {
+    // TRUE utilization excludes idle: of manned trucks, the fraction actually working
+    // (moving/carrying). TOS K_UTIL only subtracts formal stops, counting manned-idle time
+    // as utilized, so it overstates (~95%). The websocket sees movement → can exclude idle.
+    const real = w.tt_engaged_live;   // idle excluded
+    const manned = w.tt_util_live;    // manning (= TOS concept, idle included)
     return {
       kind: "dual",
-      auxVal: eng != null ? `${w.tt_util_live}% · ${ko ? "작업" : "act"} ${eng}%` : `${w.tt_util_live}%`,
+      auxVal: ko ? `실가동 ${real}%` : `util ${real}%`,
       auxTitle: ko
-        ? `실시간 가동(맨드)률 ${w.tt_util_live}% — TOS 세션 가동률과 같은 개념(엔진 ON=운전자 탑승). 그중 실제 작업(이동·적재) 중은 ${eng ?? "—"}%, 나머지는 대기/유휴(과잉공급 여유).`
-        : `live manned/in-service fraction ${w.tt_util_live}% — same concept as TOS session utilization (engine on = operator aboard). Of those, ${eng ?? "—"}% are actually engaged (moving/carrying); the rest are idle-waiting (over-supply slack).`,
+        ? `진짜 가동률(유휴 제외) ${real}% — 맨드 트럭 중 실제 작업(이동·적재) 비율. TOS K_UTIL(${manned ?? "~95"}% 부근)은 로그인−정지만 빼고 "유휴 대기"는 가동으로 세므로 과대평가. 유휴를 빼면 ${real}%가 진짜 가동률.`
+        : `true utilization (idle excluded) ${real}% — of manned trucks, the fraction actually working. TOS K_UTIL (~${manned ?? 95}%) only subtracts formal stops and counts idle-waiting as utilized, so it overstates. Subtracting idle gives ${real}%.`,
     };
   }
   if (key === "K_MPH" && w.crane_mph_live != null)
