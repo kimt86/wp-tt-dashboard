@@ -130,10 +130,10 @@
         <div class="dt">
           <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg></span>
           <div><h3>websocket로 KPI 정확도 향상</h3>
-            <div class="desc">TOS의 실시간 약점(정시버킷·당기는 주기·HAVING 과소)을 websocket으로 보완. 향상 가능 KPI 선별 + 첫 구현(크레인 PLC 사이클로 실시간 K_MPH, TOS 교차검증).</div>
+            <div class="desc">"실제로 어떻게 정확해지는가" 중심. TT 사이클 재검토(TOS는 40분짜리 처리 span을 잼 → GPS 이동거리로 검증한 실제 트럭 사이클) + K_MPH·K_QC_Q·K_UTIL 실시간 보정. 외부 평가 4회 반영(시간 하한 막다른 길 → GPS 이동 검증으로 정정).</div>
           </div>
         </div>
-        <div class="tags"><span class="tag">정확도</span><span class="tag">실시간 K_MPH</span><span class="tag">PLC 사이클</span><span class="tag">교차검증</span></div>
+        <div class="tags"><span class="tag">정확도</span><span class="tag">TT 사이클</span><span class="tag">실시간</span><span class="tag">외부평가</span></div>
         <div class="foot">2026-06-09 · 기능·아키텍처</div>
       </a>
     </div>

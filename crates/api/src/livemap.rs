@@ -54,7 +54,47 @@ struct Pos {
     nett: Option<String>,
     dtime: Option<String>,
     distance: Option<f64>,
+    // TT cycle tracking (carried across fixes). A delivery completes when `container1`
+    // changes away from a non-empty value — i.e. nonempty→empty OR nonempty→other (a
+    // truck often goes container A→container B with no empty gap, so a loaded→EMPTY-only
+    // edge misses ~3/4 of deliveries; observed ~574/hr vs ~90/hr for the empty-only edge).
+    // The interval between a truck's consecutive deliveries, capped, is one cycle. The
+    // values are exposed via /api/livemap/positions (see the KC websocket-kpi-accuracy doc).
+    carry_since_ms: i64, // when the current non-empty container1 began (0 if empty)
+    last_drop_ms: i64,   // last counted delivery
+    carry_trip_m: f64,   // path length the truck has driven since the current carry began
 }
+
+// TT cycle bounds. A loose physical sanity band only — the *real* artifact filter is GPS
+// movement (MIN_CARRY_TRIP_M below), not duration. We keep [2,20]m so a single absurd
+// interval (clock skew, a >20m idle gap that isn't one cycle) can't poison the median, but
+// we do NOT use the lower bound to manufacture a "realistic" number — see the movement
+// filter, which is what actually separates a real delivery from a TOS re-assignment.
+const MIN_CYCLE_S: i64 = 120;
+const MAX_CYCLE_S: i64 = 1200;
+// a delivery only counts if the container was actually carried ≥30s (filters a flicker).
+const MIN_LOADED_MS: i64 = 30_000;
+// the principled artifact filter (per external eval): a *real* laden delivery means the
+// truck physically drove the container from pickup to handover. If `container1` changes but
+// the truck accumulated < this much path length while carrying it, the truck never moved —
+// it is TOS pre-assigning / rewriting the container field while the truck sits, NOT a
+// delivery. Validating on movement (not on a duration threshold) avoids circularly using a
+// "cycles should be long" prior to inflate the median. ~150m clears GPS jitter and is below
+// even the shortest real quay↔block haul.
+const MIN_CARRY_TRIP_M: f64 = 150.0;
+// a reject whose carried path falls in this near-miss band [100,150)m is tracked separately:
+// it is exposed so a reviewer can see how many genuine ultra-short hauls the 150m cut might
+// be discarding (the one direction this filter can bias the median upward).
+const NEAR_TRIP_M: f64 = 100.0;
+// guard: ignore a single inter-fix jump larger than this when accumulating path length
+// (GPS teleport / accuracy spike), so jitter can't fake "movement".
+const MAX_FIX_STEP_M: f64 = 600.0;
+// the median needs a non-trivial sample before it is shown — a 5-sample median is noise.
+// Below this the UI shows "collecting n/N" instead of a number (per external eval #4).
+const MIN_CYCLE_SAMPLES: usize = 20;
+// a working quay crane idle longer than this with no TT present ≈ likely waiting for a
+// truck. Set past a normal inter-move gap (~90–120s) so routine gaps don't trip it.
+const QCQ_IDLE_S: i64 = 120;
 
 /// Crane PLC state from the `ctab` zone (`plc_data`). Dynamic equipment only
 /// (C/M/Z prefixes). Keyed by crane id, which matches the GPS device id.
@@ -157,6 +197,17 @@ pub struct LiveMap {
     last_error: RwLock<Option<String>>,
     plc_connected: AtomicBool,
     plc_messages: AtomicU64,
+    // TT cycle: fleet drop timestamps (for throughput λ) + accepted cycle-interval
+    // samples (drop_ms, interval_s) for the median. Both pruned to the 1h window.
+    tt_drops: Mutex<VecDeque<i64>>,
+    tt_cycles: Mutex<VecDeque<(i64, i64)>>,
+    // container1 changes rejected by the movement filter (truck didn't move while carrying)
+    // — i.e. suspected TOS re-assignment artifacts. Kept for auditability: the artifact:real
+    // ratio is exposed so the filter's effect is visible rather than hidden.
+    tt_artifacts: Mutex<VecDeque<i64>>,
+    // subset of the above whose carried path was in the near-miss band [100,150)m — possibly
+    // genuine ultra-short hauls the cut discards. Exposed so the upward-bias is measurable.
+    tt_artifacts_near: Mutex<VecDeque<i64>>,
 }
 
 impl LiveMap {
@@ -166,6 +217,10 @@ impl LiveMap {
             plc: RwLock::new(HashMap::new()),
             centroids: RwLock::new(HashMap::new()),
             ring: Mutex::new(Ring::new()),
+            tt_drops: Mutex::new(VecDeque::new()),
+            tt_cycles: Mutex::new(VecDeque::new()),
+            tt_artifacts: Mutex::new(VecDeque::new()),
+            tt_artifacts_near: Mutex::new(VecDeque::new()),
             connected: AtomicBool::new(false),
             messages: AtomicU64::new(0),
             reconnects: AtomicU64::new(0),
@@ -269,6 +324,31 @@ pub struct PositionsOut {
     crane_moves_60m: u32,
     cranes_working: usize,
     crane_mph_live: Option<f64>,
+    /// live TT cycle time (s) — replaces the mislabeled TOS span. Little's-law fleet
+    /// average + median of per-truck drop intervals, with sample/throughput counts.
+    tt_cycle_littles_s: Option<i64>,
+    tt_cycle_median_s: Option<i64>,
+    /// spread of the cycle samples (25th/75th pctile, s) so a thin/noisy median is visible
+    tt_cycle_p25_s: Option<i64>,
+    tt_cycle_p75_s: Option<i64>,
+    tt_drops_60m: u32,
+    tt_cycle_samples: u32,
+    /// min samples before the median is shown (UI shows "collecting n/N" below this)
+    tt_cycle_min_samples: u32,
+    /// container1 changes rejected by the movement filter in the last hour (suspected TOS
+    /// re-assignment artifacts). Exposed for audit: artifacts vs real deliveries.
+    tt_artifacts_60m: u32,
+    /// subset of rejects in the [100,150)m near-miss band — possible ultra-short hauls the
+    /// 150m cut discards (measures the one direction this filter can bias the median up).
+    tt_artifacts_near_60m: u32,
+    /// how full the rolling 1h window is, in minutes (0..=60). <60 ⇒ still settling.
+    window_fill_min: u32,
+    active_trucks: usize,
+    /// live K_UTIL (%) — instantaneous non-idle TT fraction
+    tt_util_live: Option<i64>,
+    /// live K_QC_Q — quay cranes currently starving (idle, no truck) + their avg wait (s)
+    qc_starving: usize,
+    qc_wait_live_s: Option<i64>,
     devices: Vec<DeviceOut>,
 }
 
@@ -488,6 +568,81 @@ pub async fn positions(State(lm): State<Arc<LiveMap>>) -> Json<PositionsOut> {
     let crane_mph_live = (cranes_working > 0)
         .then(|| (crane_moves_60m as f64 / cranes_working as f64 / obs_h * 10.0).round() / 10.0);
 
+    // ── live TT cycle time ── (replaces the mislabeled TOS "cycle"). Two estimates:
+    //  • Little's law W = L/λ — robust fleet average: L = trucks in a cycle (non-idle),
+    //    λ = fleet delivery (drop) rate. No per-truck edge timing → hard to skew.
+    //  • median of per-truck drop-to-drop intervals (capped) — the typical cycle.
+    let active_trucks: usize = dispatch_counts.iter().filter(|(k, _)| **k != "idle").map(|(_, v)| *v).sum();
+    // L for Little's law = trucks on a laden round-trip arc (en route to pick up, carrying,
+    // or at handover). Exclude idle and wait_rtg (parked) so W = L/λ isn't biased high.
+    let cycling_trucks: usize = ["empty_travel", "delivering", "soon_idle"]
+        .iter()
+        .map(|k| dispatch_counts.get(k).copied().unwrap_or(0))
+        .sum();
+    let drops_60m = {
+        let d = lm.tt_drops.lock().await;
+        d.iter().filter(|&&t| now - t <= MOVE_WINDOW_MS).count() as u32
+    };
+    let lambda = drops_60m as f64 / (obs_h * 3600.0); // deliveries / second
+    let tt_cycle_littles_s = (cycling_trucks > 0 && lambda > 0.0)
+        .then(|| (cycling_trucks as f64 / lambda).round() as i64);
+    let mut cyc_samples: Vec<i64> = {
+        let c = lm.tt_cycles.lock().await;
+        c.iter().filter(|&&(t, _)| now - t <= MOVE_WINDOW_MS).map(|&(_, i)| i).collect()
+    };
+    let tt_cycle_samples = cyc_samples.len() as u32;
+    cyc_samples.sort_unstable();
+    let pctile = |v: &[i64], p: f64| v.get(((v.len() as f64 * p) as usize).min(v.len().saturating_sub(1))).copied();
+    let have_median = cyc_samples.len() >= MIN_CYCLE_SAMPLES;
+    let tt_cycle_median_s = have_median.then(|| cyc_samples[cyc_samples.len() / 2]);
+    let tt_cycle_p25_s = have_median.then(|| pctile(&cyc_samples, 0.25)).flatten();
+    let tt_cycle_p75_s = have_median.then(|| pctile(&cyc_samples, 0.75)).flatten();
+    let tt_cycle_min_samples = MIN_CYCLE_SAMPLES as u32;
+    let tt_artifacts_60m = {
+        let a = lm.tt_artifacts.lock().await;
+        a.iter().filter(|&&t| now - t <= MOVE_WINDOW_MS).count() as u32
+    };
+    let tt_artifacts_near_60m = {
+        let a = lm.tt_artifacts_near.lock().await;
+        a.iter().filter(|&&t| now - t <= MOVE_WINDOW_MS).count() as u32
+    };
+    // how full the rolling 1h window is (min). Until it is full the rates/median are still
+    // settling, so the UI labels "window filling" rather than implying a steady-state hour.
+    let started = lm.connected_since_ms.load(Ordering::Relaxed) as i64;
+    let window_fill_min = if started > 0 {
+        (((now - started) / 60_000).clamp(0, MOVE_WINDOW_MS / 60_000)) as u32
+    } else { 0 };
+
+    // ── live K_UTIL (TT utilization) ── instantaneous non-idle fraction. A cross-check
+    // for the TOS session-based K_UTIL (which counts logged-in time); this counts trucks
+    // actually in a cycle right now.
+    let total_tt = map.values().filter(|p| p.cls == "TT" && (now - p.last_seen_ms) / 1000 <= STALE_AFTER_S).count();
+    let tt_util_live = (total_tt > 0).then(|| (active_trucks as f64 / total_tt as f64 * 100.0).round() as i64);
+
+    // ── live K_QC_Q (QC waiting for a truck) ── direct starvation: a working quay crane
+    // that's been idle past a normal inter-move gap with NO assigned TT arrived at it.
+    // Fixes the TOS HAVING-≥10 intra-shift undercount. Conservative (60s gap); quay only.
+    let cranes_with_tt: std::collections::HashSet<&str> = map
+        .values()
+        .filter(|p| p.cls == "TT" && p.arrival.as_deref() == Some("ARRIVED"))
+        .filter_map(|p| p.topos1.as_deref())
+        .filter(|t| is_crane_code(t))
+        .collect();
+    let (mut qc_starving, mut qc_wait_sum) = (0usize, 0i64);
+    for (id, c) in plc.iter() {
+        let working = c.moves.iter().any(|&t| now - t <= MOVE_WINDOW_MS);
+        let fresh = (now - c.last_seen_ms) / 1000 <= STALE_AFTER_S;
+        if !working || !fresh || c.last_move_ms == 0 {
+            continue;
+        }
+        let idle_s = (now - c.last_move_ms) / 1000;
+        if idle_s > QCQ_IDLE_S && !cranes_with_tt.contains(id.as_str()) {
+            qc_starving += 1;
+            qc_wait_sum += idle_s;
+        }
+    }
+    let qc_wait_live_s = (qc_starving > 0).then(|| qc_wait_sum / qc_starving as i64);
+
     let last_ms = lm.last_msg_ms.load(Ordering::Relaxed);
     let as_of = (last_ms != 0).then(|| DateTime::from_timestamp_millis(last_ms as i64)).flatten();
     Json(PositionsOut {
@@ -500,6 +655,20 @@ pub async fn positions(State(lm): State<Arc<LiveMap>>) -> Json<PositionsOut> {
         crane_moves_60m,
         cranes_working,
         crane_mph_live,
+        tt_cycle_littles_s,
+        tt_cycle_median_s,
+        tt_cycle_p25_s,
+        tt_cycle_p75_s,
+        tt_drops_60m: drops_60m,
+        tt_cycle_samples,
+        tt_cycle_min_samples,
+        tt_artifacts_60m,
+        tt_artifacts_near_60m,
+        window_fill_min,
+        active_trucks,
+        tt_util_live,
+        qc_starving,
+        qc_wait_live_s,
         devices,
     })
 }
@@ -872,7 +1041,7 @@ async fn ingest_text(lm: &Arc<LiveMap>, text: &str) {
     let cls: String = id.chars().take_while(|c| c.is_ascii_alphabetic()).collect();
     let now = Utc::now().timestamp_millis();
 
-    let pos = Pos {
+    let mut pos = Pos {
         cls,
         lat,
         lon,
@@ -893,6 +1062,7 @@ async fn ingest_text(lm: &Arc<LiveMap>, text: &str) {
         nett: opt_str(g, "nett"),
         dtime: opt_str(g, "dtime"),
         distance: g.get("distance").and_then(num),
+        ..Default::default()
     };
 
     // learn block/bay AND crane positions from TTs observed ARRIVED at a topos — feeds the
@@ -910,7 +1080,84 @@ async fn ingest_text(lm: &Arc<LiveMap>, text: &str) {
             }
         }
     }
-    lm.devices.write().await.insert(id.to_string(), pos);
+    // TT cycle: carry per-truck tracking across fixes; a delivery = container1 changing
+    // away from a non-empty value (→empty OR →another container). Record a fleet delivery
+    // (for throughput λ) — always — and, between two of a truck's deliveries, a capped
+    // cycle-interval sample (for the median). Fleet-delivery and cycle-sample are separate
+    // (the first delivery has no predecessor, so it feeds λ but not the median).
+    let mut fleet_drop = false;
+    let mut cycle_sample_s: Option<i64> = None;
+    let mut artifact = false;
+    let mut artifact_near = false;
+    {
+        let mut devmap = lm.devices.write().await;
+        let prev_c1 = devmap.get(id).and_then(|p| p.container1.clone());
+        if let Some(prev) = devmap.get(id) {
+            pos.carry_since_ms = prev.carry_since_ms;
+            pos.last_drop_ms = prev.last_drop_ms;
+            // accumulate path length driven since the carry began (jitter-guarded). This is
+            // the evidence used to tell a real delivery (truck drove the box) from a TOS
+            // re-assignment artifact (container1 rewritten while the truck sits still).
+            pos.carry_trip_m = prev.carry_trip_m;
+            if pos.cls == "TT" && prev.lat != 0.0 && pos.lat != 0.0 {
+                let step = dist_m((prev.lat, prev.lon), (pos.lat, pos.lon));
+                if step.is_finite() && step <= MAX_FIX_STEP_M {
+                    pos.carry_trip_m += step;
+                }
+            }
+        }
+        if pos.cls == "TT" {
+            let new_c1 = pos.container1.as_deref().unwrap_or("");
+            let old_c1 = prev_c1.as_deref().unwrap_or("");
+            if new_c1 != old_c1 {
+                if !old_c1.is_empty() {
+                    // a delivery requires the box was carried ≥30s AND the truck actually
+                    // drove it ≥150m. Carried-but-stationary = TOS re-assignment, not a
+                    // delivery: rejected here on the movement signature (not on duration).
+                    let held = if pos.carry_since_ms > 0 { now - pos.carry_since_ms } else { i64::MAX };
+                    if held >= MIN_LOADED_MS {
+                        if pos.carry_trip_m >= MIN_CARRY_TRIP_M {
+                            fleet_drop = true;
+                            if pos.last_drop_ms != 0 {
+                                let iv = now - pos.last_drop_ms;
+                                if (MIN_CYCLE_S * 1000..=MAX_CYCLE_S * 1000).contains(&iv) {
+                                    cycle_sample_s = Some(iv / 1000);
+                                }
+                            }
+                            pos.last_drop_ms = now;
+                        } else {
+                            artifact = true; // changed container1 without moving it
+                            artifact_near = pos.carry_trip_m >= NEAR_TRIP_M; // possible short haul
+                        }
+                    }
+                }
+                // new carry (or empty): reset the trip accumulator for the next box
+                pos.carry_since_ms = if new_c1.is_empty() { 0 } else { now };
+                pos.carry_trip_m = 0.0;
+            }
+        }
+        devmap.insert(id.to_string(), pos);
+    }
+    if fleet_drop {
+        let mut drops = lm.tt_drops.lock().await;
+        drops.push_back(now);
+        while drops.front().is_some_and(|&f| now - f > MOVE_WINDOW_MS) { drops.pop_front(); }
+    }
+    if artifact {
+        let mut arts = lm.tt_artifacts.lock().await;
+        arts.push_back(now);
+        while arts.front().is_some_and(|&f| now - f > MOVE_WINDOW_MS) { arts.pop_front(); }
+    }
+    if artifact_near {
+        let mut near = lm.tt_artifacts_near.lock().await;
+        near.push_back(now);
+        while near.front().is_some_and(|&f| now - f > MOVE_WINDOW_MS) { near.pop_front(); }
+    }
+    if let Some(s) = cycle_sample_s {
+        let mut cyc = lm.tt_cycles.lock().await;
+        cyc.push_back((now, s));
+        while cyc.front().is_some_and(|&(t, _)| now - t > MOVE_WINDOW_MS) { cyc.pop_front(); }
+    }
     lm.messages.fetch_add(1, Ordering::Relaxed);
     lm.last_msg_ms.store(now as u64, Ordering::Relaxed);
     lm.ring.lock().await.bump(now / 60_000);

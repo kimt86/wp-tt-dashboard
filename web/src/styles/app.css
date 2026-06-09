@@ -125,6 +125,15 @@ body {
   padding: 10px 12px; min-height: 120px; display: flex; flex-direction: column; gap: 4px; position: relative; overflow: hidden;
 }
 .kpi.primary { border-left: 3px solid var(--warn); }
+/* websocket live cross-check strip */
+.ws-strip { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px;
+  padding: 7px 12px; background: rgba(245,158,11,0.06); border: 1px solid rgba(245,158,11,0.25); border-radius: var(--radius-lg); }
+.ws-strip-lbl { font-size: 10.5px; font-weight: 800; color: #fbbf24; letter-spacing: 0.02em; margin-right: 4px; }
+.ws-chip { display: inline-flex; align-items: baseline; gap: 5px; padding: 2px 9px; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--border); }
+.ws-chip-l { font-size: 10px; color: var(--text-mute); }
+.ws-chip-v { font-size: 12px; font-weight: 800; color: var(--text); font-family: "JetBrains Mono", monospace; }
+.ws-chip-s { font-size: 9px; color: var(--text-faint); font-family: "JetBrains Mono", monospace; }
 /* extra sub-values inside the distance / ratio cards (loaded, total, loaded-ratio) */
 .kpi-extras { display: flex; flex-direction: column; gap: 1px; margin: 1px 0 2px; padding-top: 3px; border-top: 1px dashed var(--border-soft); }
 .kpi-extra { display: flex; justify-content: space-between; align-items: baseline; font-size: 10.5px; }

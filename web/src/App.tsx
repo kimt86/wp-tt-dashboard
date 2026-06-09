@@ -146,6 +146,76 @@ function useLive() {
   return { live, vessels, today };
 }
 
+// websocket-derived LIVE cross-check strip: per-second signals that refine the TOS
+// shift KPIs (which are pulled every few minutes and hour-bucketed). See the KC doc
+// "websocket로 KPI 정확도 향상". The live TT cycle here is the REAL truck transport
+// cycle, distinct from (and far shorter than) the renamed TOS "작업 처리 시간".
+type WsLive = {
+  tt_cycle_littles_s?: number | null; tt_cycle_median_s?: number | null; tt_cycle_samples?: number;
+  tt_cycle_min_samples?: number; tt_cycle_p25_s?: number | null; tt_cycle_p75_s?: number | null;
+  tt_artifacts_60m?: number; tt_artifacts_near_60m?: number; window_fill_min?: number;
+  tt_util_live?: number | null; crane_mph_live?: number | null;
+  qc_starving?: number; qc_wait_live_s?: number | null; active_trucks?: number; connected?: boolean;
+};
+function fmtCycle(s: number | null | undefined): string {
+  if (s == null) return "—";
+  return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
+}
+function LiveWsStrip({ lang }: { lang: Lang }) {
+  const ko = lang === "ko";
+  const [w, setW] = useState<WsLive | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const poll = () => fetch("/api/livemap/positions").then((r) => r.ok ? r.json() : null)
+      .then((j) => { if (alive && j) setW(j); }).catch(() => {});
+    poll();
+    const id = setInterval(poll, 5000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+  if (!w || !w.connected) return null;
+  // median of per-truck delivery-to-delivery intervals. Each delivery is GPS-movement-
+  // validated (the truck actually drove the box ≥150m) — a container1 change with no
+  // movement is a TOS re-assignment, not a delivery, and is rejected (counted as artifact).
+  // Little's-law W is unreliable here (empty_travel over-counts L), so it is not shown.
+  // Median includes some inter-delivery idle → an upper bound on the active cycle, but far
+  // closer to a real truck cycle than the TOS handling span (~40m).
+  const cyc = w.tt_cycle_median_s ?? null;
+  const haveCyc = cyc != null;
+  const need = w.tt_cycle_min_samples ?? 20;
+  const fill = w.window_fill_min ?? 60;
+  const filling = fill < 60; // rolling 1h window not yet full → still settling
+  const spread = haveCyc && w.tt_cycle_p25_s != null && w.tt_cycle_p75_s != null
+    ? `${fmtCycle(w.tt_cycle_p25_s)}–${fmtCycle(w.tt_cycle_p75_s)}` : "";
+  // never show the median as a lone scalar: always bind n + IQR (and a window-filling hint).
+  const cycSub = haveCyc
+    ? `n=${w.tt_cycle_samples}${spread ? ` · ${spread}` : ""}${filling ? ` · ${ko ? `윈도우 ${fill}/60분` : `win ${fill}/60m`}` : ""}`
+    : "";
+  const chips: { lbl: string; val: string; sub?: string; title: string }[] = [
+    { lbl: ko ? "TT 배달간격" : "TT interval",
+      val: haveCyc ? fmtCycle(cyc) : (ko ? `수집중 ${w.tt_cycle_samples ?? 0}/${need}` : `…${w.tt_cycle_samples ?? 0}/${need}`),
+      sub: cycSub,
+      title: ko ? `트럭 연속 배달 간격의 중앙값(n≥${need}부터 표시). 배달은 GPS 이동(≥150m)으로 검증 — 안 움직인 container1 변경은 재배정 잡음으로 제외(최근1h 잡음 ${w.tt_artifacts_60m ?? 0}건, 그중 100–150m 근접 ${w.tt_artifacts_near_60m ?? 0}건). 유휴 포함이라 활성 사이클의 상한. TOS '작업 처리 시간'(생애 span ~40분)과 다른 값.` : `median truck delivery-to-delivery interval (shown from n≥${need}); each delivery is GPS-movement-validated (≥150m), stationary container1 changes rejected as re-assignment noise (${w.tt_artifacts_60m ?? 0} in last 1h, of which ${w.tt_artifacts_near_60m ?? 0} in the 100–150m near band). Includes some idle → upper bound on the cycle, distinct from the TOS ~40m handling span` },
+    { lbl: ko ? "비유휴" : "Active", val: w.tt_util_live != null ? `${w.tt_util_live}%` : "—",
+      title: ko ? "현재 비유휴(작업중) 트럭 비율 — TOS 세션 가동률(로그인 기준)과는 다른 즉시 지표" : "non-idle truck fraction now — distinct from TOS session-based utilization" },
+    { lbl: ko ? "QC 처리량" : "QC mph", val: w.crane_mph_live != null ? `${w.crane_mph_live}/h` : "—",
+      title: ko ? "PLC 사이클 기반 실시간 QC 평균 처리량" : "live avg QC throughput from PLC cycles" },
+    { lbl: ko ? "QC 대기" : "QC wait", val: (w.qc_starving ?? 0) > 0 ? `${w.qc_starving}${ko ? "대" : ""} · ${w.qc_wait_live_s}s` : (ko ? "없음" : "none"),
+      title: ko ? "지금 트럭을 기다리는(유휴+무트럭) 가동 QC 수와 평균 대기" : "quay cranes idle now with no truck (count · avg wait)" },
+  ];
+  return (
+    <div className="ws-strip" title={ko ? "websocket 초단위 신호로 산출한 실시간 보정값" : "live values from the per-second websocket feed"}>
+      <span className="ws-strip-lbl">⚡ {ko ? "websocket 실시간" : "live (websocket)"}</span>
+      {chips.map((c) => (
+        <span className="ws-chip" key={c.lbl} title={c.title}>
+          <span className="ws-chip-l">{c.lbl}</span>
+          <span className="ws-chip-v">{c.val}</span>
+          {c.sub && <span className="ws-chip-s">{c.sub}</span>}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function LiveCard({ c, lang, extras }: { c: LiveKpi; lang: Lang; extras?: KExtra[] }) {
   const s = t(lang);
   const nm = lang === "ko" ? c.name_ko : c.name_en;
@@ -282,6 +352,7 @@ function LiveTab({ lang }: { lang: Lang }) {
       <div className="grid kpi-strip">
         {live.kpis.map((c) => <LiveCard key={c.key} c={c} lang={lang} extras={distanceExtras(live.kpis, c.key, lang)} />)}
       </div>
+      <LiveWsStrip lang={lang} />
 
       {/* 오늘 누적 KPI 7개 */}
       <div className="section-title" style={{ marginTop: 18 }}>{s.todayKpis}<span className="section-sub">{s.vsBaseline}</span></div>
