@@ -221,6 +221,114 @@ pub async fn trend(
     }))
 }
 
+#[derive(Deserialize)]
+pub struct HistoryQuery {
+    gran: Option<String>,
+    n: Option<i64>,
+}
+
+/// KPI values bucketed by day / week / month (newest-first). Reads ONLY Postgres —
+/// `kpi_daily` for day (one query, same source as `trend`); `agg::aggregate` over
+/// `raw_*`/shift for week/month (exact incl. K_UTIL + provisional today). Zero Oracle load.
+pub async fn kpi_history(
+    State(pool): State<PgPool>,
+    Query(q): Query<HistoryQuery>,
+) -> Result<Json<HistoryResponse>, AppError> {
+    let today = wp_core::shift::terminal_now().date_naive();
+    let gran = match q.gran.as_deref().unwrap_or("day") {
+        "week" => "week",
+        "month" => "month",
+        _ => "day",
+    };
+    let (cap, default_n) = match gran {
+        "day" => (60_i64, 14),
+        "week" => (26, 12),
+        _ => (12, 12),
+    };
+    let n = q.n.unwrap_or(default_n).clamp(1, cap) as usize;
+
+    let targets = load_targets(&pool).await?;
+    let columns: Vec<HistoryColumn> = ORDER
+        .iter()
+        .map(|kpi| HistoryColumn {
+            key: kpi.as_str().to_string(),
+            name_en: kpi.name_en().to_string(),
+            name_ko: kpi.name_ko().to_string(),
+            unit: kpi.unit().to_string(),
+            direction: targets.get(kpi.as_str()).and_then(|t| t.direction.clone()),
+        })
+        .collect();
+
+    let ranges = match gran {
+        "week" => periods::week_buckets(today, n),
+        "month" => periods::month_buckets(today, n),
+        _ => periods::day_buckets(today, n),
+    };
+
+    let mut buckets = Vec::with_capacity(ranges.len());
+
+    if gran == "day" {
+        // one kpi_daily query for the whole window, then pivot per day (matches `trend`).
+        let oldest = ranges.last().map(|r| r.from).unwrap_or(today);
+        let rows: Vec<(String, NaiveDate, f64, Option<i32>)> = sqlx::query_as(
+            "SELECT kpi_key, snapshot_date, value::float8, sample_n FROM kpi_daily
+              WHERE snapshot_date BETWEEN $1 AND $2",
+        )
+        .bind(oldest)
+        .bind(today)
+        .fetch_all(&pool)
+        .await?;
+        let mut by: std::collections::HashMap<NaiveDate, std::collections::HashMap<String, (f64, Option<i32>)>> =
+            std::collections::HashMap::new();
+        for (k, d, v, sn) in rows {
+            by.entry(d).or_default().insert(k, (v, sn));
+        }
+        for r in &ranges {
+            let day_map = by.get(&r.from);
+            let cells = ORDER
+                .iter()
+                .map(|kpi| {
+                    let key = kpi.as_str();
+                    let c = day_map.and_then(|m| m.get(key));
+                    (
+                        key.to_string(),
+                        HistoryCell { value: c.map(|x| x.0), sample_n: c.and_then(|x| x.1).map(|n| n as i64) },
+                    )
+                })
+                .collect();
+            buckets.push(HistoryBucket {
+                bucket: r.from.to_string(),
+                label_from: r.from.to_string(),
+                label_to: r.to.to_string(),
+                is_provisional: periods::includes_today(r, today),
+                cells,
+            });
+        }
+    } else {
+        // week/month: exact range aggregation per bucket (reuses agg.rs).
+        for r in &ranges {
+            let a = agg::aggregate(&pool, r.from, r.to).await?;
+            let cells = ORDER
+                .iter()
+                .map(|kpi| {
+                    let key = kpi.as_str();
+                    let (v, sn) = a.get(key).copied().unwrap_or((None, None));
+                    (key.to_string(), HistoryCell { value: v, sample_n: sn })
+                })
+                .collect();
+            buckets.push(HistoryBucket {
+                bucket: r.from.to_string(),
+                label_from: r.from.to_string(),
+                label_to: r.to.to_string(),
+                is_provisional: periods::includes_today(r, today),
+                cells,
+            });
+        }
+    }
+
+    Ok(Json(HistoryResponse { gran: gran.to_string(), kpis: columns, buckets }))
+}
+
 pub async fn breakdown_qc(
     State(pool): State<PgPool>,
     Query(q): Query<PeriodQuery>,

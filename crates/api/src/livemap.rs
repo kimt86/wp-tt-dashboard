@@ -46,6 +46,7 @@ struct Pos {
     container2: Option<String>,
     cur_loc: Option<String>,
     topos1: Option<String>,
+    arrival: Option<String>, // "ARRIVED" when the TT has reached its handover point
     fuel: Option<f64>,
     accuracy: Option<f64>,
     userid: Option<String>,
@@ -65,6 +66,24 @@ struct Plc {
     hpos: Option<f64>, // hoist position (crane-local axis)
     tpos: Option<f64>, // trolley position
     last_seen_ms: i64,
+}
+
+/// Learned position of a yard block/bay code, accumulated from the GPS of TTs observed
+/// ARRIVED there. Lets us estimate "how far is an empty TT from its assigned pickup" with
+/// no TOS/layout dependency (standalone).
+#[derive(Clone, Copy, Default)]
+pub struct Centroid {
+    lat: f64,
+    lon: f64,
+    n: u32,
+}
+impl Centroid {
+    fn push(&mut self, lat: f64, lon: f64) {
+        self.n = (self.n + 1).min(500); // cap so it stays mildly adaptive
+        let k = 1.0 / self.n as f64;
+        self.lat += (lat - self.lat) * k;
+        self.lon += (lon - self.lon) * k;
+    }
 }
 
 /// Per-minute throughput ring for the health sparkline.
@@ -107,6 +126,7 @@ impl Ring {
 pub struct LiveMap {
     devices: RwLock<HashMap<String, Pos>>,
     plc: RwLock<HashMap<String, Plc>>, // crane PLC state from the ctab zone
+    centroids: RwLock<HashMap<String, Centroid>>, // learned block/bay positions (topos1 → centroid)
     ring: Mutex<Ring>,
     connected: AtomicBool,
     messages: AtomicU64,
@@ -124,6 +144,7 @@ impl LiveMap {
         Arc::new(Self {
             devices: RwLock::new(HashMap::new()),
             plc: RwLock::new(HashMap::new()),
+            centroids: RwLock::new(HashMap::new()),
             ring: Mutex::new(Ring::new()),
             connected: AtomicBool::new(false),
             messages: AtomicU64::new(0),
@@ -162,6 +183,8 @@ struct DeviceOut {
     #[serde(skip_serializing_if = "Option::is_none")]
     topos1: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    arrival: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     fuel: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     accuracy: Option<f64>,
@@ -177,6 +200,17 @@ struct DeviceOut {
     distance: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     plc: Option<PlcOut>,
+    // dispatch-state classification (TT only): idle|empty_travel|delivering|soon_idle|wait_rtg
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dispatch: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dispatch_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    nearest_rtg_m: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dest_remaining_m: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    swappable: Option<bool>,
 }
 
 /// Crane PLC state served alongside a crane's GPS fix.
@@ -203,7 +237,120 @@ pub struct PositionsOut {
     as_of: Option<DateTime<Utc>>,
     count: usize,
     messages: u64,
+    /// TT dispatch-state counts (idle/empty_travel/delivering/soon_idle/wait_rtg)
+    dispatch_counts: HashMap<&'static str, usize>,
     devices: Vec<DeviceOut>,
+}
+
+const RTG_BAY_M: f64 = 30.0; // RTG within this of a TT ≈ same bay (engaged)
+const IDLE_SPEED_KMH: f64 = 3.0;
+const SWAP_MIN_M: f64 = 150.0; // an empty TT closer than this to its pickup isn't worth swapping
+
+/// A topos1 like "C46"/"M4"/"Z6" = a quay/dynamic crane (vs a block code like "03U-21").
+fn is_crane_code(s: &str) -> bool {
+    let b = s.as_bytes();
+    b.len() >= 2 && matches!(b[0], b'C' | b'M' | b'Z') && b[1..].iter().all(u8::is_ascii_digit)
+}
+
+/// Block/area prefix of a yard code: "07F-06" → "07F", "WHARF_23_B" → "WHARF_23_B".
+fn block_prefix(s: &str) -> &str {
+    s.split('-').next().unwrap_or(s)
+}
+
+/// Approximate ground distance (m) between two lat/lon points (equirectangular).
+fn dist_m(a: (f64, f64), b: (f64, f64)) -> f64 {
+    let lat = (a.0 + b.0) / 2.0 * std::f64::consts::PI / 180.0;
+    let dx = (a.1 - b.1) * 111_320.0 * lat.cos();
+    let dy = (a.0 - b.0) * 111_320.0;
+    (dx * dx + dy * dy).sqrt()
+}
+
+#[derive(Default)]
+struct Classed {
+    state: &'static str,
+    reason: Option<String>,
+    nearest_rtg_m: Option<f64>,
+    dest_remaining_m: Option<f64>, // empty_travel: distance to its assigned pickup (topos1)
+    swappable: Option<bool>,       // empty_travel: still far enough from pickup to re-match
+}
+
+/// Classify a TT's dispatch state from its mission fields + RTG proximity + QC PLC, and for
+/// empty-travelling TTs assess swap-worthiness (remaining distance to the assigned pickup —
+/// crane destinations use live crane GPS, block destinations use learned centroids).
+///  - idle: empty + ~stationary (available now)
+///  - empty_travel: empty + moving toward a pickup (swap candidate if still far enough)
+///  - delivering: loaded + en route
+///  - soon_idle: loaded + ARRIVED at final handover AND crane engaged (QC=PLC / block=RTG near)
+///  - wait_rtg: loaded + ARRIVED at block but no RTG near yet (arrived ≠ soon-idle)
+fn classify_tt(
+    p: &Pos,
+    rtgs: &[(f64, f64)],
+    plc: &HashMap<String, Plc>,
+    cranes: &HashMap<String, (f64, f64)>,
+    centroids: &HashMap<String, Centroid>,
+    now: i64,
+) -> Classed {
+    let st = |state, reason: Option<String>| Classed { state, reason, ..Default::default() };
+    let loaded = p.container1.as_deref().is_some_and(|s| !s.is_empty());
+    if !loaded {
+        if p.speed < IDLE_SPEED_KMH {
+            return st("idle", None);
+        }
+        // empty + moving = empty_travel. Swap-worthiness = remaining distance to its pickup.
+        let topos = p.topos1.as_deref().unwrap_or("");
+        if topos.is_empty() {
+            return Classed { state: "empty_travel", reason: Some("공차 주행 중 · 회송/대기".into()), swappable: Some(false), ..Default::default() };
+        }
+        let destpos = if is_crane_code(topos) {
+            // live crane GPS, else its learned position (crane may not be broadcasting)
+            cranes.get(topos).copied().or_else(|| centroids.get(topos).map(|c| (c.lat, c.lon)))
+        } else {
+            centroids.get(topos).or_else(|| centroids.get(block_prefix(topos))).map(|c| (c.lat, c.lon))
+        };
+        let remaining = destpos.map(|dp| dist_m((p.lat, p.lon), dp));
+        let rem_r = remaining.map(|r| (r * 10.0).round() / 10.0);
+        let swappable = remaining.is_none_or(|r| r >= SWAP_MIN_M);
+        let reason = match remaining {
+            Some(r) if r < SWAP_MIN_M => format!("공차 주행 중 · 목적지 근접 {r:.0}m (스왑 부적합)"),
+            Some(r) => format!("공차 주행 중 · 잔여 {r:.0}m"),
+            None => "공차 주행 중 · 목적지 미학습".into(),
+        };
+        return Classed { state: "empty_travel", reason: Some(reason), dest_remaining_m: rem_r, swappable: Some(swappable), ..Default::default() };
+    }
+    if p.arrival.as_deref() != Some("ARRIVED") {
+        return st("delivering", Some("적재 이동 중".into()));
+    }
+    let topos = p.topos1.as_deref().unwrap_or("");
+    let is_crane = is_crane_code(topos);
+    // Which side UNLOADS this job (= frees the TT)? LD unloads at the quay crane; DS/MO/MI at a
+    // block. A loaded TT ARRIVED at the *other* side just picked up → still delivering.
+    let drop_at_crane = match p.jobtype.as_deref().unwrap_or("") {
+        "LD" => true,
+        "DS" | "MO" | "MI" => false,
+        _ => is_crane,
+    };
+    if drop_at_crane {
+        if !is_crane {
+            return st("delivering", Some("적재 이동 (안벽行)".into()));
+        }
+        let plc_ok = plc.get(topos).is_some_and(|c| (now - c.last_seen_ms) / 1000 <= STALE_AFTER_S);
+        let reason = if plc_ok { format!("안벽 {topos} 핸드오버 · PLC 확인") } else { format!("안벽 {topos} 핸드오버") };
+        return st("soon_idle", Some(reason));
+    }
+    if is_crane {
+        return st("delivering", Some("적재 이동 (블록行)".into()));
+    }
+    // block handover — needs an RTG engaged (≈ same bay).
+    let nearest = rtgs.iter().map(|r| dist_m((p.lat, p.lon), *r)).fold(f64::INFINITY, f64::min);
+    if !nearest.is_finite() {
+        return st("wait_rtg", Some("도착 · RTG 미관측".into()));
+    }
+    let d = (nearest * 10.0).round() / 10.0;
+    if d <= RTG_BAY_M {
+        Classed { state: "soon_idle", reason: Some(format!("블록 RTG 근접 {d:.0}m")), nearest_rtg_m: Some(d), ..Default::default() }
+    } else {
+        Classed { state: "wait_rtg", reason: Some(format!("도착 · RTG 대기 (최근접 {d:.0}m)")), nearest_rtg_m: Some(d), ..Default::default() }
+    }
 }
 
 /// `GET /api/livemap/positions` — active device fixes (age ≤ 120s).
@@ -211,6 +358,19 @@ pub async fn positions(State(lm): State<Arc<LiveMap>>) -> Json<PositionsOut> {
     let now = Utc::now().timestamp_millis();
     let map = lm.devices.read().await;
     let plc = lm.plc.read().await;
+    let centroids = lm.centroids.read().await;
+    // fresh RTG positions for the discharge same-bay proximity check
+    let rtgs: Vec<(f64, f64)> = map
+        .values()
+        .filter(|p| p.cls == "RTG" && (now - p.last_seen_ms) / 1000 <= STALE_AFTER_S)
+        .map(|p| (p.lat, p.lon))
+        .collect();
+    // fresh crane (C/M/Z) positions — destination for empty TTs heading to pick up at a quay
+    let cranes: HashMap<String, (f64, f64)> = map
+        .iter()
+        .filter(|(_, p)| matches!(p.cls.as_str(), "C" | "M" | "Z") && (now - p.last_seen_ms) / 1000 <= STALE_AFTER_S)
+        .map(|(id, p)| (id.clone(), (p.lat, p.lon)))
+        .collect();
     let mut devices: Vec<DeviceOut> = map
         .iter()
         .filter_map(|(id, p)| {
@@ -218,6 +378,12 @@ pub async fn positions(State(lm): State<Arc<LiveMap>>) -> Json<PositionsOut> {
             if age > STALE_AFTER_S {
                 return None;
             }
+            let c = (p.cls == "TT").then(|| classify_tt(p, &rtgs, &plc, &cranes, &centroids, now));
+            let dispatch = c.as_ref().map(|c| c.state);
+            let dispatch_reason = c.as_ref().and_then(|c| c.reason.clone());
+            let nearest_rtg_m = c.as_ref().and_then(|c| c.nearest_rtg_m);
+            let dest_remaining_m = c.as_ref().and_then(|c| c.dest_remaining_m);
+            let swappable = c.as_ref().and_then(|c| c.swappable);
             // attach crane PLC state (ctab zone) when fresh — id matches the crane id.
             let plc_out = plc.get(id).and_then(|c| {
                 let pa = (now - c.last_seen_ms) / 1000;
@@ -245,6 +411,7 @@ pub async fn positions(State(lm): State<Arc<LiveMap>>) -> Json<PositionsOut> {
                 container2: p.container2.clone(),
                 cur_loc: p.cur_loc.clone(),
                 topos1: p.topos1.clone(),
+                arrival: p.arrival.clone(),
                 fuel: p.fuel,
                 accuracy: p.accuracy,
                 userid: p.userid.clone(),
@@ -253,10 +420,21 @@ pub async fn positions(State(lm): State<Arc<LiveMap>>) -> Json<PositionsOut> {
                 dtime: p.dtime.clone(),
                 distance: p.distance,
                 plc: plc_out,
+                dispatch,
+                dispatch_reason,
+                nearest_rtg_m,
+                dest_remaining_m,
+                swappable,
             })
         })
         .collect();
     devices.sort_by(|a, b| a.id.cmp(&b.id));
+    let mut dispatch_counts: HashMap<&'static str, usize> = HashMap::new();
+    for d in &devices {
+        if let Some(s) = d.dispatch {
+            *dispatch_counts.entry(s).or_default() += 1;
+        }
+    }
     let last_ms = lm.last_msg_ms.load(Ordering::Relaxed);
     let as_of = (last_ms != 0).then(|| DateTime::from_timestamp_millis(last_ms as i64)).flatten();
     Json(PositionsOut {
@@ -265,6 +443,7 @@ pub async fn positions(State(lm): State<Arc<LiveMap>>) -> Json<PositionsOut> {
         as_of,
         count: devices.len(),
         messages: lm.messages.load(Ordering::Relaxed),
+        dispatch_counts,
         devices,
     })
 }
@@ -629,6 +808,7 @@ async fn ingest_text(lm: &Arc<LiveMap>, text: &str) {
         container2: opt_str(g, "container2"),
         cur_loc: opt_str(g, "cur_loc"),
         topos1: opt_str(g, "topos1"),
+        arrival: opt_str(g, "arrival"),
         fuel: g.get("fuel_level").and_then(num),
         accuracy: g.get("accuracy").and_then(num),
         userid: opt_str(g, "userid").map(|s| clean_driver(&s)),
@@ -638,6 +818,21 @@ async fn ingest_text(lm: &Arc<LiveMap>, text: &str) {
         distance: g.get("distance").and_then(num),
     };
 
+    // learn block/bay AND crane positions from TTs observed ARRIVED at a topos — feeds the
+    // empty-TT "remaining distance to pickup" used for swap-worthiness (crane fallback when a
+    // crane isn't broadcasting GPS).
+    if pos.cls == "TT" && pos.arrival.as_deref() == Some("ARRIVED") {
+        if let Some(t) = pos.topos1.as_deref() {
+            if !t.is_empty() {
+                let (full, pre) = (t.to_string(), block_prefix(t).to_string());
+                let mut c = lm.centroids.write().await;
+                c.entry(full).or_default().push(lat, lon);
+                if pre != t {
+                    c.entry(pre).or_default().push(lat, lon);
+                }
+            }
+        }
+    }
     lm.devices.write().await.insert(id.to_string(), pos);
     lm.messages.fetch_add(1, Ordering::Relaxed);
     lm.last_msg_ms.store(now as u64, Ordering::Relaxed);

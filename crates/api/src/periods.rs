@@ -84,3 +84,93 @@ pub fn resolve(period: &str, today: NaiveDate) -> Resolved {
 pub fn includes_today(r: &Range, today: NaiveDate) -> bool {
     r.from <= today && today <= r.to
 }
+
+fn next_month(first_of: NaiveDate) -> NaiveDate {
+    if first_of.month() == 12 {
+        NaiveDate::from_ymd_opt(first_of.year() + 1, 1, 1).unwrap()
+    } else {
+        NaiveDate::from_ymd_opt(first_of.year(), first_of.month() + 1, 1).unwrap()
+    }
+}
+
+/// Most-recent `n` single-day buckets, newest first.
+pub fn day_buckets(today: NaiveDate, n: usize) -> Vec<Range> {
+    (0..n as i64)
+        .map(|i| {
+            let d = today - Duration::days(i);
+            Range { from: d, to: d }
+        })
+        .collect()
+}
+
+/// Most-recent `n` ISO-week (Mon–Sun) buckets, newest first. The current week's `to` is
+/// clamped to `today`.
+pub fn week_buckets(today: NaiveDate, n: usize) -> Vec<Range> {
+    let cur_mon = monday_of(today);
+    (0..n as i64)
+        .map(|i| {
+            let mon = cur_mon - Duration::days(7 * i);
+            Range { from: mon, to: (mon + Duration::days(6)).min(today) }
+        })
+        .collect()
+}
+
+/// Most-recent `n` calendar-month buckets, newest first. The current month's `to` is
+/// clamped to `today`.
+pub fn month_buckets(today: NaiveDate, n: usize) -> Vec<Range> {
+    let mut out = Vec::with_capacity(n);
+    let mut first = first_of_month(today);
+    for _ in 0..n {
+        let last = next_month(first) - Duration::days(1);
+        out.push(Range { from: first, to: last.min(today) });
+        first = first_of_month(first - Duration::days(1));
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn day_buckets_newest_first() {
+        let t = NaiveDate::from_ymd_opt(2026, 6, 9).unwrap();
+        let b = day_buckets(t, 3);
+        assert_eq!(b.len(), 3);
+        assert_eq!(b[0].from, t);
+        assert_eq!(b[0].to, t);
+        assert_eq!(b[1].from, NaiveDate::from_ymd_opt(2026, 6, 8).unwrap());
+        assert_eq!(b[2].from, NaiveDate::from_ymd_opt(2026, 6, 7).unwrap());
+    }
+
+    #[test]
+    fn week_buckets_mon_sun_clamped() {
+        // 2026-06-09 is a Tuesday → ISO week Mon 06-08 .. Sun 06-14, clamped to today.
+        let t = NaiveDate::from_ymd_opt(2026, 6, 9).unwrap();
+        let b = week_buckets(t, 2);
+        assert_eq!(b[0].from, NaiveDate::from_ymd_opt(2026, 6, 8).unwrap()); // Monday
+        assert_eq!(b[0].to, t); // clamped to today (not Sunday)
+        assert_eq!(b[1].from, NaiveDate::from_ymd_opt(2026, 6, 1).unwrap()); // prev Monday
+        assert_eq!(b[1].to, NaiveDate::from_ymd_opt(2026, 6, 7).unwrap()); // prev Sunday
+    }
+
+    #[test]
+    fn month_buckets_clamped_and_step() {
+        let t = NaiveDate::from_ymd_opt(2026, 6, 9).unwrap();
+        let b = month_buckets(t, 3);
+        assert_eq!(b[0].from, NaiveDate::from_ymd_opt(2026, 6, 1).unwrap());
+        assert_eq!(b[0].to, t); // June clamped to today
+        assert_eq!(b[1].from, NaiveDate::from_ymd_opt(2026, 5, 1).unwrap());
+        assert_eq!(b[1].to, NaiveDate::from_ymd_opt(2026, 5, 31).unwrap());
+        assert_eq!(b[2].from, NaiveDate::from_ymd_opt(2026, 4, 1).unwrap());
+        assert_eq!(b[2].to, NaiveDate::from_ymd_opt(2026, 4, 30).unwrap());
+    }
+
+    #[test]
+    fn month_buckets_year_boundary() {
+        let t = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let b = month_buckets(t, 2);
+        assert_eq!(b[1].from, NaiveDate::from_ymd_opt(2025, 12, 1).unwrap());
+        assert_eq!(b[1].to, NaiveDate::from_ymd_opt(2025, 12, 31).unwrap());
+    }
+}

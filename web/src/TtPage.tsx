@@ -1,6 +1,7 @@
 // TT operations page — visual mock (no live data yet). Ports the AI-dispatch
 // components from docs/mock-dashboard.html with fake data: QC Sequence & TT Dispatch
 // (global pool), TT Status Distribution, TT Utilization (per vehicle), Last Decision.
+import { useEffect, useState } from "react";
 import { type Lang } from "./i18n";
 
 const ko = (lang: Lang) => lang === "ko";
@@ -337,9 +338,119 @@ function JobPool({ lang }: { lang: Lang }) {
   );
 }
 
+// ── REAL live dispatch pool (from /api/livemap/positions) ──
+type LiveTT = { id: string; cls: string; dispatch?: string; jobtype?: string; topos1?: string; dispatch_reason?: string; nearest_rtg_m?: number; swappable?: boolean; dest_remaining_m?: number };
+type Snap = { connected: boolean; as_of: string | null; dispatch_counts?: Record<string, number>; devices: LiveTT[] };
+const DSP_META: Record<string, { ko: string; en: string; color: string }> = {
+  idle: { ko: "유휴 (배차 가능)", en: "Idle (available)", color: "#22c55e" },
+  soon_idle: { ko: "곧 유휴", en: "Soon idle", color: "#f59e0b" },
+  delivering: { ko: "적재 이동", en: "Delivering", color: "#64748b" },
+  wait_rtg: { ko: "도착·RTG 대기", en: "Arrived·wait RTG", color: "#ef4444" },
+  empty_travel: { ko: "공차 주행 중", en: "Empty traveling", color: "#94a3b8" },
+};
+const DSP_ORDER = ["idle", "soon_idle", "delivering", "wait_rtg", "empty_travel"];
+
+function LiveDispatchPool({ lang }: { lang: Lang }) {
+  const [snap, setSnap] = useState<Snap | null>(null);
+  const [err, setErr] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    const poll = async () => {
+      try {
+        const r = await fetch("/api/livemap/positions");
+        if (!r.ok) throw new Error();
+        const j: Snap = await r.json();
+        if (alive) { setSnap(j); setErr(false); }
+      } catch { if (alive) setErr(true); }
+    };
+    poll();
+    const iv = setInterval(poll, 2500);
+    return () => { alive = false; clearInterval(iv); };
+  }, []);
+  const tts = (snap?.devices ?? []).filter((d) => d.cls === "TT");
+  const counts = snap?.dispatch_counts ?? {};
+  const soon = tts.filter((d) => d.dispatch === "soon_idle").sort((a, b) => a.id.localeCompare(b.id));
+  const idle = tts.filter((d) => d.dispatch === "idle").sort((a, b) => a.id.localeCompare(b.id));
+  const empties = tts.filter((d) => d.dispatch === "empty_travel");
+  // swap candidates = empty-traveling toward a pickup with meaningful remaining distance.
+  // Near-destination / no-destination (회송) empties are excluded — not worth swapping.
+  const swap = empties.filter((d) => d.swappable).sort((a, b) => (b.dest_remaining_m ?? 1e9) - (a.dest_remaining_m ?? 1e9));
+  const swapExcluded = empties.length - swap.length;
+  const ageS = snap?.as_of ? Math.max(0, Math.round((Date.now() - Date.parse(snap.as_of)) / 1000)) : null;
+
+  return (
+    <section className="tcard lvp">
+      <div className="tcard-head">
+        <h3>{ko(lang) ? "실시간 배차 풀" : "Live Dispatch Pool"}
+          <span className="h3-sub">{ko(lang) ? "websocket GPS/PLC · standalone" : "from websocket GPS/PLC"}</span></h3>
+        <div className="head-sub">
+          <span className={`pill ${snap?.connected ? "good" : "bad"}`}><span className="dot" />{snap?.connected ? "LIVE" : (err ? "OFF" : "…")}</span>
+          <span className="muted">{ageS != null ? `⟳ ${ageS}s` : ""}</span>
+        </div>
+      </div>
+      <div className="tcard-body">
+        <div className="lvp-stats">
+          {DSP_ORDER.map((k) => (
+            <div className="lvp-stat" key={k} style={{ borderTopColor: DSP_META[k].color }}>
+              <div className="lvp-n">{counts[k] ?? 0}</div>
+              <div className="lvp-l">{ko(lang) ? DSP_META[k].ko : DSP_META[k].en}</div>
+            </div>
+          ))}
+        </div>
+        <div className="lvp-cols lvp-cols3">
+          {/* 1. Idle now — empty + stationary, dispatchable immediately */}
+          <div className="lvp-col">
+            <div className="lvp-col-h"><span className="sw" style={{ background: DSP_META.idle.color }} />{ko(lang) ? "현재 유휴" : "Idle now"}<span className="lvp-cn">{idle.length}</span></div>
+            <div className="lvp-sub">{ko(lang) ? "즉시 배차 가능" : "dispatchable now"}</div>
+            <div className="lvp-chips">
+              {idle.length === 0 && <div className="lvp-empty">{ko(lang) ? "없음" : "none"}</div>}
+              {idle.slice(0, 48).map((d) => <span className="lvp-chip idle mono" key={d.id}>{d.id}</span>)}
+              {idle.length > 48 && <span className="lvp-more">+{idle.length - 48}</span>}
+            </div>
+          </div>
+          {/* 2. Soon-idle — finishing the last handover */}
+          <div className="lvp-col">
+            <div className="lvp-col-h"><span className="sw" style={{ background: DSP_META.soon_idle.color }} />{ko(lang) ? "곧 유휴" : "Soon-idle"}<span className="lvp-cn">{soon.length}</span></div>
+            <div className="lvp-sub">{ko(lang) ? "마지막 핸드오버 진행" : "at final handover"}</div>
+            <div className="lvp-list">
+              {soon.length === 0 && <div className="lvp-empty">{ko(lang) ? "없음" : "none"}</div>}
+              {soon.map((d) => (
+                <div className="lvp-row" key={d.id}>
+                  <span className="lvp-id mono">{d.id}</span>
+                  {d.jobtype && <span className={`lvp-job type-${d.jobtype.toLowerCase()}`}>{d.jobtype}</span>}
+                  {d.topos1 && <span className="lvp-dest mono">→{d.topos1}</span>}
+                  <span className="lvp-why">{d.dispatch_reason}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* 3. Swappable empty — empty-traveling toward a job, not yet loaded → re-match candidate */}
+          <div className="lvp-col">
+            <div className="lvp-col-h"><span className="sw" style={{ background: DSP_META.empty_travel.color }} />{ko(lang) ? "스왑 가능한 공차" : "Swappable empty"}<span className="lvp-cn">{swap.length}</span></div>
+            <div className="lvp-sub">{ko(lang) ? `픽업까지 잔여 ≥150m · 근접/회송 ${swapExcluded} 제외` : `≥150m left to pickup · ${swapExcluded} excluded`}</div>
+            <div className="lvp-list">
+              {swap.length === 0 && <div className="lvp-empty">{ko(lang) ? "없음" : "none"}</div>}
+              {swap.map((d) => (
+                <div className="lvp-row" key={d.id}>
+                  <span className="lvp-id mono">{d.id}</span>
+                  {d.jobtype && <span className={`lvp-job type-${d.jobtype.toLowerCase()}`}>{d.jobtype}</span>}
+                  {d.topos1 && <span className="lvp-dest mono">→{d.topos1}</span>}
+                  <span className="lvp-why">{d.dest_remaining_m != null ? (ko(lang) ? `잔여 ${Math.round(d.dest_remaining_m)}m` : `${Math.round(d.dest_remaining_m)}m left`) : (ko(lang) ? "목적지 학습 중" : "dest learning")}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="lvp-note">{ko(lang) ? "곧유휴 = 적재 TT가 마지막 핸드오버 단계 + 크레인 관여(QC PLC / RTG 같은 bay). 스왑 가능한 공차 = 작업을 향해 공차 주행 중이나 아직 미상차 → 더 가까운 작업으로 재매칭(스왑) 대상." : "Soon-idle = loaded TT at its final handover (QC PLC / RTG same bay). Swappable empty = empty-traveling toward a job but not yet loaded → re-match (swap) candidate."}</div>
+      </div>
+    </section>
+  );
+}
+
 export default function TtPage({ lang }: { lang: Lang }) {
   return (
     <div className="content tt-page">
+      <LiveDispatchPool lang={lang} />
       <QcSequence lang={lang} />
       <div className="grid tt-two">
         <VehiclePool lang={lang} />

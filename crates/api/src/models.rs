@@ -55,6 +55,39 @@ pub struct TrendResponse {
     pub points: Vec<TrendPoint>,
 }
 
+// ---- KPI history matrix (by day / week / month) ----
+
+#[derive(Serialize)]
+pub struct HistoryColumn {
+    pub key: String,
+    pub name_en: String,
+    pub name_ko: String,
+    pub unit: String,
+    pub direction: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct HistoryCell {
+    pub value: Option<f64>,
+    pub sample_n: Option<i64>,
+}
+
+#[derive(Serialize)]
+pub struct HistoryBucket {
+    pub bucket: String,     // ISO date: day=that day, week=Monday, month=1st of month
+    pub label_from: String, // inclusive range covered
+    pub label_to: String,
+    pub is_provisional: bool,
+    pub cells: std::collections::HashMap<String, HistoryCell>, // keyed by KPI key
+}
+
+#[derive(Serialize)]
+pub struct HistoryResponse {
+    pub gran: String,
+    pub kpis: Vec<HistoryColumn>,
+    pub buckets: Vec<HistoryBucket>, // newest-first
+}
+
 #[derive(Serialize)]
 pub struct QcRow {
     pub qc: String,

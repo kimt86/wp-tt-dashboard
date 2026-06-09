@@ -18,6 +18,10 @@ export type SelVeh = {
   container2?: string;
   cur_loc?: string;
   topos1?: string;
+  arrival?: string;
+  dispatch?: "idle" | "empty_travel" | "delivering" | "soon_idle" | "wait_rtg";
+  dispatch_reason?: string;
+  nearest_rtg_m?: number;
   fuel?: number;
   accuracy?: number;
   userid?: string;
@@ -34,6 +38,15 @@ export type SelVeh = {
     tpos?: number;
     age_s: number;
   };
+};
+
+// dispatch state → label + colors (matches the live-map rings)
+const DSP: Record<string, { ko: string; en: string; color: string; bg: string }> = {
+  idle: { ko: "유휴 (배차 가능)", en: "Idle (available)", color: "#16a34a", bg: "rgba(34,197,94,0.12)" },
+  soon_idle: { ko: "곧 유휴", en: "Soon idle", color: "#d97706", bg: "rgba(245,158,11,0.14)" },
+  wait_rtg: { ko: "도착 · RTG 대기", en: "Arrived · waiting RTG", color: "#dc2626", bg: "rgba(239,68,68,0.12)" },
+  delivering: { ko: "적재 이동 중", en: "Delivering", color: "#475569", bg: "rgba(100,116,139,0.12)" },
+  empty_travel: { ko: "공차 주행 중", en: "Empty traveling", color: "#475569", bg: "rgba(100,116,139,0.12)" },
 };
 
 const EQUIP_KO: Record<string, string> = { TT: "야드트럭", RTG: "야드크레인", C: "안벽크레인", TC: "트랜스퍼크레인" };
@@ -65,6 +78,7 @@ export function LiveVehicleDetail({ v, lang, onClose }: { v: SelVeh; lang: Lang;
   const ko = lang === "ko";
   const st = stateOf(v.speed, v.engine);
   const hasWork = v.jobtype || v.vslname || v.container1 || v.container2 || v.cur_loc || v.topos1;
+  const dsp = v.dispatch ? DSP[v.dispatch] : null;
 
   return (
     <aside className="lvd-root">
@@ -75,6 +89,11 @@ export function LiveVehicleDetail({ v, lang, onClose }: { v: SelVeh; lang: Lang;
           <button className="lvd-close" onClick={onClose} aria-label={ko ? "닫기" : "Close"} title={ko ? "닫기" : "Close"}>×</button>
         </div>
         <div className="lvd-state" style={{ color: ST_COLOR[st] }}>● {ko ? ST_TXT[st].ko : ST_TXT[st].en}</div>
+        {dsp && (
+          <div className="lvd-dispatch" style={{ color: dsp.color, borderColor: dsp.color, background: dsp.bg }}>
+            {ko ? dsp.ko : dsp.en}{v.dispatch_reason ? <span className="lvd-dsp-why"> · {v.dispatch_reason}</span> : null}
+          </div>
+        )}
         <div className="lvd-rel mono">{relTime(v.age_s, ko)}</div>
       </header>
 

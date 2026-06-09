@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WP-TT 지식센터 · Knowledge Center</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0f1d; --bg2:#0e1525; --surface:#131b2e; --surface2:#1a2438; --surface3:#222d44;
+    --border:#2a3654; --border2:#3a4768; --text:#e2e8f0; --dim:#94a3b8; --mute:#64748b;
+    --brand:#60a5fa; --brand2:#3b82f6; --g1:#1e3a8a; --g2:#1e40af;
+    --r:12px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Inter','Malgun Gothic',sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;min-height:100vh}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 26px}
+  /* hero */
+  header.hero{background:linear-gradient(135deg,#001b44,#0e2a63);border-bottom:1px solid var(--border)}
+  .hero-in{max-width:1080px;margin:0 auto;padding:42px 26px 34px}
+  .hb{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+  .hb .logo{font-family:'Manrope';font-weight:800;font-size:17px;letter-spacing:-.3px;color:#fff}
+  .hb .logo .accent{color:var(--brand)}
+  .hb .div{width:1px;height:20px;background:rgba(255,255,255,.25)}
+  .hb .sub{font-size:12px;color:#9ec5ff;font-weight:600;letter-spacing:.1em;text-transform:uppercase}
+  .hero h1{font-family:'Manrope';font-weight:800;font-size:34px;letter-spacing:-.03em;color:#fff;line-height:1.15}
+  .hero p{color:#cdddf6;font-size:15px;font-weight:300;margin-top:10px;max-width:640px}
+  .hero .meta{margin-top:16px;font-size:12px;color:#9ec5ff}
+  .search{margin-top:22px;position:relative;max-width:480px}
+  .search input{width:100%;padding:11px 14px 11px 38px;border-radius:999px;border:1px solid var(--border2);
+    background:rgba(10,15,29,.6);color:var(--text);font-size:14px;font-family:inherit;outline:none}
+  .search input:focus{border-color:var(--brand)}
+  .search .ic{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--mute)}
+  main{padding:30px 0 80px}
+  .cat{margin-bottom:30px}
+  .cat-h{display:flex;align-items:center;gap:9px;font-family:'Manrope';font-weight:800;font-size:15px;color:var(--text);margin:6px 2px 14px}
+  .cat-h .bar{width:4px;height:16px;border-radius:2px;background:var(--brand)}
+  .cat-h .cnt{font-size:11px;color:var(--mute);font-weight:600;background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:1px 9px}
+  .docs{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+  @media(max-width:760px){.docs{grid-template-columns:1fr}.hero h1{font-size:27px}}
+  a.doc{display:block;text-decoration:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+    padding:18px 20px;transition:border-color .15s,transform .12s,background .15s;position:relative;overflow:hidden}
+  a.doc:hover{border-color:var(--brand);background:var(--surface2);transform:translateY(-2px)}
+  a.doc .dt{display:flex;align-items:flex-start;gap:11px}
+  a.doc .ico{flex:none;width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,var(--g1),var(--g2));color:#fff}
+  a.doc .ico svg{width:20px;height:20px}
+  a.doc h3{font-family:'Manrope';font-weight:700;font-size:15.5px;color:var(--text);line-height:1.3}
+  a.doc .desc{font-size:12.8px;color:var(--dim);margin-top:7px;line-height:1.6}
+  a.doc .foot{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:11px;color:var(--mute);font-family:'JetBrains Mono',monospace}
+  a.doc .tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:10px}
+  a.doc .tag{font-size:10px;font-weight:700;color:var(--brand);background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.3);border-radius:999px;padding:1px 8px}
+  a.doc.flag{border-left:3px solid var(--brand)}
+  a.doc .new{position:absolute;top:12px;right:12px;font-size:9px;font-weight:800;letter-spacing:.05em;color:#001b44;background:var(--brand);border-radius:999px;padding:2px 8px}
+  .empty{display:none;color:var(--mute);text-align:center;padding:40px;font-size:14px}
+  footer{border-top:1px solid var(--border);padding:22px 0;font-size:12px;color:var(--mute);text-align:center}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-in">
+    <div class="hb"><span class="logo">CLT <span class="accent">WP·TT</span></span><span class="div"></span><span class="sub">Knowledge Center</span></div>
+    <h1>WP-TT 지식센터</h1>
+    <p>Westports TT 배차·KPI 프로젝트의 연구 보고서와 데이터 레퍼런스 모음. 내부 공유용.</p>
+    <div class="meta">CLT Digital · 갱신 2026-06-09 · 내부(Tailscale) 전용</div>
+    <div class="search"><span class="ic">🔍</span><input id="q" type="text" placeholder="문서 검색 (제목·설명·태그)…" oninput="filt()"></div>
+  </div>
+</header>
+
+<main class="wrap" id="list">
+
+  <!-- 데이터 레퍼런스 -->
+  <div class="cat" data-cat>
+    <div class="cat-h"><span class="bar"></span>데이터 레퍼런스 <span class="cnt">1</span></div>
+    <div class="docs">
+      <a class="doc flag" href="./tos-db-reference-ko.html" data-doc data-s="tos db 종합 레퍼런스 테이블 컬럼 보존 코드 websocket kpi oracle 데이터 reference schema retention">
+        <span class="new">NEW</span>
+        <div class="dt">
+          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></span>
+          <div><h3>TOS DB 종합 레퍼런스</h3>
+            <div class="desc">TOS Oracle·websocket 전체 — 테이블·컬럼 설명, 보존 기간, 코드 사전, 실시간 필드, 7개 KPI, 서빙 모델, 함정까지 총망라한 단일 진실 소스.</div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag">TOS DB</span><span class="tag">스키마</span><span class="tag">보존</span><span class="tag">websocket</span><span class="tag">KPI</span></div>
+        <div class="foot">2026-06-09 · 레퍼런스</div>
+      </a>
+    </div>
+  </div>
+
+  <!-- TT 배차 연구 -->
+  <div class="cat" data-cat>
+    <div class="cat-h"><span class="bar"></span>TT 배차 연구 <span class="cnt">1</span></div>
+    <div class="docs">
+      <a class="doc" href="./tt-prediction-research-ko.html" data-doc data-s="tt 배차 2단계 예측 모형 연구 학습 데이터 곧 유휴 스왑 prediction training 이동시간 etw rtg 핸드오버">
+        <div class="dt">
+          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></span>
+          <div><h3>TT 배차 2단계 예측 모형 연구</h3>
+            <div class="desc">무엇을 학습하고 어떤 학습데이터를 가공할지 — 이동시간·QC ETW·블록 핸드오버 예측, "곧 유휴"·스왑 가능 공차 판별, 라벨 생성 파이프라인까지 실증 포함.</div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag">예측</span><span class="tag">학습데이터</span><span class="tag">곧유휴</span><span class="tag">실증</span></div>
+        <div class="foot">2026-06-08 · 연구 보고서</div>
+      </a>
+    </div>
+  </div>
+
+  <!-- 고객 세션 -->
+  <div class="cat" data-cat>
+    <div class="cat-h"><span class="bar"></span>고객 세션 <span class="cnt">1</span></div>
+    <div class="docs">
+      <a class="doc" href="./tt-assignment-session-ko.html" data-doc data-s="tt 배차 westports 고객 세션 poc kpi 헝가리안 전역 매칭 customer session 방법론 일정">
+        <div class="dt">
+          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg></span>
+          <div><h3>스마트 TT 배차 — Westports 세션</h3>
+            <div class="desc">현행 TOS 로직 vs AI 전역 매칭, PoC 방법론(2단계 도입·UAT), KPI·효과 측정 방법을 담은 고객 발표 자료.</div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag">PoC</span><span class="tag">방법론</span><span class="tag">KPI</span><span class="tag">일정</span></div>
+        <div class="foot">2026-06-08 · 발표 자료</div>
+      </a>
+    </div>
+  </div>
+
+  <div class="empty" id="empty">검색 결과가 없습니다.</div>
+</main>
+
+<footer>CLT Port Group · Digital Team — WP-TT Knowledge Center · 내부(Tailscale) 공유용 · 새 문서는 <span style="font-family:'JetBrains Mono',monospace">kc/</span>에 HTML 추가 + 카드 한 장</footer>
+
+<script>
+function filt(){
+  var q=document.getElementById('q').value.trim().toLowerCase();
+  var docs=document.querySelectorAll('[data-doc]'); var any=false;
+  docs.forEach(function(d){
+    var hit=!q||(d.getAttribute('data-s')+' '+d.textContent).toLowerCase().indexOf(q)>=0;
+    d.style.display=hit?'':'none'; if(hit)any=true;
+  });
+  // hide empty categories
+  document.querySelectorAll('[data-cat]').forEach(function(c){
+    var vis=c.querySelectorAll('[data-doc]:not([style*="display: none"])').length;
+    c.style.display=vis?'':'none';
+  });
+  document.getElementById('empty').style.display=any?'none':'block';
+}
+</script>
+</body>
+</html>

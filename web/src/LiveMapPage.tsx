@@ -16,19 +16,34 @@ type Device = { id: string; cls: string; pts: Pt[] };
 type Replay = { meta: { window_s: number; center: [number, number]; n_devices: number }; devices: Device[] };
 
 // live feed from /api/livemap/positions (GPS via the SSH tunnel)
-type LiveDev = { id: string; cls: string; lat: number; lon: number; speed: number; engine: number; age_s: number };
-type LiveSnap = { source: string; connected: boolean; count: number; as_of: string | null; devices: LiveDev[] };
+type Dispatch = "idle" | "empty_travel" | "delivering" | "soon_idle" | "wait_rtg";
+type LiveDev = { id: string; cls: string; lat: number; lon: number; speed: number; engine: number; age_s: number; dispatch?: Dispatch; jobtype?: string; topos1?: string };
+type LiveSnap = { source: string; connected: boolean; count: number; as_of: string | null; dispatch_counts?: Record<string, number>; devices: LiveDev[] };
 
-function equip(cls: string): "TT" | "RTG" | "QC" | "ETC" {
+// dispatch-state highlight on the map (TT pool building)
+// dispatch pools — filter the map by vehicle-pool type (TT only)
+const DISPATCH_POOLS: { key: Dispatch; ko: string; en: string; color: string }[] = [
+  { key: "idle", ko: "유휴", en: "Idle", color: "#22c55e" },
+  { key: "soon_idle", ko: "곧 유휴", en: "Soon", color: "#f59e0b" },
+  { key: "delivering", ko: "적재이동", en: "Deliver", color: "#38bdf8" },
+  { key: "wait_rtg", ko: "RTG대기", en: "Wait RTG", color: "#ef4444" },
+  { key: "empty_travel", ko: "공차 주행 중", en: "Empty traveling", color: "#94a3b8" },
+];
+
+type EquipKey = "TT" | "RTG" | "QC" | "ETC";
+function equip(cls: string): EquipKey {
   if (cls === "TT") return "TT";
   if (cls === "RTG") return "RTG";
   if (cls === "C") return "QC";
   return "ETC";
 }
-const EQUIP_TABS: { key: "ALL" | "TT" | "RTG" | "QC" | "ETC"; ko: string; en: string }[] = [
-  { key: "ALL", ko: "전체", en: "All" }, { key: "TT", ko: "야드트럭", en: "TT" },
-  { key: "RTG", ko: "야드크레인", en: "RTG" }, { key: "QC", ko: "안벽크레인", en: "QC" }, { key: "ETC", ko: "기타", en: "Other" },
+const EQUIP_TABS: { key: EquipKey; ko: string; en: string }[] = [
+  { key: "TT", ko: "야드트럭", en: "TT" },
+  { key: "RTG", ko: "야드크레인", en: "RTG" },
+  { key: "QC", ko: "안벽크레인", en: "QC" },
+  { key: "ETC", ko: "기타", en: "Other" },
 ];
+const ALL_EQUIP: EquipKey[] = ["TT", "RTG", "QC", "ETC"];
 
 function stateOf(spd: number, eng: number): "moving" | "idle" | "off" {
   if (spd > 0) return "moving";
@@ -169,14 +184,17 @@ export default function LiveMapPage({ lang }: { lang: Lang }) {
   const linksLoaded = useRef(false);
   const [ready, setReady] = useState(false);
 
-  const [equipFilter, setEquipFilter] = useState<"ALL" | "TT" | "RTG" | "QC" | "ETC">("ALL");
+  const [equipSet, setEquipSet] = useState<Set<EquipKey>>(() => new Set(ALL_EQUIP)); // multi-select
+  const [equipCounts, setEquipCounts] = useState<Record<string, number>>({});
   const [stateFilter, setStateFilter] = useState<string | null>(null);
+  const [dispatchFilter, setDispatchFilter] = useState<Dispatch | null>(null);
   const [toggles, setToggles] = useState<Toggles>(DEFAULT_TOGGLES);
   const [panelOpen, setPanelOpen] = useState(true);
   const [counts, setCounts] = useState({ total: 0, moving: 0, idle: 0, off: 0 });
   const [tpos, setTpos] = useState(0);
-  const filterRef = useRef({ equip: equipFilter, state: stateFilter });
-  filterRef.current = { equip: equipFilter, state: stateFilter };
+  const filterRef = useRef<{ equip: Set<EquipKey>; state: string | null; dispatch: Dispatch | null }>({ equip: equipSet, state: stateFilter, dispatch: null });
+  filterRef.current = { equip: equipSet, state: stateFilter, dispatch: dispatchFilter };
+  const toggleEquip = (k: EquipKey) => setEquipSet((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
   // live feed: poll /api/livemap/positions; fall back to replay when it's empty/down.
   const liveRef = useRef<LiveSnap | null>(null);
@@ -184,6 +202,7 @@ export default function LiveMapPage({ lang }: { lang: Lang }) {
   const useLiveRef = useRef(useLive);
   useLiveRef.current = useLive;
   const [liveInfo, setLiveInfo] = useState<{ connected: boolean; count: number; asOf: string | null }>({ connected: false, count: 0, asOf: null });
+  const [dispatchCounts, setDispatchCounts] = useState<Record<string, number>>({});
 
   // clicked-vehicle detail panel
   const [selDev, setSelDev] = useState<SelVeh | null>(null);
@@ -290,6 +309,10 @@ export default function LiveMapPage({ lang }: { lang: Lang }) {
         if (!alive) return;
         liveRef.current = j;
         setLiveInfo({ connected: j.connected, count: j.count, asOf: j.as_of });
+        setDispatchCounts(j.dispatch_counts ?? {});
+        const ec: Record<string, number> = { TT: 0, RTG: 0, QC: 0, ETC: 0 };
+        for (const d of j.devices) ec[equip(d.cls)]++;
+        setEquipCounts(ec);
         // keep the open detail panel fresh
         if (selRef.current) {
           const d = j.devices.find((x) => x.id === selRef.current);
@@ -332,7 +355,7 @@ export default function LiveMapPage({ lang }: { lang: Lang }) {
     const tick = () => {
       const map = mapRef.current;
       if (map && map.getSource("vehicles")) {
-        const { equip: ef, state: sf } = filterRef.current;
+        const { equip: ef, state: sf, dispatch: df } = filterRef.current;
         const feats: GeoJSON.Feature[] = [];
         let moving = 0, idle = 0, off = 0;
         const live = liveRef.current;
@@ -342,9 +365,11 @@ export default function LiveMapPage({ lang }: { lang: Lang }) {
           for (const d of live!.devices) {
             const st = stateOf(d.speed, d.engine);
             if (st === "moving") moving++; else if (st === "idle") idle++; else off++;
-            if (ef !== "ALL" && equip(d.cls) !== ef) continue;
+            const eq = equip(d.cls);
+            if (!ef.has(eq)) continue; // equipment multi-select
+            if (df && eq === "TT" && d.dispatch !== df) continue; // pool filter — TT only
             if (sf && st !== sf) continue;
-            feats.push({ type: "Feature", geometry: { type: "Point", coordinates: [d.lon, d.lat] }, properties: { id: d.id, state: st, eq: equip(d.cls), speed: d.speed } });
+            feats.push({ type: "Feature", geometry: { type: "Point", coordinates: [d.lon, d.lat] }, properties: { id: d.id, state: st, eq, speed: d.speed, dispatch: d.dispatch ?? "" } });
           }
         } else {
           // replay: interpolate along captured tracks on a real-time loop.
@@ -357,7 +382,7 @@ export default function LiveMapPage({ lang }: { lang: Lang }) {
               const p = posAt(d, t);
               if (!p) continue;
               if (p.state === "moving") moving++; else if (p.state === "idle") idle++; else off++;
-              if (ef !== "ALL" && equip(d.cls) !== ef) continue;
+              if (!ef.has(equip(d.cls))) continue;
               if (sf && p.state !== sf) continue;
               feats.push({ type: "Feature", geometry: { type: "Point", coordinates: [p.lon, p.lat] }, properties: { id: d.id, state: p.state, eq: equip(d.cls), speed: p.speed } });
             }
@@ -386,12 +411,19 @@ export default function LiveMapPage({ lang }: { lang: Lang }) {
 
   return (
     <div className="map-page">
-      {/* top: equipment display filter (distinct teal accent) */}
+      {/* top: equipment multi-select filter (teal accent) with per-type counts */}
       <div className="map-top">
         <div className="map-equip">
+          <button
+            className={`meq all${equipSet.size === ALL_EQUIP.length ? " active" : ""}`}
+            onClick={() => setEquipSet(new Set(ALL_EQUIP))}
+            title={ko ? "전체 표시" : "Show all"}
+          >
+            {ko ? "전체" : "All"}<span className="meq-n">{liveActive ? liveInfo.count : ndev}</span>
+          </button>
           {EQUIP_TABS.map((e) => (
-            <button key={e.key} className={`meq${equipFilter === e.key ? " active" : ""}`} onClick={() => setEquipFilter(e.key)}>
-              <EqGlyph eq={e.key} />{ko ? e.ko : e.en}
+            <button key={e.key} className={`meq${equipSet.has(e.key) ? " active" : ""}`} onClick={() => toggleEquip(e.key)} title={ko ? `${e.ko} 표시 전환` : `toggle ${e.en}`}>
+              <EqGlyph eq={e.key} />{ko ? e.ko : e.en}<span className="meq-n">{equipCounts[e.key] ?? 0}</span>
             </button>
           ))}
         </div>
@@ -411,6 +443,26 @@ export default function LiveMapPage({ lang }: { lang: Lang }) {
           <span className="map-clock mono">▶ t+{tpos}s / {win}s</span>
         )}
       </div>
+
+      {/* TT dispatch-pool filter — narrows TTs only (other equipment unaffected) */}
+      {liveActive && equipSet.has("TT") && (
+        <div className="map-dpf">
+          <span className="map-dpf-lbl">{ko ? "TT 풀" : "TT pool"}</span>
+          <button className={`dpf${dispatchFilter === null ? " active" : ""}`} onClick={() => setDispatchFilter(null)}>
+            {ko ? "전체" : "All"}<span className="dpf-n">{equipCounts.TT ?? 0}</span>
+          </button>
+          {DISPATCH_POOLS.map((pl) => (
+            <button
+              key={pl.key}
+              className={`dpf${dispatchFilter === pl.key ? " active" : ""}`}
+              style={dispatchFilter === pl.key ? { borderColor: pl.color, background: `${pl.color}22`, color: pl.color } : undefined}
+              onClick={() => setDispatchFilter(dispatchFilter === pl.key ? null : pl.key)}
+            >
+              <i style={{ background: pl.color }} />{ko ? pl.ko : pl.en}<span className="dpf-n">{dispatchCounts[pl.key] ?? 0}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="map-canvas" ref={mapEl} />
 

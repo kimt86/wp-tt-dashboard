@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TOS DB 종합 레퍼런스 — wp-tt 데이터 원천 · 테이블 · 보존 · 코드 (2026-06)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --primary:#001b44; --primary-2:#002f6c; --accent:#1e6feb;
+    --ink:#16202c; --ink-2:#3c4654; --muted:#6b7787; --line:#e3e8ef; --line-2:#cdd5e0;
+    --bg:#eef1f5; --card:#ffffff; --soft:#f4f6f9; --soft-2:#eef2f7;
+    --good:#15803d; --good-bg:#dcfce7; --warn:#b45309; --warn-bg:#fef3c7; --bad:#b91c1c; --bad-bg:#fee2e2;
+    --tos:#3730a3; --ws:#86198f; --pg:#0f766e;
+    --r:10px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Inter','Malgun Gothic','Apple SD Gothic Neo',sans-serif;color:var(--ink);background:var(--bg);line-height:1.7;-webkit-font-smoothing:antialiased}
+  .layout{display:grid;grid-template-columns:240px 1fr;gap:34px;max-width:1340px;margin:0 auto;padding:0 28px}
+  nav.toc{position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;padding:24px 8px 24px 0;font-size:13px}
+  nav.toc .brand{font-family:'Manrope';font-weight:800;font-size:14px;color:var(--primary);letter-spacing:-.02em}
+  nav.toc .brandsub{font-size:11px;color:var(--muted);margin:2px 0 14px}
+  nav.toc a{display:block;color:var(--ink-2);text-decoration:none;padding:5px 10px;border-radius:7px;border-left:2px solid transparent;margin-bottom:1px}
+  nav.toc a:hover{background:var(--soft-2);color:var(--primary)}
+  nav.toc a.sec{font-weight:700;color:var(--primary);margin-top:11px}
+  nav.toc a small{display:block;font-size:10.5px;color:var(--muted);font-weight:400}
+  nav.toc .home{font-size:11px;color:var(--accent);text-decoration:none;display:inline-block;margin-bottom:10px}
+  main{padding:34px 0 120px;min-width:0}
+  .hero{background:linear-gradient(135deg,#001b44,#013a86);color:#fff;border-radius:16px;padding:34px 40px;margin-bottom:26px;box-shadow:0 10px 30px rgba(0,27,68,.18)}
+  .hero .tag{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#9ec5ff;font-weight:600}
+  .hero h1{font-family:'Manrope';font-weight:800;font-size:30px;letter-spacing:-.03em;line-height:1.2;margin:9px 0 10px}
+  .hero p{color:#dbe7fb;font-size:14.5px;font-weight:300;max-width:780px}
+  .hero .meta{margin-top:15px;font-size:12px;color:#a9c4ee}
+  .hero .meta b{color:#fff;font-weight:600}
+  section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:28px 32px;margin-bottom:20px;scroll-margin-top:16px}
+  .kicker{font-size:11.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--accent)}
+  h2{font-family:'Manrope';font-weight:800;font-size:23px;color:var(--primary);letter-spacing:-.02em;margin:6px 0 14px;padding-bottom:11px;border-bottom:2px solid var(--soft-2)}
+  h3{font-family:'Manrope';font-weight:700;font-size:16.5px;color:var(--primary-2);margin:22px 0 8px}
+  h3 .mono{font-size:14px}
+  h4{font-weight:700;font-size:13.5px;color:var(--ink);margin:15px 0 6px}
+  p{font-size:14px;color:var(--ink-2);margin-bottom:10px}
+  ul,ol{padding-left:20px;margin-bottom:10px}
+  li{font-size:14px;color:var(--ink-2);margin-bottom:4px}
+  strong{color:var(--ink);font-weight:600}
+  code,.mono{font-family:'JetBrains Mono',monospace;font-size:.86em;background:var(--soft-2);padding:1px 6px;border-radius:5px;color:#0b3b8c}
+  .note{border-left:3px solid var(--accent);background:var(--soft);border-radius:0 10px 10px 0;padding:12px 16px;margin:14px 0}
+  .note.good{border-left-color:var(--good);background:var(--good-bg)}
+  .note.warn{border-left-color:var(--warn);background:var(--warn-bg)}
+  .note.bad{border-left-color:var(--bad);background:var(--bad-bg)}
+  .note.key{border-left-color:var(--primary-2);background:#eef4ff}
+  .note p{margin:0;font-size:13.5px}
+  .note .h{font-weight:700;color:var(--ink);display:block;margin-bottom:3px}
+  table{width:100%;border-collapse:separate;border-spacing:0;margin:13px 0;font-size:12.5px}
+  th{font-family:'Manrope';font-weight:700;font-size:11.5px;background:var(--primary);color:#fff;text-align:left;padding:8px 11px}
+  th:first-child{border-radius:9px 0 0 0}th:last-child{border-radius:0 9px 0 0}
+  td{padding:7px 11px;border-bottom:1px solid var(--line);color:var(--ink-2);vertical-align:top}
+  tr:nth-child(even) td{background:var(--soft)}
+  tbody tr:hover td{background:#eef4ff}
+  td .mono{font-size:11px}
+  .t-col th{background:var(--tos)} .t-col.ws th{background:var(--ws)} .t-col.pg th{background:var(--pg)}
+  .b{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:700;white-space:nowrap}
+  .b-tos{background:#e0e7ff;color:#3730a3}.b-ws{background:#fae8ff;color:#86198f}.b-pg{background:#ccfbf1;color:#0f766e}
+  .b-ld{background:#dcfce7;color:#15803d}.b-ds{background:#dbeafe;color:#1e40af}.b-key{background:#fef3c7;color:#92400e}
+  pre{background:#0b1727;color:#d7e3f4;border-radius:10px;padding:13px 15px;overflow-x:auto;font-family:'JetBrains Mono',monospace;font-size:11.5px;line-height:1.6;margin:11px 0}
+  pre .k{color:#7cc4ff}pre .s{color:#9ae6b4}pre .n{color:#fbbf72}pre .c{color:#64748b}
+  .grid{display:grid;gap:13px;margin:13px 0}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
+  .card{background:var(--soft);border:1px solid var(--line);border-radius:11px;padding:14px 16px}
+  .card h4{margin:0 0 5px;color:var(--primary-2)}.card p{font-size:12.5px;margin:0}
+  .card .big{font-family:'Manrope';font-weight:800;font-size:24px;color:var(--primary);letter-spacing:-.02em}
+  .card .unit{font-size:12px;color:var(--muted);font-weight:600}
+  .pill-row{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+  hr.soft{border:0;border-top:1px solid var(--line);margin:18px 0}
+  .foot{font-size:12px;color:var(--muted);text-align:center;padding:18px}
+  @media(max-width:920px){.layout{grid-template-columns:1fr}nav.toc{display:none}.g3,.g2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav class="toc">
+  <a class="home" href="./index.html">← 지식센터</a>
+  <div class="brand">TOS DB 종합 레퍼런스</div>
+  <div class="brandsub">wp-tt · CLT Digital · 2026-06</div>
+  <a class="sec" href="#overview">0 · 개요·데이터 아키텍처</a>
+  <a href="#sources">1 · 두 원천 한눈에</a>
+  <a href="#retention">2 · 보존 기간 (핵심)</a>
+  <a class="sec" href="#tos">3 · TOS Oracle 테이블</a>
+  <a href="#job">3.1 JOB_ORDER_HISTORY</a>
+  <a href="#mch">3.2 MCH_OPERATION</a>
+  <a href="#vss">3.3 VSS_STATISTICS</a>
+  <a href="#wt">3.4 작업시간·장비 마스터</a>
+  <a class="sec" href="#codes">4 · 코드·의미 사전</a>
+  <a href="#codes">4.1 작업종류 / 장비</a>
+  <a href="#pos">4.2 위치·블록·POINT_TYPE</a>
+  <a class="sec" href="#ws">5 · 실시간 websocket</a>
+  <a href="#ws-gps">5.1 wpt_gps (gps_update)</a>
+  <a href="#ws-plc">5.2 ctab (plc_data)</a>
+  <a href="#ws-net">5.3 주기·핸드셰이크·터널</a>
+  <a class="sec" href="#kpi">6 · 7개 KPI 정의</a>
+  <a href="#serving">7 · 서빙 모델 (Postgres)</a>
+  <a href="#gotchas">8 · 함정·운영 노트</a>
+</nav>
+
+<main>
+<div class="hero">
+  <div class="tag">WP-TT · Knowledge Center · TOS DB Reference</div>
+  <h1>TOS DB 종합 레퍼런스</h1>
+  <p>Westports TOS(Oracle)와 실시간 websocket — wp-tt 대시보드/연구가 쓰는 모든 데이터 원천의 <b>테이블·컬럼·보존특성·코드·필드</b>를 한 문서에 총망라. "어디에서 무엇이 나오고, 얼마나 오래 남고, 무엇을 조심해야 하는가"의 단일 진실 소스.</p>
+  <div class="meta">기준 <b>2026-06-09</b> · 원천 = TOS Oracle(tos-db-research) + websocket(wpt_gps/ctab) · 서빙 = PostgreSQL 3-tier · 절대제약 <b>prod Oracle은 추출기만 접근</b></div>
+</div>
+
+<!-- 0 -->
+<section id="overview">
+  <div class="kicker">Part 0</div>
+  <h2>개요 · 데이터 아키텍처</h2>
+  <p>데이터는 두 원천에서 나와 <strong>Postgres 3-tier</strong>로 흐릅니다. 대시보드/API는 <strong>Postgres만</strong> 읽고, <strong>prod Oracle은 추출기(extractor) 크레이트만</strong> 건드립니다(읽기전용·인덱스레인지·<span class="mono">FETCH FIRST</span>·<span class="mono">NO_PARALLEL</span>, 승인된 <span class="mono">remote-toolbox-sql</span> 경유).</p>
+  <pre><span class="c">TOS Oracle  ──(추출기: 일/교대 틱, 캡·인덱스레인지)──▶  Postgres L0 raw_*  ──▶ L1 kpi_daily ──▶ L2 baseline</span>
+<span class="c">websocket   ──(SSH 터널 → API 인제스트, ctab/wpt_gps)──▶ 메모리(라이브맵·배차)  ※DB 미적재</span>
+<span class="c">대시보드/API ──읽기──▶ Postgres only          ※Oracle 직접 접근 절대 금지</span></pre>
+  <div class="note key"><p><span class="h">왜 이렇게</span>source Oracle은 <strong>운영 라이브</strong> DB라 부하를 최소화해야 합니다. 추출기는 정해진 시각(야간 01:30 MYT 권위·교대 틱 경량)에만, 날짜 인덱스로 좁혀, 출력만 <span class="mono">FETCH FIRST</span>로 잘라 가져옵니다. 한 번 가져온 날은 Postgres에 영구 누적 → 같은 과거 날짜를 다시 스캔하지 않습니다.</p></div>
+</section>
+
+<!-- 1 -->
+<section id="sources">
+  <div class="kicker">Part 1</div>
+  <h2>두 원천 한눈에</h2>
+  <div class="grid g2">
+    <div class="card" style="border-top:3px solid #3730a3"><h4><span class="b b-tos">TOS Oracle</span> tos-db-research</h4><p>완료된 작업의 권위적 기록. 컨테이너 이벤트·크레인 작업·항차 계획·장비 가동. 타임스탬프 <b>초</b> 단위. <b>보존 기간 제한</b>(§2). 스키마 <span class="mono">TOSADM.*</span>.</p></div>
+    <div class="card" style="border-top:3px solid #86198f"><h4><span class="b b-ws">websocket</span> 실시간 2 zone</h4><p>장비 ~450대의 GPS/PLC. <code>wpt_gps</code>(위치+미션) · <code>ctab</code>(크레인 PLC). 연속 관측. DB 미적재(메모리). 원천 IP는 WSL NAT라 <b>Azure 경유 SSH 터널</b>로만 수신.</p></div>
+  </div>
+  <table>
+    <tr><th style="width:120px">구분</th><th>TOS Oracle</th><th>websocket</th></tr>
+    <tr><td>성격</td><td>이벤트·결과(무슨 작업이 있었나)</td><td>연속 관측(공간·시간에서 어떻게)</td></tr>
+    <tr><td>시간 해상도</td><td>초 단위 timestamp</td><td>GPS 장비당 ~3s 불규칙 / PLC ~1s</td></tr>
+    <tr><td>접근</td><td>추출기만(remote-toolbox-sql)</td><td>API 인제스트(SSH 터널 127.0.0.1:9986)</td></tr>
+    <tr><td>저장</td><td>Postgres raw_*/kpi_*(영구 누적)</td><td>메모리(라이브 스냅샷)</td></tr>
+    <tr><td>깊이</td><td>보존 기간만(§2)</td><td>현재 순간만</td></tr>
+  </table>
+</section>
+
+<!-- 2 -->
+<section id="retention">
+  <div class="kicker">Part 2</div>
+  <h2>보존 기간 — 가장 중요한 특성</h2>
+  <p>TOS Oracle은 <strong>롤링(rolling) 보존</strong>이라 오래된 날짜가 자동 삭제됩니다. 이게 "과거 데이터를 얼마나 끌어올 수 있나"를 결정합니다.</p>
+  <table>
+    <tr><th style="width:230px">소스 테이블</th><th style="width:110px">보존</th><th>영향받는 KPI</th><th>실증</th></tr>
+    <tr><td><span class="mono">JOB_ORDER_HISTORY</span></td><td><span class="b b-key">약 15일</span></td><td>공차·공차비율·사이클·핸드오버대기(K_CRANE_Q)</td><td>raw_k_cycle이 정확히 ~15일 창에서 끊김</td></tr>
+    <tr><td><span class="mono">MCH_OPERATION</span> / <span class="mono">VSS_STATISTICS</span></td><td><span class="b b-key">≥ 35일</span></td><td>MPH·QC대기·가동률·항차 통계</td><td>MCH 기반 raw_*가 더 깊게 남음</td></tr>
+    <tr><td><span class="mono">YT_DIS_DT</span>/<span class="mono">ACTV_DT</span> (크레인대기 입력)</td><td>오래된 날 희소</td><td>K_CRANE_Q</td><td>오래된 날은 0행 → 0 산출</td></tr>
+  </table>
+  <div class="note bad"><p><span class="h">실무 결론 — 깊은 백필 불가</span>예: <strong>2026년 1월 데이터(약 160일 전)는 원천에 남아있지 않아 가져올 수 없습니다.</strong> 백필로 끌어올 수 있는 최대 깊이는 공차/사이클 <b>~15일</b>, MPH/QC대기/가동률 <b>~35일</b> 뿐. 그 이전(특히 1~4월)은 Oracle에서 이미 삭제됨. <strong>과거 깊이는 "추출을 시작한 시점"부터 앞으로만 영구 누적</strong>됩니다(현재 Postgres 보유 2026-05-01~). 빈 결과셋에 toolbox는 <span class="mono">{"result":"null"}</span> 반환(0행 처리).</p></div>
+</section>
+
+<!-- 3 -->
+<section id="tos">
+  <div class="kicker">Part 3</div>
+  <h2>TOS Oracle 테이블</h2>
+  <p>wp-tt가 실제로 읽는 핵심 테이블들. 컬럼은 추출 SQL(<span class="mono">crates/extractor/sql/*.sql</span>)에서 실제 사용하는 것 기준. 스키마는 <span class="mono">TOSADM</span>.</p>
+
+  <h3 id="job">3.1 <span class="mono">JOB_ORDER_HISTORY</span> — 컨테이너 작업 이력 <span class="b b-tos">컨테이너 단위 이벤트</span></h3>
+  <p>한 컨테이너 작업의 생애를 이벤트(transition) 단위로 기록. <strong>이동거리·사이클·크레인 큐 대기의 원천</strong>. 한 작업 = (CONTNO, POINT, SEQNO)로 식별, 여러 이벤트로 구성.</p>
+  <table class="t-col">
+    <tr><th style="width:200px">컬럼</th><th>의미 · 단위 · 예</th></tr>
+    <tr><td><span class="mono">JOB_HIST_DATE</span> / <span class="mono">JOB_HIST_TIME</span></td><td>이벤트 날짜(YYYYMMDD, <b>인덱스 술어</b>) / 시각(HH24MISS). 교대 분류·정렬에 사용.</td></tr>
+    <tr><td><span class="mono">JOB_HIST_JOBTYPE</span></td><td>작업 종류 — <span class="b b-ld">LD</span> 적하 · <span class="b b-ds">DS</span> 양하 · MO/MI 이적 · RH 재취급 · GI/GO 게이트 in/out 등(§4).</td></tr>
+    <tr><td><span class="mono">JOB_HIST_CONTNO</span></td><td>컨테이너 번호(ISO, 예 <span class="mono">EGSU2064058</span>). 작업 식별 키.</td></tr>
+    <tr><td><span class="mono">JOB_HIST_POINT</span> / <span class="mono">JOB_HIST_SEQNO</span></td><td>포인트 코드 / 시퀀스 번호. (CONTNO·POINT·SEQNO) = 한 작업.</td></tr>
+    <tr><td><span class="mono">JOB_HIST_VESSEL</span> / <span class="mono">JOB_HIST_VOYAGE</span></td><td>선박명 / 항차. 항차별 집계·맥락.</td></tr>
+    <tr><td><span class="mono">JOB_HIST_ARMGC</span></td><td>작업 크레인 ID. <b>주의:</b> probe 결과 RTG·ES·XXX(미배정)만 — <b>C##(안벽)은 없음</b>. 즉 야드측 크레인.</td></tr>
+    <tr><td><span class="mono">YT_DIS_DT</span> → <span class="mono">JOB_HIST_ACTV_DT</span></td><td>YT(TT) 하차 시각 → 크레인 활성 시각. 차이 = <b>크레인 큐 대기(K_CRANE_Q)</b> = <span class="mono">(ACTV_DT − YT_DIS_DT)·86400</span>초. 오래된 날 희소.</td></tr>
+    <tr><td><span class="mono">CRNT_PSN_IDX_NO1</span></td><td>현재 위치 인덱스 = 블록 ID.</td></tr>
+    <tr><td><span class="mono">LNDN_TRV_RNG</span> / <span class="mono">UN_LNDN_TRV_RNG</span></td><td><b>적재거리 / 공차거리</b>(미터, 0~5000 필터). 공차비율 = <span class="mono">Σ공차 / Σ(적재+공차)</span>.</td></tr>
+  </table>
+  <div class="note"><p>로드 <b>MEDIUM</b>(~240K행 인덱스 범위). 보존 <b>~15일</b>(§2). 추출 SQL: <span class="mono">e4_k_empty_decomposition</span>(공차), <span class="mono">e3b_k_cycle_refined_v2</span>(사이클), <span class="mono">c08/e5_k_crane_q</span>(큐 대기).</p></div>
+
+  <h3 id="mch">3.2 <span class="mono">MCH_OPERATION</span> — 크레인 작업 기록 <span class="b b-tos">move 단위</span></h3>
+  <p>크레인 move 1건 = 1행. <strong>QC 생산성(MPH)·QC 유휴(K_QC_Q)·크레인 가동률</strong>의 원천. JOB_ORDER_HISTORY보다 가볍고(LOW~MEDIUM) 깊게 보존(≥35일).</p>
+  <table class="t-col">
+    <tr><th style="width:200px">컬럼</th><th>의미 · 예</th></tr>
+    <tr><td><span class="mono">MCH_OPER_MACHNO</span></td><td>장비 번호. <span class="mono">^C[0-9]+$</span> = QC(안벽), RTG·M·Z 등(§4).</td></tr>
+    <tr><td><span class="mono">ST_DT</span></td><td>move 시작(YYYYMMDDHH24MISS, 앞 14자).</td></tr>
+    <tr><td><span class="mono">MCH_OPER_COMPDATE</span> + <span class="mono">MCH_OPER_COMPTIME</span></td><td>완료 날짜(YYYYMMDD) + 시각(HH24MISS). 인덱스 술어 = COMPDATE.</td></tr>
+    <tr><td><span class="mono">MCH_OPER_JOBTYPE</span></td><td>LD/DS 등. MPH는 LD/DS만 집계.</td></tr>
+    <tr><td><span class="mono">MCH_OPER_VESSEL</span> / <span class="mono">MCH_OPER_VOYAGE</span> / <span class="mono">MCH_OPER_CONTNO</span></td><td>선박 / 항차 / 컨테이너.</td></tr>
+    <tr><td><span class="mono">TRK_ID</span></td><td>이 move를 처리한 트럭(TT) ID — 항차당 distinct TT 수 집계.</td></tr>
+  </table>
+  <div class="note"><p>인터벌 병합(연속 move 간 짧은 갭)으로 크레인 가동 구간을 만들고, <b>병합 구간 사이의 갭 = QC 유휴(K_QC_Q)</b>. 추출 SQL: <span class="mono">c07_k_mph_realtime</span>, <span class="mono">f2_k_qc_q</span>, <span class="mono">e1c_k_util_crane_merged_intervals</span>.</p></div>
+
+  <h3 id="vss">3.3 <span class="mono">VSS_STATISTICS</span> — 항차 계획·실적 <span class="b b-tos">선박/항차 단위</span></h3>
+  <p>(선박, 항차)당 1행(최신 업데이트 우선). <strong>계획 물량·규격 혼합·공식 생산성</strong> — 진행률·맥락 피처. 30일 윈도우.</p>
+  <table class="t-col">
+    <tr><th style="width:200px">컬럼</th><th>의미</th></tr>
+    <tr><td><span class="mono">VSS_STT_VESSEL</span> / <span class="mono">VSS_STT_VOYAGE</span> / <span class="mono">VSS_STT_UP_DT</span></td><td>선박 / 항차 / 업데이트 시각.</td></tr>
+    <tr><td><span class="mono">VSS_STT_VAN</span> / <span class="mono">VSS_STT_MOVES</span> / <span class="mono">VSS_STT_TEU</span></td><td>계획 컨테이너 수 / 계획 move / TEU. (진행중 항차는 MOVES가 NULL인 경우 많음.)</td></tr>
+    <tr><td><span class="mono">VSS_STT_SIN_MOV</span> / <span class="mono">TWN_MOV</span> / <span class="mono">TND_MOV</span></td><td>단/트윈/탠덤 move 수(규격 혼합).</td></tr>
+    <tr><td><span class="mono">VSS_STT_GROSSTIME</span> / <span class="mono">NETTIME</span> / <span class="mono">ABERTHTIME</span></td><td>총시간 / 순시간 / 실접안시간(분).</td></tr>
+    <tr><td><span class="mono">VSS_STT_WORKQC</span></td><td>작업 QC 수.</td></tr>
+    <tr><td><span class="mono">VSS_STT_GQCR</span> / <span class="mono">NQCR</span></td><td>Gross / Net QC Rate(move/hr) = 공식 MPH(전체시간 / 유휴제외).</td></tr>
+    <tr><td><span class="mono">VSS_STT_GBP</span> / <span class="mono">NBP</span></td><td>Gross / Net Berth Productivity.</td></tr>
+  </table>
+  <div class="note"><p>로드 <b>TRIVIAL</b>(~41K, FTS). 추출 SQL: <span class="mono">voyage_plan</span>(계획 물량), <span class="mono">c06_k_mph_voyage</span>(공식 rate). 진행률 = moves/VAN(VAN 있을 때만, 약 1/11 항차).</p></div>
+
+  <h3 id="wt">3.4 작업시간·장비 마스터 <span class="b b-tos">가동률 입력</span></h3>
+  <table class="t-col">
+    <tr><th style="width:200px">테이블 · 컬럼</th><th>의미</th></tr>
+    <tr><td><span class="mono">MCH_WORKTIME</span>: MACHNO, START_DT, END_DT, STARTDATE/ENDDATE</td><td>TT(YT) 작업/로그인 세션. Postgres에서 병합(로그아웃 이상 플래그)해 가동률(K_UTIL_TT) 산출.</td></tr>
+    <tr><td><span class="mono">MCH_WORKSTOP</span>: MACHNO, START_DT, END_DT, STARTDATE/ENDDATE</td><td>TT 정지/휴식 구간. 가동시간에서 차감.</td></tr>
+    <tr><td><span class="mono">CDY_MACHINE</span>: CDY_MCHN_CODE, CDY_MCHN_TYPE</td><td>장비 마스터. TYPE='YT'(야드트럭)로 TT 필터, QC/YC 등.</td></tr>
+  </table>
+  <div class="note"><p>추출 SQL: <span class="mono">e3a_k_util_tt_merged</span>(YT 가동률, 세션-정지 병합). 로드 LOW(~10K).</p></div>
+</section>
+
+<!-- 4 -->
+<section id="codes">
+  <div class="kicker">Part 4</div>
+  <h2>코드 · 의미 사전</h2>
+
+  <h3>4.1 작업종류(jobtype) / 장비 프리픽스</h3>
+  <div class="grid g2">
+    <div class="card"><h4>작업종류 (JOBTYPE)</h4>
+      <p><span class="b b-ld">LD</span> 적하(yard→vessel) · <span class="b b-ds">DS</span> 양하(vessel→yard) · <b>MO/MI</b> 구내이적(out/in) · <b>RH</b> 재취급 · <b>GI/GO</b> 게이트 in/out · 그 외 AH·LC·GC 관측. 배차 핵심은 LD·DS·MO·MI.</p></div>
+    <div class="card"><h4>장비 프리픽스 (device id)</h4>
+      <p><b>TT</b> 야드트럭(프라임무버) · <b>RTG</b> 야드 갠트리크레인 · <b>C##</b> 안벽크레인(QC) · <b>M##</b> 모바일하버크레인 · <b>Z#</b> 스트래들 · <b>TC</b> 트랜스퍼 · <b>ES/RS</b> 엠티/리치 스태커 · CR·PPM 등.</p></div>
+  </div>
+  <div class="note warn"><p><span class="h">중요 — PLC를 주는 크레인</span>실시간 PLC(<code>ctab</code>)는 <strong>동적 크레인 C/M/Z만</strong> 송신. <strong>RTG(야드크레인)는 PLC 미수신</strong> → 양하 블록측 핸드오버는 GPS·근접도로만 추정(배차 연구 참조).</p></div>
+
+  <h3 id="pos">4.2 위치 · 블록 · POINT_TYPE</h3>
+  <p>위치는 여러 형태의 문자 코드로 표현됩니다.</p>
+  <table>
+    <tr><th style="width:170px">코드 형태</th><th>의미 · 예</th></tr>
+    <tr><td>블록 베이 <span class="mono">NN[A-Z]-bay</span></td><td>야드 블록의 베이. 예 <span class="mono">07F-06</span>(블록 07F, 베이 06), <span class="mono">01PW-0405</span>, <span class="mono">08K-1213</span>.</td></tr>
+    <tr><td>블록 라벨 <span class="mono">NN[A-Z](S|W)?</span></td><td>예 <span class="mono">01U</span>, <span class="mono">01YS</span>(S=짝), <span class="mono">12XW</span>(W=홀). 내부 ID 매핑: <span class="mono">01Y→Y_B01</span>, <span class="mono">01YS→Y_EB02</span>, <span class="mono">01YW→Y_EB01</span>.</td></tr>
+    <tr><td>크레인 <span class="mono">[CMZ][0-9]+</span></td><td>안벽/동적 크레인. <span class="mono">topos1</span>가 이 형태면 목적지가 크레인.</td></tr>
+    <tr><td>특수 <span class="mono">WHARF_*·CT*·FUEL_*</span></td><td>예 <span class="mono">WHARF_23_B</span>, <span class="mono">CT4_WORKSHOP</span>. 내부 매핑 없음 → 근접점 매칭.</td></tr>
+  </table>
+  <h4>POINT_TYPE 코드 (레이아웃 매칭)</h4>
+  <div class="pill-row">
+    <span class="b" style="background:#ffedd5;color:#9a3412">1 안벽작업(quay)</span>
+    <span class="b" style="background:#ccfbf1;color:#0f766e">2 블록 side</span>
+    <span class="b" style="background:#ccfbf1;color:#0f766e">3 블록 end</span>
+    <span class="b" style="background:#e2e8f0;color:#475569">4 buffer</span>
+    <span class="b" style="background:#dcfce7;color:#15803d">5 게이트 IN</span>
+    <span class="b" style="background:#fee2e2;color:#b91c1c">6 게이트 OUT</span>
+    <span class="b" style="background:#e2e8f0;color:#475569">7 battery</span>
+    <span class="b" style="background:#e2e8f0;color:#475569">10 handler · 11 pinning</span>
+    <span class="b" style="background:#f1f5f9;color:#64748b">0 extra · 8/9 new/del(제외)</span>
+  </div>
+  <p style="font-size:12.5px;color:var(--muted)">레이아웃(블록/도로/포인트/노드/링크)은 mm CAD 좌표 → 등거리+6-파라미터 아핀 투영으로 lat/lon 변환(RMS ~70m). 라이브맵·매칭에서 사용.</p>
+</section>
+
+<!-- 5 -->
+<section id="ws">
+  <div class="kicker">Part 5</div>
+  <h2>실시간 websocket 데이터</h2>
+  <p>두 zone. 메시지 봉투: <span class="mono">{"data":{"id","zone","datas":"&lt;stringified json&gt;"}}</span> + churn용 <span class="mono">{"disconnect":{"user"}}</span>.</p>
+
+  <h3 id="ws-gps">5.1 <code>wpt_gps</code> — gps_update (위치 + 미션)</h3>
+  <p>차량/크레인의 위치 + <strong>현재 미션</strong>(무슨 컨테이너를 어디로). 특히 TT는 작업 맥락이 풍부.</p>
+  <pre><span class="c">// 실제 TT 샘플</span>
+{ <span class="k">"device"</span>:<span class="s">"TT1045"</span>, <span class="k">"lat"</span>:<span class="s">"2.9179205"</span>, <span class="k">"lon"</span>:<span class="s">"101.28711433"</span>, <span class="k">"speed"</span>:<span class="s">"8kmh"</span>,
+  <span class="k">"engine_on"</span>:<span class="s">"ON"</span>, <span class="k">"accuracy"</span>:<span class="s">"10"</span>, <span class="k">"dtime"</span>:<span class="s">"11:50:27"</span>,
+  <span class="k">"cur_loc"</span>:<span class="s">"01U"</span>, <span class="k">"topos1"</span>:<span class="s">"03U-21"</span>, <span class="k">"jobtype"</span>:<span class="s">"LD"</span>, <span class="k">"vslname"</span>:<span class="s">"ESL SHEKOU"</span>,
+  <span class="k">"container1"</span>:<span class="s">"EGSU2064058"</span>, <span class="k">"container2"</span>:<span class="s">"EGSU3909308"</span>,
+  <span class="k">"arrival"</span>:<span class="s">"ARRIVED"</span>, <span class="k">"fuel_level"</span>:<span class="s">"38.8"</span>, <span class="k">"batt"</span>:<span class="s">"0%"</span>, <span class="k">"nett"</span>:<span class="s">"TELE"</span>,
+  <span class="k">"userid"</span>:<span class="s">"P30629&lt;br/&gt;(0169337157)"</span>, <span class="k">"distance"</span>:<span class="s">"0.0"</span> }</pre>
+  <table class="t-col ws">
+    <tr><th style="width:175px">필드</th><th>의미</th></tr>
+    <tr><td><span class="mono">device,lat,lon,speed,engine_on,accuracy</span></td><td>장비ID·위치·속도("Nkmh")·시동("ON"/공백)·GPS정확도(m).</td></tr>
+    <tr><td><span class="mono">dtime,arr_dtime</span></td><td>장비 보고 시각(MYT, HH:MM:SS, 날짜없음) · 도착 시각.</td></tr>
+    <tr><td><span class="mono">cur_loc</span> / <span class="mono">addr</span></td><td>현재 위치 라벨(블록/안벽/특수) / 주소(보통 동일).</td></tr>
+    <tr><td><span class="mono">topos1, topos2</span></td><td><b>목적지 코드</b>(다음 핸드오버 지점) — 블록 베이 또는 크레인 C##. 픽업↔드롭에 따라 동적.</td></tr>
+    <tr><td><span class="mono">container1, container2</span></td><td>적재 컨테이너(2개=트윈/탠덤). <b>비어있음=공차/유휴</b>의 직접 지표.</td></tr>
+    <tr><td><span class="mono">jobtype, vslname</span></td><td>작업종류(LD/DS/MO/MI) · 선박명.</td></tr>
+    <tr><td><span class="mono">arrival, lapse/lapse1/2</span></td><td>도착 플래그("ARRIVED") · 체류 카운터.</td></tr>
+    <tr><td><span class="mono">fuel_level, batt, nett, userid, distance, mds, ins</span></td><td>연료% · 배터리 · 통신(TELE/GLOG) · 운전자(<span class="mono">&lt;br/&gt;</span> 정리) · 이동거리 · 기타.</td></tr>
+  </table>
+
+  <h3 id="ws-plc">5.2 <code>ctab</code> — plc_data (크레인 PLC)</h3>
+  <p>크레인 PLC 상태. <strong>적재 하중(load) 전이가 곧 핸드오버 순간</strong>(집기/내리기) — 동기화의 가장 정밀한 신호. C/M/Z만 송신(RTG 없음).</p>
+  <pre><span class="c">// 실제 PLC 샘플</span>
+{ <span class="k">"crane"</span>:<span class="s">"C51"</span>, <span class="k">"load"</span>:<span class="n">1.9</span>, <span class="k">"lock"</span>:<span class="s">"False"</span>, <span class="k">"land"</span>:<span class="s">"False"</span>,
+  <span class="k">"hpos"</span>:<span class="s">"31.74"</span>, <span class="k">"tpos"</span>:<span class="s">"27.68"</span> }</pre>
+  <table class="t-col ws">
+    <tr><th style="width:130px">필드</th><th>의미</th></tr>
+    <tr><td><span class="mono">crane</span></td><td>크레인 ID(C##/M##/Z#). GPS device id와 일치 → 위치 머지 가능.</td></tr>
+    <tr><td><span class="mono">load</span></td><td>하중(톤). <b>적재 ≥ 1.0t</b>, 빈후크 0(또는 음수 tare). 전이로 PICKUP(0.5↓→1.0↑)/DROP 검출.</td></tr>
+    <tr><td><span class="mono">lock</span> / <span class="mono">land</span></td><td>트위스트락 / 안착("True"/"False" 문자열).</td></tr>
+    <tr><td><span class="mono">hpos</span> / <span class="mono">tpos</span></td><td>호이스트(들어올림) / 트롤리(횡행) 위치(m, 크레인 로컬축).</td></tr>
+  </table>
+  <p style="font-size:12.5px;color:var(--muted)">그 외 ctab kind: checkin · session_liveview/singleview/pool_lock · rps_ocr(컨테이너 OCR) · rps_ping_error 등(현재 미사용).</p>
+
+  <h3 id="ws-net">5.3 송신 주기 · 핸드셰이크 · 터널</h3>
+  <div class="grid g3">
+    <div class="card"><div class="big">~3<span class="unit"> 초</span></div><p><b>wpt_gps GPS</b> 장비당 중앙값(p90 10s·최대 55s). <b>1Hz 아님·불규칙</b>, 정지 시 수십 초. 각 메시지 뒤 disconnect 1:1.</p></div>
+    <div class="card"><div class="big">~1<span class="unit"> 초</span></div><p><b>ctab PLC</b> 크레인당 거의 규칙적(중앙값 1.04s). 핸드오버 순간 포착에 충분.</p></div>
+    <div class="card"><div class="big">~450<span class="unit"> 대</span></div><p>동시 추적 장비(TT~280·RTG~100·QC~28). 전체 합산 ~40건/초 → ~250~350만/일.</p></div>
+  </div>
+  <h4>핸드셰이크 (zone당 1 연결)</h4>
+  <ul>
+    <li><b>wpt_gps</b>: <span class="mono">{"command":{"identify":"clt_digitaltwin1","zone":"wpt_gps"}}</span> → 2s 대기 → <span class="mono">{"checkin":{"username":"digitaltwin","user":"clt_digitaltwin1"}}</span> → 수신.</li>
+    <li><b>ctab</b>: identify만(checkin 없음).</li>
+    <li>ping 비활성(서버가 pong 안 함) → 수신 타임아웃으로 dead socket 감지.</li>
+  </ul>
+  <div class="note"><p><span class="h">네트워크 — Azure 경유 터널</span>원천 <span class="mono">ws://172.21.30.72:9986</span>은 WSL2 NAT IP라 이 서버에서 직접 불가. <strong>Tailscale 노드 azure-wp-poc(100.124.171.118)가 사내망에 닿아</strong>, SSH 터널 <span class="mono">-L 127.0.0.1:9986:172.21.30.72:9986</span>로 API가 수신(systemd <span class="mono">wp-ws-bridge</span>).</p></div>
+</section>
+
+<!-- 6 -->
+<section id="kpi">
+  <div class="kicker">Part 6</div>
+  <h2>7개 KPI 정의</h2>
+  <p>대시보드는 6개 표시(K_CRANE_Q 숨김). 모두 intensive(평균·비율)라 기간 합산 시 분자/분모로 정확 결합.</p>
+  <table>
+    <tr><th style="width:130px">KPI</th><th style="width:90px">단위·방향</th><th>정의 (소스)</th><th>가중치</th></tr>
+    <tr><td><b>K_EMPTY</b> 공차거리</td><td>km/Job · 낮을수록↑</td><td>Σ공차m / Σjobs / 1000 (JOB_ORDER_HISTORY)</td><td>jobs</td></tr>
+    <tr><td><b>K_EMPTY_R</b> 공차비율</td><td>% · 낮을수록↑</td><td>Σ공차m / Σ(공차+적재)m (JOB_ORDER_HISTORY)</td><td>미터</td></tr>
+    <tr><td><b>K_CYCLE</b> 사이클타임</td><td>s · 낮을수록↑</td><td>작업 첫~마지막 이벤트 간격의 jobs-가중평균 (JOB_ORDER_HISTORY)</td><td>jobs</td></tr>
+    <tr><td><b>K_UTIL</b> TT 가동률</td><td>% · 높을수록↑</td><td><b>TT별 min(1, 가동분/경과분)의 평균</b>·100 — avg-of-ratios(단순 가중평균 아님) (MCH_WORKTIME/STOP)</td><td>(평균)</td></tr>
+    <tr><td><b>K_QC_Q</b> QC 대기</td><td>s · 낮을수록↑</td><td>QC 병합 active 구간 사이 유휴 갭 평균 (MCH_OPERATION C##)</td><td>idle_periods</td></tr>
+    <tr><td><b>K_MPH</b> QC 처리량</td><td>move/hr · 높을수록↑</td><td>QC move/active-hour의 active_hours-가중평균 (MCH_OPERATION)</td><td>active_hours</td></tr>
+    <tr><td><b>K_CRANE_Q</b> 야드 핸드오버 대기 <span class="b" style="background:#e2e8f0;color:#475569">숨김</span></td><td>s · 낮을수록↑</td><td>(ACTV_DT − YT_DIS_DT) — TT 하차→야드 핸드오버 (JOB_ORDER_HISTORY). 안벽 QC 대기가 아님(ARMGC=RTG/ES).</td><td>in_range</td></tr>
+  </table>
+  <div class="note"><p><span class="h">K_UTIL 특수</span>avg-of-ratios라 주/월 버킷은 일 단위 raw에서 재계산해야 정확(단순 평균 불가). 오늘분은 <span class="mono">util_tt_shift</span>(TT별 productive_min + 쉬프트 elapsed_min)에서 정확 재조합.</p></div>
+</section>
+
+<!-- 7 -->
+<section id="serving">
+  <div class="kicker">Part 7</div>
+  <h2>서빙 모델 (PostgreSQL 3-tier)</h2>
+  <table class="t-col pg">
+    <tr><th style="width:130px">계층</th><th>테이블</th><th>역할</th></tr>
+    <tr><td>L0 raw</td><td><span class="mono">raw_k_empty · raw_k_cycle · raw_k_crane_q_daily · raw_k_qc_q · raw_k_mph_realtime · raw_k_util_tt · raw_k_util_crane · raw_voyage_plan</span></td><td>Oracle 일 스냅샷(분자/분모 보존). PK=(date, …) 멱등 upsert.</td></tr>
+    <tr><td>L1 rollup</td><td><span class="mono">kpi_daily</span>(kpi_key,snapshot_date,value,sample_n,…) · <span class="mono">kpi_breakdown_qc</span></td><td>KPI별 일 권위 값(트렌드·이력의 소스). 야간 확정 / 틱 잠정.</td></tr>
+    <tr><td>L2 stats</td><td><span class="mono">kpi_baseline</span>(4주 롤링 + Welch t-test)</td><td>기준선·유의성.</td></tr>
+    <tr><td>LIVE</td><td><span class="mono">kpi_shift · kpi_shift_history · vessel_shift · vessel_qc_shift · util_tt_shift</span></td><td>현재 교대 누적(틱이 채움) → "오늘"을 Oracle 재스캔 없이 합산.</td></tr>
+  </table>
+  <h4>기간 합산 (agg.rs)</h4>
+  <p>범위 [from,to] = <strong>과거일 raw_*</strong>(분자/분모 정확) + <strong>터미널-오늘은 kpi_shift</strong>에서 폴드(제2 Oracle 스캔 0). 6개는 합/비율로 정확 결합, K_UTIL은 raw 재계산. 일/주/월 이력도 동일 원리(<span class="mono">/api/kpis/history</span>).</p>
+  <div class="note warn"><p><span class="h">시간대(필수)</span>서버=KST(UTC+9)지만 터미널/Oracle=<b>MYT(UTC+8, Westports)</b>. 교대 감지·기간 경계는 반드시 <span class="mono">wp_core::shift::terminal_now()</span> 사용. 서버 <span class="mono">Local::now()</span>를 쓰면 교대 1h 오판·창이 데이터를 놓쳐 0행.</p></div>
+  <h4>추출 스케줄 (systemd user timer, opt-in)</h4>
+  <ul>
+    <li><b>야간(01:30 MYT)</b> <span class="mono">wp-nightly</span> — 어제 권위 전체 추출 + transform + baseline(~32s, 1회 풀스캔).</li>
+    <li><b>교대 틱</b> <span class="mono">wp-shift-t1</span>(~3분: MPH/QC대기/가동률+선박, LOW) · <span class="mono">wp-shift-t2</span>(~15분: 공차/사이클/크레인대기, JOB_ORDER_HISTORY).</li>
+    <li><span class="mono">enable-linger</span>로 로그아웃 후 생존.</li>
+  </ul>
+</section>
+
+<!-- 8 -->
+<section id="gotchas">
+  <div class="kicker">Part 8</div>
+  <h2>함정 · 운영 노트 (반복 실수 방지)</h2>
+  <table>
+    <tr><th style="width:240px">함정</th><th>내용 · 대응</th></tr>
+    <tr><td>SQL 주석의 아포스트로피</td><td><span class="mono">--</span> 주석에 <span class="mono">'</span>(예 <span class="mono">crane's</span>)가 있으면 toolbox/Oracle <b>HTTP 400</b>. em-dash는 OK. 곱슬따옴표도 금지.</td></tr>
+    <tr><td><span class="mono">ORDER BY &lt;집계 별칭&gt;</span></td><td>금지 — 표현식이나 일반 컬럼 사용.</td></tr>
+    <tr><td><span class="mono">include_str!</span> SQL 수정</td><td>.sql 편집 후 .rs를 touch해 재임베드해야 반영.</td></tr>
+    <tr><td>시간대 MYT vs KST</td><td>위 §7. terminal_now() 필수. KST 00:00–01:00(=MYT 23:00–24:00)에 "오늘"이 아직 시작 안 한 터미널 날을 가리켜 0/7 blank.</td></tr>
+    <tr><td>빈 결과셋</td><td>toolbox가 <span class="mono">{"result":"null"}</span> 반환 → 0행 처리.</td></tr>
+    <tr><td>K_CRANE_Q 라벨 오해</td><td>"QC 크레인 대기"가 아님 — ARMGC가 RTG/ES라 <b>야드 핸드오버 대기</b>. 실제 "QC가 트럭을 기다림"은 별도 K_QC_Q.</td></tr>
+    <tr><td>RTG PLC 없음</td><td>양하 블록측 핸드오버는 직접 PLC 신호 없음 → GPS·RTG 근접도로 추정(배차 연구).</td></tr>
+    <tr><td>보존 한계</td><td>§2. 깊은 과거(예 1월)는 백필 불가. 깊이는 앞으로만 누적.</td></tr>
+    <tr><td>직접 ssh+curl 금지</td><td>Oracle 접근은 승인된 <span class="mono">remote-toolbox-sql</span>만(<span class="mono">SKILL_DIR=/home/aiadmin/.codex/skills/yard-db-ops</span>).</td></tr>
+  </table>
+</section>
+
+<div class="foot">CLT Port Group · Digital Team — TOS DB 종합 레퍼런스 · 2026-06-09 · 원천: 추출 SQL + websocket 캡처 + 실측 보존/주기 + 서빙 코드(agg.rs/periods.rs) · 내부 공유용</div>
+
+</main>
+</div>
+</body>
+</html>

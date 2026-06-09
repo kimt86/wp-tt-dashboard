@@ -7,6 +7,7 @@ import TtPage from "./TtPage";
 import LiveMapPage from "./LiveMapPage";
 import HealthPage from "./HealthPage";
 import FeedHealthPage from "./FeedHealthPage";
+import HistoryMatrix from "./HistoryMatrix";
 
 function useClock(): string {
   const [now, setNow] = useState(() => new Date());
@@ -350,6 +351,7 @@ function KpiPage({ lang }: { lang: Lang }) {
       <LiveTab lang={lang} />
       <div className="area-divider"><span>{s.areaHistory}</span></div>
       <HistoryTab lang={lang} />
+      <HistoryMatrix lang={lang} />
     </div>
   );
 }

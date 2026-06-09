@@ -36,6 +36,12 @@ export interface KpisResponse {
 export interface TrendPoint { date: string; value: number; sample_n: number | null; }
 export interface TrendResponse { key: string; unit: string; target: number | null; baseline: number | null; points: TrendPoint[]; }
 
+// KPI history matrix (by day / week / month)
+export interface HistoryCell { value: number | null; sample_n: number | null; }
+export interface HistoryColumn { key: string; name_en: string; name_ko: string; unit: string; direction: string | null; }
+export interface HistoryBucket { bucket: string; label_from: string; label_to: string; is_provisional: boolean; cells: Record<string, HistoryCell>; }
+export interface HistoryResponse { gran: string; kpis: HistoryColumn[]; buckets: HistoryBucket[]; }
+
 export interface QcRow { qc: string; mph: number | null; qc_wait_sec: number | null; status: string | null; }
 export interface BreakdownResponse { as_of: string; rows: QcRow[]; }
 
@@ -79,6 +85,7 @@ export const api = {
     return get<TrendResponse>(`/api/kpis/${key}/trend?${qs}`);
   },
   breakdown: (period: string) => get<BreakdownResponse>(`/api/breakdown/qc?period=${encodeURIComponent(period)}`),
+  kpiHistory: (gran: string, n?: number) => get<HistoryResponse>(`/api/kpis/history?gran=${gran}${n ? `&n=${n}` : ""}`),
   health: () => get<HealthResponse>("/api/health"),
   live: () => get<LiveResponse>("/api/live"),
   liveVessels: () => get<VesselsResponse>("/api/live/vessels"),

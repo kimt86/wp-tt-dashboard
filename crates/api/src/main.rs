@@ -39,6 +39,7 @@ impl FromRef<AppState> for Arc<livemap::LiveMap> {
 fn app(state: AppState) -> Router {
     let api = Router::new()
         .route("/api/kpis", get(routes::kpis))
+        .route("/api/kpis/history", get(routes::kpi_history))
         .route("/api/kpis/:key/trend", get(routes::trend))
         .route("/api/breakdown/qc", get(routes::breakdown_qc))
         .route("/api/stats/:key", get(routes::stats))
@@ -49,6 +50,11 @@ fn app(state: AppState) -> Router {
         .route("/api/health", get(routes::health))
         .layer(CorsLayer::permissive()) // dev; tighten to the dashboard origin in prod
         .with_state(state);
+
+    // Knowledge center — self-contained static HTML docs at /kc/ (NOT linked from the
+    // dashboard UI; shared internally by direct link, reachable over Tailscale).
+    let kc_dir = std::env::var("KC_DIR").unwrap_or_else(|_| "kc".to_string());
+    let api = api.nest_service("/kc", ServeDir::new(&kc_dir));
 
     // Serve the built SPA (if present) and fall back to index.html for client routing.
     let web_dist = std::env::var("WEB_DIST").unwrap_or_else(|_| "web/dist".to_string());
