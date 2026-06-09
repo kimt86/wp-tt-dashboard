@@ -90,11 +90,12 @@
   <div class="brandsub">TT AiOps Platform · 2026-06</div>
   <a class="sec" href="#tldr">한눈에 요약</a>
   <a href="#kpis">1 · 7개 KPI 정의</a>
-  <a href="#tiers">2 · 3계층 (L0→L1→L2)</a>
-  <a href="#today">3 · "오늘"을 재스캔 없이</a>
-  <a href="#sched">4 · 추출 스케줄</a>
-  <a href="#history">5 · 일/주/월 이력</a>
-  <a href="#gotchas">6 · 주의 사항</a>
+  <a href="#detail">2 · KPI별 추출·가공·적재 상세</a>
+  <a href="#tiers">3 · 3계층 (L0→L1→L2)</a>
+  <a href="#today">4 · "오늘"을 재스캔 없이</a>
+  <a href="#sched">5 · 추출 스케줄</a>
+  <a href="#history">6 · 일/주/월 이력</a>
+  <a href="#gotchas">7 · 주의 사항</a>
 </nav>
 
 <main>
@@ -135,9 +136,189 @@
   <div class="note warn"><p><span class="h">K_QC_Q ≠ K_CRANE_Q</span><b>K_QC_Q</b>(표시) = "QC가 트럭을 기다림"(안벽 크레인 유휴 갭). <b>K_CRANE_Q</b>(숨김) = "TT가 야드에서 핸드오버를 기다림"(ARMGC=RTG). 둘은 다른 대기입니다. 자세한 TOS 컬럼은 <a href="./tos-db-reference-ko.html#kpi" style="color:var(--accent)">TOS DB 레퍼런스</a>.</p></div>
 </section>
 
+<!-- 2 per-KPI detail -->
+<section id="detail">
+  <div class="kicker">Part 2</div>
+  <h2>KPI별 추출·가공·적재 상세</h2>
+  <p>KPI 하나하나가 <b>TOS Oracle의 어떤 테이블·컬럼</b>에서 나와, <b>추출 SQL이 무엇을 왜</b> 계산하고, <b>Postgres의 어느 <span class="mono">raw_*</span> 테이블·컬럼</b>에 멱등 적재되며, <b>transform.rs가 어떻게 <span class="mono">kpi_daily</span>로 롤업</b>하는지를 코드 그대로 추적합니다. 각 KPI는 네 단계 — <b>① 소스 · ② 가공+왜 · ③ 적재 · ④ 롤업</b> — 로 나눕니다.</p>
+  <div class="note key"><p><span class="h">공통 규약</span>모든 일 단위 SQL은 <span class="mono">{{DAY_STR}}</span>(=YYYYMMDD)을 <b>인덱스-세이프 문자열 리터럴</b>로 주입(<span class="mono">params.rs</span>). DAY 경로는 <span class="mono">{{TIME_PREDICATE}}</span>를 <b>빈 문자열</b>로 채워 검증본 SQL과 <b>바이트 동일</b>; SHIFT(라이브) 경로는 <span class="mono">AND (시각열) BETWEEN '시작' AND '끝'</span>을 끼워 교대 창으로 좁힙니다. <span class="mono">/*+ NO_PARALLEL */</span> + <span class="mono">FETCH FIRST</span>로 운영 Oracle 부하를 억제합니다. 모든 <span class="mono">raw_*</span> upsert는 <span class="mono">ON CONFLICT (PK) DO UPDATE</span> — 같은 날을 다시 돌려도 덮어쓰기만(중복 없음).</p></div>
+
+  <!-- K_EMPTY / K_EMPTY_R -->
+  <h3>K_EMPTY · K_EMPTY_R — 공차거리 / 공차비율</h3>
+  <p>두 KPI는 같은 추출 SQL(<span class="mono">e4_k_empty_decomposition.sql</span>) 한 번으로 같은 <span class="mono">raw_k_empty</span> 행에서 나옵니다(분자만 다름).</p>
+  <h4>① 소스 (TOS 테이블·컬럼)</h4>
+  <table class="pg">
+    <tr><th style="width:230px">TOSADM 컬럼</th><th>역할</th></tr>
+    <tr><td><span class="mono">JOB_ORDER_HISTORY</span></td><td>완료 작업 이력 (소스 테이블, FROM)</td></tr>
+    <tr><td><span class="mono">JOB_HIST_DATE</span></td><td>인덱스 범위 = <span class="mono">'{{DAY_STR}}'</span> (PK 범위 스캔)</td></tr>
+    <tr><td><span class="mono">JOB_HIST_JOBTYPE</span></td><td>작업 유형 (그룹·출력 키)</td></tr>
+    <tr><td><span class="mono">JOB_HIST_CONTNO · _POINT · _SEQNO</span></td><td>작업 1건의 자연 식별자 (GROUP BY 키)</td></tr>
+    <tr><td><span class="mono">JOB_HIST_TIME</span></td><td>교대 산정용 (SUBSTR 앞 2자리 = 시각)</td></tr>
+    <tr><td><span class="mono">LNDN_TRV_RNG</span></td><td>적재(laden) 주행거리 m → <span class="mono">lndn</span></td></tr>
+    <tr><td><span class="mono">UN_LNDN_TRV_RNG</span></td><td>공차(empty) 주행거리 m → <span class="mono">un_lndn</span></td></tr>
+    <tr><td><span class="mono">CRNT_PSN_IDX_NO1</span></td><td>블록 ID (MAX → <span class="mono">block_id</span>, distinct 카운트)</td></tr>
+  </table>
+  <p>인덱스/필터 술어: <span class="mono">JOB_HIST_DATE = '{{DAY_STR}}'</span> · <span class="mono">LNDN_TRV_RNG BETWEEN 0 AND 5000</span> · <span class="mono">UN_LNDN_TRV_RNG BETWEEN 0 AND 5000</span> · <span class="mono">HAVING COUNT(*) &gt;= 50</span> · <span class="mono">FETCH FIRST 50 ROWS ONLY</span>.</p>
+  <h4>② 가공 + 왜</h4>
+  <pre><span class="c">-- 작업 1건 = (CONTNO,POINT,SEQNO,JOBTYPE,DATE) 단위로 먼저 접고(GROUP BY),</span>
+<span class="c">--   교대는 그 작업의 첫 이벤트 시각(MIN(TIME))으로 결정</span>
+CASE WHEN SUBSTR(MIN(JOB_HIST_TIME),1,2) BETWEEN '00' AND '07' THEN 'Night'
+     WHEN SUBSTR(MIN(JOB_HIST_TIME),1,2) BETWEEN '08' AND '15' THEN 'Day'
+     WHEN SUBSTR(MIN(JOB_HIST_TIME),1,2) BETWEEN '16' AND '23' THEN 'Evening' END
+<span class="c">-- 그 다음 (jobtype × shift)로 다시 집계</span>
+ROUND(SUM(un_lndn) / NULLIF(SUM(lndn + un_lndn),0), 4)  <span class="c">AS k_empty_ratio</span>
+SUM(un_lndn) AS total_empty_m,  SUM(lndn) AS total_laden_m,  COUNT(*) AS jobs</pre>
+  <div class="note"><p><span class="h">왜 0~5000m로 거르나</span><b>한 작업의 정상 주행거리 범위</b>를 벗어난 값(센서 오류·미터값 결측·창고 간 비정상 이동)을 분모/분자에서 제외하기 위함. 음수나 5km 초과는 GPS/주행 산정 오류로 보고 버립니다. 그래야 <span class="mono">SUM(un_lndn)/SUM(lndn+un_lndn)</span> 비율이 한두 개의 이상치에 오염되지 않습니다.</p></div>
+  <div class="note"><p><span class="h">왜 비율 대신 합을 저장하나</span>SQL이 행마다 <span class="mono">k_empty_ratio</span>를 계산하긴 하지만, 적재되는 핵심은 <b>분자 <span class="mono">total_empty_m</span>·분모 <span class="mono">total_laden_m</span>·<span class="mono">jobs</span>의 합</b>입니다. 기간 합산 시 비율을 단순 평균하면(작업량이 다른 날을 동등 취급) 틀리고, 합을 보존해야 어떤 구간도 <span class="mono">Σ공차 / Σ(공차+적재)</span>로 정확히 재계산됩니다.</p></div>
+  <h4>③ 적재 (Postgres)</h4>
+  <p>대상: <span class="mono">raw_k_empty</span> · PK <span class="mono">(snapshot_date, jobtype, shift)</span> (<span class="mono">k_empty.rs</span>).</p>
+  <table class="pg">
+    <tr><th style="width:230px">raw_k_empty 컬럼</th><th>출처 (SQL 출력)</th></tr>
+    <tr><td><span class="mono">jobtype, shift</span></td><td>JOB_HIST_JOBTYPE, 교대 CASE (PK 일부)</td></tr>
+    <tr><td><span class="mono">jobs</span></td><td>COUNT(*) — K_EMPTY 가중치</td></tr>
+    <tr><td><span class="mono">total_empty_m</span></td><td>SUM(un_lndn) — <b>K_EMPTY 분자 / K_EMPTY_R 분자</b></td></tr>
+    <tr><td><span class="mono">total_laden_m</span></td><td>SUM(lndn) — K_EMPTY_R 분모의 적재 성분</td></tr>
+    <tr><td><span class="mono">k_empty_ratio, avg_empty_m, avg_laden_m, distinct_blocks</span></td><td>참고용(롤업엔 합 컬럼만 사용)</td></tr>
+  </table>
+  <pre>INSERT INTO raw_k_empty (snapshot_date, jobtype, shift, jobs, …)
+ON CONFLICT (snapshot_date, jobtype, shift) DO UPDATE SET
+  total_empty_m=EXCLUDED.total_empty_m, total_laden_m=EXCLUDED.total_laden_m, … extracted_at=now()</pre>
+  <h4>④ 롤업 (→ kpi_daily)</h4>
+  <pre><span class="c">-- K_EMPTY (km/Job)</span>
+value = round(sum(total_empty_m)/nullif(sum(jobs),0)/1000, 4)   sample_n = sum(jobs)
+<span class="c">-- K_EMPTY_R (%)</span>
+value = round(sum(total_empty_m)/nullif(sum(total_empty_m+total_laden_m),0)*100, 4)
+sample_n = sum(jobs)</pre>
+  <p><span class="mono">transform.rs</span>가 그날 <span class="mono">raw_k_empty</span>의 (jobtype×shift) 행 전부를 합쳐 위 식으로 산출. <span class="mono">HAVING sum(jobs)&gt;0</span>(또는 <span class="mono">sum(empty+laden)&gt;0</span>)이라 데이터 없는 날은 아무것도 쓰지 않음. 라이브(<span class="mono">shift.rs</span>)에서는 K_EMPTY 가중치=<span class="mono">jobs</span>, <b>K_EMPTY_R 가중치=<span class="mono">Σ(empty+laden)</span> 미터</b>(jobs 아님)로 <span class="mono">kpi_shift.agg_weight</span>에 따로 저장합니다.</p>
+
+  <!-- K_CYCLE -->
+  <h3>K_CYCLE — 작업 사이클 타임</h3>
+  <h4>① 소스</h4>
+  <table class="pg">
+    <tr><th style="width:230px">TOSADM 컬럼</th><th>역할</th></tr>
+    <tr><td><span class="mono">JOB_ORDER_HISTORY</span></td><td>소스 테이블 (FROM)</td></tr>
+    <tr><td><span class="mono">JOB_HIST_DATE</span></td><td>인덱스 범위 <span class="mono">= '{{DAY_STR}}'</span></td></tr>
+    <tr><td><span class="mono">JOB_HIST_JOBTYPE</span></td><td>유형 (그룹·출력 키)</td></tr>
+    <tr><td><span class="mono">JOB_HIST_CONTNO · _POINT · _SEQNO</span></td><td>작업 1건 식별자 (GROUP BY)</td></tr>
+    <tr><td><span class="mono">JOB_HIST_TIME</span></td><td>이벤트 시각 — <span class="mono">DATE||TIME</span>의 MIN/MAX로 사이클 양끝</td></tr>
+  </table>
+  <h4>② 가공 + 왜 (2-pass, 평균+2σ 이상치)</h4>
+  <pre><span class="c">job_events: 작업 1건 = 첫 이벤트 ~ 마지막 이벤트</span>
+cycle_sec = (MAX(DATE||TIME) − MIN(DATE||TIME)) * 86400     <span class="c">-- 초 단위</span>
+WHERE transitions &gt; 1                <span class="c">-- 이벤트 1개뿐이면 간격 0 → 제외</span>
+<span class="c">stats(jobtype별): 평균·중앙·표준편차·P25/75/95, 이상치 임계치</span>
+thr = AVG(cycle_sec) + 2*STDDEV(cycle_sec)
+outlier_n = (SELECT COUNT(*) FROM cycles WHERE cycle_sec &gt; thr)</pre>
+  <div class="note"><p><span class="h">왜 transitions&gt;1 / 평균+2σ인가</span>이벤트가 하나뿐인 작업은 시작=끝이라 사이클이 0초 — 의미 없는 값이라 거릅니다. 그리고 사이클 타임은 꼬리가 긴 분포(장비 고장·대기로 비정상 장시간)라, <b>평균+2σ를 이상치 임계로</b> 두어 정상 작업의 평균이 극단값에 끌려가지 않도록 <span class="mono">outlier_n</span>을 따로 셉니다. 중앙값·P95도 함께 보존해 분포를 진단합니다.</p></div>
+  <h4>③ 적재</h4>
+  <p>대상: <span class="mono">raw_k_cycle</span> · PK <span class="mono">(snapshot_date, jobtype)</span> (<span class="mono">k_cycle.rs</span>). 핵심 컬럼 <span class="mono">jobs</span>(=COUNT), <span class="mono">avg_sec</span>(=ROUND(avg_cyc,1)); 그 외 <span class="mono">med_sec·std_sec·p25/75/95_sec·outlier_threshold_sec·outlier_n·avg_transitions</span>은 진단용. <span class="mono">ON CONFLICT (snapshot_date, jobtype) DO UPDATE</span>.</p>
+  <h4>④ 롤업</h4>
+  <pre>value = round(sum(avg_sec*jobs)/nullif(sum(jobs),0), 1)   <span class="c">-- jobs-가중 평균 초</span>
+sample_n = sum(jobs)         HAVING sum(jobs) &gt; 0</pre>
+  <p>가중치=<span class="mono">jobs</span>. 라이브도 동일(<span class="mono">Σ(avg_sec·jobs)/Σjobs</span>), <span class="mono">agg_weight=jobs</span>.</p>
+
+  <!-- K_UTIL -->
+  <h3>K_UTIL — TT(야드 트랙터) 가동률</h3>
+  <h4>① 소스</h4>
+  <table class="pg">
+    <tr><th style="width:230px">TOSADM 컬럼</th><th>역할</th></tr>
+    <tr><td><span class="mono">CDY_MACHINE</span></td><td><span class="mono">CDY_MCHN_TYPE='YT'</span>인 <span class="mono">CDY_MCHN_CODE</span> = TT 장비 목록</td></tr>
+    <tr><td><span class="mono">MCH_WORKTIME</span></td><td>로그인 세션 — <span class="mono">MCH_WORK_MACHNO · _START_DT · _END_DT · _STARTDATE · _ENDDATE</span></td></tr>
+    <tr><td><span class="mono">MCH_WORKSTOP</span></td><td>정지 구간 — <span class="mono">MCH_STOP_MACHNO · _START_DT · _END_DT · _STARTDATE · _ENDDATE</span></td></tr>
+  </table>
+  <p>인덱스 술어: <span class="mono">MCH_WORK_STARTDATE = day_str OR MCH_WORK_ENDDATE = day_str</span>(세션이 자정을 걸쳐도 포착), <span class="mono">LENGTH(...DT) &gt;= 14</span>. 창은 <span class="mono">params</span> CTE의 <span class="mono">{{START_TS}}/{{END_TS}}</span>로 클립. <span class="mono">FETCH FIRST 50 ROWS ONLY</span>.</p>
+  <h4>② 가공 + 왜 (구간 병합 → 캡)</h4>
+  <pre><span class="c">세션 시작/끝을 창[START_TS,END_TS]으로 GREATEST/LEAST 클립</span>
+<span class="c">flagged→grouped→merged: 겹치거나 잇닿은 세션을 하나의 구간으로 병합</span>
+active_min_merged = SUM((grp_end − grp_start) * 1440)
+stop_min          = SUM((e_dt − s_dt) * 1440)        <span class="c">-- MCH_WORKSTOP</span>
+productive_min    = active_min_merged − stop_min
+k_util_capped = LEAST(1.0, (productive_min) / {{ELAPSED_DENOM}})
+k_util_raw    =            (productive_min) / {{ELAPSED_DENOM}}</pre>
+  <div class="note"><p><span class="h">왜 세션을 병합하나</span>운영자가 <b>로그아웃을 빼먹으면</b> 세션이 겹치거나 비정상적으로 길어집니다. 겹치는 세션을 병합(<span class="mono">MAX(end) OVER … 1 PRECEDING</span> 누적 플래그)하면 같은 시간을 이중 계산하지 않고 <b>실제 점유 구간</b>만 남습니다. <span class="mono">has_overlap → logout_anomaly</span>로 그 이상을 표시합니다.</p></div>
+  <div class="note warn"><p><span class="h">왜 캡(≤1)과 avg-of-ratios인가</span>분모 <span class="mono">{{ELAPSED_DENOM}}</span>는 DAY 경로에서 <b>1440분</b>(하루), SHIFT 경로에서 <b>교대 경과분</b>. 병합 오차로 가동분이 경과분을 살짝 넘을 수 있어 <span class="mono">LEAST(1.0,…)</span>로 캡합니다. K_UTIL은 <b>TT별 비율을 먼저 구한 뒤 그것들을 평균</b>(avg-of-ratios)하므로, 분자/분모 단순합으로는 결합되지 않습니다 — 이 점이 다른 6개와 근본적으로 다릅니다.</p></div>
+  <h4>③ 적재</h4>
+  <p>대상: <span class="mono">raw_k_util_tt</span> · PK <span class="mono">(snapshot_date, machno)</span> (<span class="mono">k_util_tt.rs</span>). 컬럼: <span class="mono">active_min · stop_min · productive_min · k_util_capped · k_util_raw · sessions_total · interval_groups · logout_anomaly</span>. <span class="mono">ON CONFLICT (snapshot_date, machno) DO UPDATE</span>. (참고: QC/YC용 <span class="mono">e1c</span> → <span class="mono">raw_k_util_crane</span>도 같은 병합 로직, machine_type QC/YC.)</p>
+  <h4>④ 롤업</h4>
+  <pre>value = round(avg(k_util_capped)*100, 4)    <span class="c">-- TT별 캡 비율의 단순 평균 ×100</span>
+sample_n = count(*)                          <span class="c">-- 그날 TT 수</span></pre>
+  <div class="note key"><p><span class="h">K_UTIL은 특별 취급</span>주/월·"오늘"은 분자/분모 합으로 결합할 수 없어, 오늘분은 <span class="mono">util_tt_shift</span>(TT별 <span class="mono">productive_min</span> + 교대 <span class="mono">elapsed_min</span>)에서 <b>TT별 day_util = min(1, Σ가동분/Σ경과분)</b>을 만들고 그 평균×100으로 <b>정확 재조합</b>합니다(<span class="mono">agg.rs</span>). 그래서 <span class="mono">kpi_shift.agg_weight=NULL</span>이고, 야간 권위 런이 최종 채웁니다.</p></div>
+
+  <!-- K_QC_Q -->
+  <h3>K_QC_Q — QC(안벽 크레인) 대기 (표시)</h3>
+  <h4>① 소스</h4>
+  <table class="pg">
+    <tr><th style="width:230px">TOSADM 컬럼</th><th>역할</th></tr>
+    <tr><td><span class="mono">MCH_OPERATION</span></td><td>장비 move 이력 (FROM)</td></tr>
+    <tr><td><span class="mono">MCH_OPER_COMPDATE</span></td><td>인덱스 <span class="mono">= '{{DAY_STR}}'</span></td></tr>
+    <tr><td><span class="mono">MCH_OPER_MACHNO</span></td><td>장비번호 — <span class="mono">REGEXP_LIKE(…,'^C[0-9]+$')</span> 안벽 크레인만</td></tr>
+    <tr><td><span class="mono">ST_DT</span></td><td>move 시작 시각 → <span class="mono">s</span> (<span class="mono">IS NOT NULL AND LENGTH&gt;=14</span>)</td></tr>
+    <tr><td><span class="mono">MCH_OPER_COMPDATE||_COMPTIME</span></td><td>move 완료 시각 → <span class="mono">e</span></td></tr>
+    <tr><td><span class="mono">MCH_OPER_JOBTYPE</span></td><td><span class="mono">IN ('LD','DS')</span> 적/양하만</td></tr>
+    <tr><td><span class="mono">MCH_OPER_VESSEL · _VOYAGE</span></td><td>크레인-선박 배정 분리(파티션 키)</td></tr>
+  </table>
+  <h4>② 가공 + 왜 (구간 병합 → 갭)</h4>
+  <pre><span class="c">moves → flagged → grouped → merged: 잇닿은 move를 active 구간으로 병합</span>
+gaps: 한 구간의 끝(ge) ~ 다음 구간의 시작(LEAD(gs)) 사이 = 유휴(idle)
+idle_sec = (LEAD(gs) OVER(… ORDER BY gs) − ge) * 86400
+<span class="c">버킷팅: &lt;1m / 1-5m / 5-10m / 10-30m / &gt;30m</span>
+avg_idle_sec = AVG(idle_sec WHERE 0..1800)   <span class="c">-- 30분 이하만</span>
+HAVING COUNT(*) &gt;= {{QCQ_HAVING}}             <span class="c">-- day=10, shift=2</span></pre>
+  <div class="note"><p><span class="h">왜 move를 병합해 갭을 보나</span>한 컨테이너 작업은 여러 move 행으로 쪼개져 있어, 인접 move를 <b>하나의 active 구간으로 병합</b>해야 "크레인이 실제로 멈춰 있던 시간"이 드러납니다. 그 구간 사이의 갭이 곧 <b>QC가 다음 트럭을 기다린 유휴</b>(K_QC_Q)입니다. 30분(1800초) 초과 갭은 작업 종료/교대 공백으로 보고 평균에서 제외합니다.</p></div>
+  <div class="note"><p><span class="h">왜 HAVING ≥ N 갭인가</span>갭이 한두 개뿐인 크레인은 평균이 통계적으로 불안정합니다. DAY 경로는 <span class="mono">≥10</span>(신뢰), SHIFT 경로는 <span class="mono">≥2</span>(부분 교대라도 근사값이라도 나오게) — <span class="mono">params.rs</span>의 <span class="mono">{{QCQ_HAVING}}</span> 토큰으로 전환합니다.</p></div>
+  <h4>③ 적재</h4>
+  <p>대상: <span class="mono">raw_k_qc_q</span> · PK <span class="mono">(snapshot_date, qc)</span> (<span class="mono">k_qc_q.rs</span>). 컬럼: <span class="mono">idle_periods · avg_idle_sec · med_idle_sec · quick_under_1m · normal_1_5m · delayed_5_10m · extended_10_30m · over_30m · total_tt_wait_sec · total_idle_30m_sec</span>. <span class="mono">ON CONFLICT (snapshot_date, qc) DO UPDATE</span>.</p>
+  <h4>④ 롤업</h4>
+  <pre>value = round(sum(avg_idle_sec*idle_periods)/nullif(sum(idle_periods),0), 1)
+sample_n = sum(idle_periods)          HAVING sum(idle_periods) &gt; 0</pre>
+  <p>가중치=<span class="mono">idle_periods</span>(=sample_n과 동일). 라이브도 동일 식, <span class="mono">agg_weight=Σidle_periods</span>.</p>
+
+  <!-- K_MPH -->
+  <h3>K_MPH — QC 시간당 처리량 (move/hr)</h3>
+  <h4>① 소스</h4>
+  <table class="pg">
+    <tr><th style="width:230px">TOSADM 컬럼</th><th>역할</th></tr>
+    <tr><td><span class="mono">MCH_OPERATION</span></td><td>장비 move 이력 (FROM)</td></tr>
+    <tr><td><span class="mono">MCH_OPER_COMPDATE</span></td><td>인덱스 <span class="mono">= '{{DAY_STR}}'</span></td></tr>
+    <tr><td><span class="mono">MCH_OPER_MACHNO</span></td><td><span class="mono">REGEXP_LIKE(…,'^C[0-9]+$')</span> 안벽 크레인만 → <span class="mono">qc_machno</span></td></tr>
+    <tr><td><span class="mono">MCH_OPER_JOBTYPE</span></td><td><span class="mono">IN ('LD','DS')</span> 적/양하만</td></tr>
+    <tr><td><span class="mono">MCH_OPER_COMPTIME</span></td><td><span class="mono">SUBSTR(...,1,2)</span> = 시각 → <span class="mono">active_hours</span></td></tr>
+    <tr><td><span class="mono">MCH_OPER_VESSEL · _VOYAGE</span></td><td>그룹 키 (선박/항차별 QC)</td></tr>
+    <tr><td><span class="mono">TRK_ID · MCH_OPER_CONTNO</span></td><td>distinct 트럭/컨테이너(진단)</td></tr>
+  </table>
+  <p><span class="mono">GROUP BY vessel, voyage, qc_machno</span> · <span class="mono">ORDER BY moves DESC FETCH FIRST 30 ROWS ONLY</span>.</p>
+  <h4>② 가공 + 왜</h4>
+  <pre>moves = COUNT(*)
+active_hours = COUNT(DISTINCT SUBSTR(MCH_OPER_COMPTIME,1,2))   <span class="c">-- 실작업 시각 수</span>
+k_mph_per_active_hour = ROUND(COUNT(*) / NULLIF(active_hours,0), 2)</pre>
+  <div class="note"><p><span class="h">왜 active_hours로 나누나(달력 24h 아님)</span>크레인은 하루 24시간 내내 작업하지 않습니다. 실제 move가 발생한 <b>distinct 시각 수</b>로만 나눠야 "작업 중일 때의 처리율"이 됩니다. 정박 대기·유휴 시간이 분모에 들어가 처리량을 왜곡하는 걸 막습니다. 그래서 기간 가중치도 <b>active_hours</b>입니다(voyage 수가 아님).</p></div>
+  <h4>③ 적재</h4>
+  <p>대상: <span class="mono">raw_k_mph_realtime</span> · PK <span class="mono">(snapshot_date, vessel, voyage, qc_machno)</span> (<span class="mono">k_mph_realtime.rs</span>). 핵심: <span class="mono">k_mph_per_active_hour · active_hours · moves · load_moves · discharge_moves</span>. <span class="mono">ON CONFLICT (…4키…) DO UPDATE</span>. (공식 항차 집계 <span class="mono">c06</span> → <span class="mono">raw_k_mph_voyage</span>는 <span class="mono">VSS_STATISTICS</span>의 <span class="mono">VSS_STT_GQCR/NQCR</span>를 30일 창으로 별도 보관.)</p>
+  <h4>④ 롤업</h4>
+  <pre>value = round(sum(k_mph_per_active_hour*active_hours)/nullif(sum(active_hours),0), 2)
+sample_n = count(distinct vessel||'/'||voyage)   <span class="c">-- 표시 N = 항차 수</span>
+HAVING sum(active_hours) &gt; 0</pre>
+  <div class="note warn"><p><span class="h">N과 가중치가 다름</span>화면의 <span class="mono">sample_n</span>은 <b>항차 수</b>지만, 실제 기간 결합 가중치는 <span class="mono">Σactive_hours</span>입니다. <span class="mono">shift.rs</span>는 <span class="mono">kpi_shift.agg_weight=Σactive_hours</span>를 따로 저장해(<span class="mono">0009</span> 마이그레이션) "오늘" 결합을 정확히 합니다 — sample_n으로 폴백하면 K_MPH는 근사가 됩니다.</p></div>
+
+  <!-- K_CRANE_Q -->
+  <h3>K_CRANE_Q — 야드 핸드오버 대기 <span class="b" style="background:#e2e8f0;color:#475569">숨김</span></h3>
+  <h4>① 소스 · ② 가공</h4>
+  <pre>FROM TOSADM.JOB_ORDER_HISTORY   WHERE JOB_HIST_DATE = '{{DAY_STR}}'
+  AND YT_DIS_DT IS NOT NULL AND JOB_HIST_ACTV_DT IS NOT NULL
+crane_q_sec = (ACTV_DT − YT_DIS_DT) * 86400        <span class="c">-- TT 하차 → 야드 핸드오버</span>
+in_range = COUNT(WHERE crane_q_sec BETWEEN 0 AND 1800)
+k_crane_q_avg_sec = AVG(crane_q_sec WHERE 0..1800)  <span class="c">-- ARMGC=RTG, 음수/30분초과는 이상</span></pre>
+  <p>컬럼 <span class="mono">YT_DIS_DT</span>(TT 하차 시각) · <span class="mono">JOB_HIST_ACTV_DT</span>(야드 크레인 활성) · <span class="mono">JOB_HIST_ARMGC</span> · <span class="mono">JOB_HIST_JOBTYPE</span>. 0~1800초로 거르는 이유는 K_QC_Q와 같음(음수=시각 역전 오류, 30분 초과=핸드오버 아닌 공백).</p>
+  <h4>③ 적재 · ④ 롤업</h4>
+  <p>대상: <span class="mono">raw_k_crane_q_daily</span> · PK <span class="mono">(work_date, jobtype)</span> (<span class="mono">k_crane_q_daily.rs</span>; 시간별은 <span class="mono">e5</span>→<span class="mono">raw_k_crane_q_hour</span>). 롤업: <span class="mono">value = round(sum(k_crane_q_avg_sec*in_range)/nullif(sum(in_range),0), 1)</span>, <span class="mono">sample_n = sum(in_range)</span>, 가중치=<span class="mono">in_range</span>.</p>
+  <div class="note warn"><p><span class="h">K_QC_Q ≠ K_CRANE_Q</span><b>K_QC_Q</b>(표시) = MCH_OPERATION의 안벽 크레인(C##) 유휴 갭 = "QC가 트럭을 기다림". <b>K_CRANE_Q</b>(숨김) = JOB_ORDER_HISTORY의 <span class="mono">ACTV_DT−YT_DIS_DT</span> = "TT가 야드 핸드오버를 기다림"(ARMGC=RTG). 서로 다른 대기입니다.</p></div>
+
+  <div class="note key"><p><span class="h">정리 — 분자·분모 보존의 일관성</span>6개 표시 KPI는 모두 <b>가중치(=진짜 분모)</b>를 <span class="mono">raw_*</span>와 <span class="mono">kpi_shift.agg_weight</span>에 보존합니다: K_EMPTY=jobs, K_EMPTY_R=Σ미터, K_CYCLE=jobs, K_MPH=active_hours, K_QC_Q=idle_periods, K_CRANE_Q=in_range. 덕분에 일·주·월 어떤 구간도 <span class="mono">Σ(value·weight)/Σweight</span>로 정확히 결합되고(§4), K_UTIL만 avg-of-ratios라 <span class="mono">util_tt_shift</span>로 재조합합니다.</p></div>
+</section>
+
 <!-- 2 tiers -->
 <section id="tiers">
-  <div class="kicker">Part 2</div>
+  <div class="kicker">Part 3</div>
   <h2>3계층 — 원천에서 화면까지</h2>
   <div class="tier">
     <div class="step"><div class="lv">SOURCE</div><h4>TOS Oracle</h4><p>완료 작업 이력. 추출기만 읽음(인덱스 범위·FETCH FIRST).</p></div>
@@ -161,7 +342,7 @@
 
 <!-- 3 today -->
 <section id="today">
-  <div class="kicker">Part 3</div>
+  <div class="kicker">Part 4</div>
   <h2>"오늘"을 Oracle 재스캔 없이</h2>
   <p>오늘은 아직 진행 중이라 권위 값이 없습니다. 그렇다고 매번 Oracle을 다시 긁으면 부하가 큽니다. 그래서:</p>
   <pre><span class="c">기간 [from, to] 집계 (agg.rs)</span>
@@ -174,7 +355,7 @@
 
 <!-- 4 schedule -->
 <section id="sched">
-  <div class="kicker">Part 4</div>
+  <div class="kicker">Part 5</div>
   <h2>추출 스케줄 (systemd 타이머)</h2>
   <table class="pg">
     <tr><th style="width:150px">작업</th><th>주기 · 내용</th><th style="width:90px">Oracle 부하</th></tr>
@@ -187,7 +368,7 @@
 
 <!-- 5 history -->
 <section id="history">
-  <div class="kicker">Part 5</div>
+  <div class="kicker">Part 6</div>
   <h2>일 / 주 / 월 이력</h2>
   <p><span class="mono">GET /api/kpis/history?gran=day|week|month</span> — 버킷×6KPI 매트릭스. <b>Postgres 전용·Oracle 0</b>.</p>
   <table class="pg">
@@ -200,7 +381,7 @@
 
 <!-- 6 gotchas -->
 <section id="gotchas">
-  <div class="kicker">Part 6</div>
+  <div class="kicker">Part 7</div>
   <h2>주의 사항</h2>
   <table>
     <tr><th style="width:170px">항목</th><th>내용</th></tr>

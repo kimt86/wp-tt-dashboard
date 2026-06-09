@@ -101,7 +101,7 @@
   <div class="tag">TT AiOps Platform · Capacity Planning</div>
   <h1>클라우드 용량 산정 — CPU · 메모리</h1>
   <p>플랫폼(대시보드·실시간 수집·KPI)과 <b>배차 로직(1·2단계)</b>을 클라우드에 띄울 때 필요한 vCPU·메모리·스토리지 추정. <b>ML 학습은 다른 서버</b>에서 돌리므로 별도로 산정했습니다. 핵심 결론부터: <b>서빙·배차는 가볍고, 무거운 건 학습</b>입니다.</p>
-  <div class="meta">기준 <b>2026-06-09</b> · 사이트 = Westports(장비 ~450대) · 산정 = 측정값 + 헤드룸 · 단위 vCPU / RAM · <b>학습 분리</b></div>
+  <div class="meta">기준 <b>2026-06-09</b> · 사이트 = Westports(장비 ~450대) · 산정 = 측정값 + <b>넉넉한 헤드룸(범위: 최소→권장→넉넉)</b> · 단위 vCPU / RAM · <b>학습 분리</b></div>
 </div>
 
 <!-- 0 -->
@@ -109,12 +109,13 @@
   <div class="kicker">한눈에</div>
   <h2>권장 사양 요약</h2>
   <table>
-    <tr><th style="width:150px">구분</th><th>권장 (헤드룸 포함)</th><th>예시 인스턴스</th><th style="width:90px">비고</th></tr>
-    <tr><td><span class="b b-ph1">1단계</span> 플랫폼+규칙배차</td><td><b>4 vCPU · 8 GB</b> ×1 (+ 관리형 Postgres 2 vCPU·8GB 선택)</td><td>m6i.xlarge · e2-standard-4 · D4s_v5</td><td>단일 노드로 충분</td></tr>
-    <tr><td><span class="b b-ph2">2단계</span> +예측 추론</td><td>플랫폼 <b>4 vCPU·8 GB</b> + 배차/추론 <b>4 vCPU·8 GB</b> (또는 합쳐 8 vCPU·16 GB)</td><td>m6i.xlarge ×2 · e2-standard-8</td><td>추론은 가벼움(트리모형)</td></tr>
-    <tr><td><span class="b b-train">학습</span> (별도·배치)</td><td><b>16 vCPU · 64 GB</b> (트리모형) / +GPU 1장 (딥러닝 시)</td><td>c6i.4xlarge · e2-highmem-16 · (+T4/A10)</td><td>야간·주간 배치, spot 가능</td></tr>
+    <tr><th style="width:140px">구분</th><th class="num" style="width:90px">최소</th><th class="num" style="width:120px">권장</th><th class="num" style="width:130px">넉넉(여유)</th><th>예시 인스턴스(권장 → 넉넉)</th><th style="width:80px">비고</th></tr>
+    <tr><td><span class="b b-ph1">1단계</span> 플랫폼+규칙배차</td><td class="num">4 vCPU·8 GB</td><td class="num"><b>8 vCPU·16 GB</b></td><td class="num">8 vCPU·16–32 GB</td><td>m6i.2xlarge · e2-standard-8 · D8s_v5 → m6i.4xlarge<br><span class="mono">+ 관리형 Postgres 2–4 vCPU·8–16 GB 별도</span></td><td>단일 노드 가능</td></tr>
+    <tr><td><span class="b b-ph2">2단계</span> +예측 추론</td><td class="num">플랫폼 8·16<br>+배차 4·8</td><td class="num"><b>플랫폼 8·16<br>+배차/추론 8·16</b></td><td class="num">합쳐 16 vCPU·32 GB</td><td>m6i.2xlarge ×2 · e2-standard-8 ×2 → m6i.4xlarge / e2-standard-16 / D16s_v5</td><td>추론 가벼움(트리)</td></tr>
+    <tr><td><span class="b b-train">학습</span> (별도·배치)</td><td class="num">16 vCPU·64 GB</td><td class="num"><b>32 vCPU·128 GB</b></td><td class="num">32 vCPU·128 GB<br>+GPU 1장</td><td>c6i.4xlarge · e2-highmem-16 → c6i.8xlarge · e2-highmem-32 (+T4/A10/L4, DL은 g4dn/g5)</td><td>배치·spot 가능</td></tr>
   </table>
-  <div class="note key"><p><span class="h">핵심</span>실시간 서빙·배차의 부하는 <b>websocket 수집(~90 msg/s)</b>과 <b>대시보드 폴링</b>이 대부분인데 둘 다 가볍습니다(코어 1개 미만). 배차 최적화(헝가리안)·예측 추론도 결정당 수~수십 ms라 가볍습니다. <b>진짜 자원이 드는 건 ML "학습"</b>이고, 그건 상시가 아니라 배치라서 <b>별도 서버에서 필요할 때만</b> 띄우면 됩니다.</p></div>
+  <div class="note"><p><span class="h">사이징 원칙 — 의도된 여유</span>아래 수치는 <b>의도적으로 보수적(넉넉)</b>하게 잡았고 <b>범위(최소 → 권장 → 넉넉)</b>로 제시합니다. 권장값에 이미 충분한 헤드룸이 들어 있으며, <b>실측 부하 테스트·모니터링 이후 더 작은 사양으로 다운사이징(right-size down)할 수 있습니다</b> — 즉 이 버퍼는 의도된 것입니다. 불확실할 때는 권장~넉넉 사이에서 시작하고, 안정화되면 비용을 줄이세요.</p></div>
+  <div class="note key"><p><span class="h">핵심</span>실시간 서빙·배차의 부하는 <b>websocket 수집(~90 msg/s)</b>과 <b>대시보드 폴링</b>이 대부분인데 둘 다 가볍습니다(코어 1개 미만). 배차 최적화(헝가리안)·예측 추론도 결정당 수~수십 ms라 가볍습니다. 그럼에도 운영 안정성을 위해 권장값을 넉넉히 잡았습니다. <b>진짜 자원이 드는 건 ML "학습"</b>이고, 그건 상시가 아니라 배치라서 <b>별도 서버에서 필요할 때만</b> 띄우면 됩니다.</p></div>
 </section>
 
 <!-- 1 components -->
@@ -149,17 +150,17 @@
 <section id="phase1">
   <div class="kicker">Part 3</div>
   <h2>1단계 사이징 — 플랫폼 + 규칙 배차</h2>
-  <p>예측 없이, 차량 풀과 후보 작업 풀을 규칙/최적화로 매칭합니다. 컴포넌트별 (평상시 → 권장 헤드룸):</p>
+  <p>예측 없이, 차량 풀과 후보 작업 풀을 규칙/최적화로 매칭합니다. 컴포넌트별 (평상시 측정 → 최소 → 권장 → 넉넉, 헤드룸 포함):</p>
   <table class="t-ph1">
-    <tr><th>컴포넌트</th><th class="num" style="width:120px">vCPU 평상/권장</th><th class="num" style="width:130px">RAM 평상/권장</th><th>메모</th></tr>
-    <tr><td>API (axum + WS 수집 + 라이브맵)</td><td class="num">0.3 / 1.0</td><td class="num">150 MB / 512 MB</td><td>WS 파싱 + 폴링 서빙 + TT 분류</td></tr>
-    <tr><td>PostgreSQL</td><td class="num">0.5 / 1.0</td><td class="num">1 GB / 2 GB</td><td>소규모 집계·90s 쓰기</td></tr>
-    <tr><td>추출기 (타이머)</td><td class="num">~0.05 / 1.0*</td><td class="num">100 MB / 256 MB</td><td>*실행 순간만 1코어, 평균 무시</td></tr>
-    <tr><td>배차 엔진 (규칙·헝가리안)</td><td class="num">0.3 / 1.0</td><td class="num">256 MB / 512 MB</td><td>결정당 수~수십 ms</td></tr>
-    <tr><td>웹(정적)·터널</td><td class="num">~0 / 0.1</td><td class="num">~0 / 64 MB</td><td>API가 정적 서빙</td></tr>
-    <tr class="sum"><td class="tot">합계 (단일 노드)</td><td class="num tot">~1.2 / 4 vCPU</td><td class="num tot">~1.6 / 6–8 GB</td><td>여유 포함 4 vCPU·8 GB</td></tr>
+    <tr><th>컴포넌트</th><th class="num" style="width:150px">vCPU 평상→권장→넉넉</th><th class="num" style="width:160px">RAM 평상→권장→넉넉</th><th>메모</th></tr>
+    <tr><td>API (axum + WS 수집 + 라이브맵)</td><td class="num">0.3 → 1.5 → 2.5</td><td class="num">150 MB → 1 → 2 GB</td><td>WS 파싱 + 폴링 서빙 + TT 분류</td></tr>
+    <tr><td>PostgreSQL</td><td class="num">0.5 → 2 → 4</td><td class="num">1 → 4 → 8 GB</td><td>소규모 집계·90s 쓰기 (관리형 분리 권장)</td></tr>
+    <tr><td>추출기 (타이머)</td><td class="num">~0.05 → 1 → 1.5*</td><td class="num">100 → 256 → 512 MB</td><td>*실행 순간만 1코어, 평균 무시</td></tr>
+    <tr><td>배차 엔진 (규칙·헝가리안)</td><td class="num">0.3 → 1.5 → 2.5</td><td class="num">256 MB → 1 → 2 GB</td><td>결정당 수~수십 ms</td></tr>
+    <tr><td>웹(정적)·터널·OS 오버헤드</td><td class="num">~0.1 → 0.5 → 1</td><td class="num">64 MB → 1 → 2 GB</td><td>API가 정적 서빙 + 커널/모니터링 여유</td></tr>
+    <tr class="sum"><td class="tot">합계 (단일 노드)</td><td class="num tot">~1.3 → 4 → 8 vCPU</td><td class="num tot">~1.6 → 8 → 16 GB</td><td>권장 8 vCPU·16 GB</td></tr>
   </table>
-  <div class="note good"><p><span class="h">1단계 권장</span><b>1× (4 vCPU · 8 GB)</b> 단일 노드로 전부 수용(API+DB+추출기+배차). 운영 안정성을 원하면 <b>PostgreSQL은 관리형</b>(2 vCPU·8 GB)으로 분리하고 앱 노드는 2–4 vCPU·4–8 GB. 예: AWS m6i.xlarge / GCP e2-standard-4 / Azure D4s_v5.</p></div>
+  <div class="note good"><p><span class="h">1단계 권장</span><b>최소 4 vCPU·8 GB → 권장 8 vCPU·16 GB → 넉넉 8 vCPU·16–32 GB</b> 단일 노드로 전부 수용(API+DB+추출기+배차). 운영 안정성을 원하면 <b>PostgreSQL은 관리형</b>(2–4 vCPU·8–16 GB)으로 분리하고 앱 노드는 8 vCPU·16 GB. 예: AWS m6i.2xlarge / GCP e2-standard-8 / Azure D8s_v5 (넉넉히 가려면 m6i.4xlarge / e2-standard-16). 권장값엔 이미 충분한 여유가 있어, 실측 후 4 vCPU·8 GB로 줄일 여지가 큽니다.</p></div>
 </section>
 
 <!-- 4 phase2 -->
@@ -168,14 +169,15 @@
   <h2>2단계 사이징 — + 예측 추론</h2>
   <p>2단계는 배차 결정 때 <strong>모형으로 예측</strong>(이동시간·크레인 준비 ETW·블록 핸드오버)을 만들어 더 정확히 매칭합니다. <b>추론</b>은 1단계 위에 얇게 얹힙니다(학습은 별도, §5).</p>
   <table class="t-ph2">
-    <tr><th>추가분</th><th class="num" style="width:120px">vCPU 추가</th><th class="num" style="width:130px">RAM 추가</th><th>메모</th></tr>
-    <tr><td>예측 추론 (배차 엔진 내)</td><td class="num">+0.5 ~ 1.0</td><td class="num">+100 ~ 300 MB</td><td>트리모형(LightGBM 등) 추론 µs/건, 결정당 수 ms</td></tr>
-    <tr><td>피처 조립 (라이브+캐시)</td><td class="num">+0.3</td><td class="num">+200 MB</td><td>쌍별 피처 계산이 추론보다 비쌈</td></tr>
-    <tr><td>학습데이터 적재 (record-only)</td><td class="num">+0.2</td><td class="num">+200 MB</td><td>추출기가 매일 스냅샷 누적(§6)</td></tr>
-    <tr class="sum"><td class="tot">배차/추론 노드 합</td><td class="num tot">~2 / 4 vCPU</td><td class="num tot">~2 / 4 GB</td><td>플랫폼과 분리 권장</td></tr>
+    <tr><th>추가분 (배차/추론 노드)</th><th class="num" style="width:150px">vCPU 평상→권장→넉넉</th><th class="num" style="width:160px">RAM 평상→권장→넉넉</th><th>메모</th></tr>
+    <tr><td>예측 추론 (배차 엔진 내)</td><td class="num">+0.5 → 1.5 → 2.5</td><td class="num">+0.3 → 1 → 2 GB</td><td>트리모형(LightGBM 등) 추론 µs/건, 결정당 수 ms</td></tr>
+    <tr><td>피처 조립 (라이브+캐시)</td><td class="num">+0.3 → 1 → 2</td><td class="num">+0.2 → 1 → 2 GB</td><td>쌍별 피처 계산이 추론보다 비쌈</td></tr>
+    <tr><td>학습데이터 적재 (record-only)</td><td class="num">+0.2 → 0.5 → 1</td><td class="num">+0.2 → 0.5 → 1 GB</td><td>추출기가 매일 스냅샷 누적(§6)</td></tr>
+    <tr><td>OS·모니터링 여유</td><td class="num">~0.1 → 1 → 2.5</td><td class="num">+0.3 → 5.5 → 11 GB</td><td>버스트·격리 헤드룸</td></tr>
+    <tr class="sum"><td class="tot">배차/추론 노드 합</td><td class="num tot">~1.1 → 4 → 8 vCPU</td><td class="num tot">~1 → 8 → 16 GB</td><td>플랫폼과 분리 권장</td></tr>
   </table>
-  <div class="note key"><p><span class="h">왜 추론이 가벼운가</span>2단계 예측은 표 형식(tabular) — 이동시간·ETW 같은 값을 <b>그래디언트 부스팅 트리</b>(LightGBM/XGBoost)로 맞히는 게 표준입니다. 트리 추론은 건당 µs, 모형은 RAM 수십 MB. 결정당 수천 건 예측해도 한 자릿수 ms. <b>GPU 불필요</b>(학습 때만 선택).</p></div>
-  <div class="note good"><p><span class="h">2단계 권장</span>플랫폼 <b>4 vCPU·8 GB</b> + 배차/추론 <b>4 vCPU·8 GB</b> (격리). 소규모면 합쳐 <b>1× 8 vCPU·16 GB</b>도 가능. 예: m6i.xlarge ×2 또는 m6i.2xlarge ×1.</p></div>
+  <div class="note key"><p><span class="h">왜 추론이 가벼운가</span>2단계 예측은 표 형식(tabular) — 이동시간·ETW 같은 값을 <b>그래디언트 부스팅 트리</b>(LightGBM/XGBoost)로 맞히는 게 표준입니다. 트리 추론은 건당 µs, 모형은 RAM 수십 MB. 결정당 수천 건 예측해도 한 자릿수 ms. <b>GPU 불필요</b>(학습 때만 선택). 노드 사양은 추론 자체보다 운영 격리·버스트 여유를 위해 넉넉히 잡은 것입니다.</p></div>
+  <div class="note good"><p><span class="h">2단계 권장</span>플랫폼 <b>8 vCPU·16 GB</b> + 배차/추론 <b>최소 4 vCPU·8 GB → 권장 8 vCPU·16 GB</b> (격리). 합치는 경우 <b>1× 16 vCPU·32 GB</b>로 넉넉히. 예: m6i.2xlarge ×2 → m6i.4xlarge ×1 (16 vCPU·32 GB) · e2-standard-8 ×2 / e2-standard-16 · Azure D8s_v5 ×2 / D16s_v5. 권장값은 여유를 포함하므로 안정화 후 배차 노드를 4 vCPU·8 GB로 다운사이징 가능.</p></div>
 </section>
 
 <!-- 5 training -->
@@ -186,15 +188,16 @@
   <h4>데이터 규모 (추정)</h4>
   <ul>
     <li>완료 작업 ~15K move/일 → 6개월 ≈ <b>2.7M 행</b> × 피처 30–50개.</li>
-    <li>학습 행렬 메모리 ≈ 2.7M×50×8B ≈ <b>~1 GB</b>; 교차검증·피처가공 중간물 포함 <b>4–16 GB</b>.</li>
+    <li>학습 행렬 메모리 ≈ 2.7M×50×8B ≈ <b>~1 GB</b>; 교차검증·피처가공 중간물 포함 <b>4–16 GB</b>. 넉넉히 잡아 <b>64–128 GB</b>면 여러 모형·하이퍼파라미터 탐색을 병렬로 돌릴 수 있음.</li>
     <li>GPS 원시까지 학습에 쓰면 훨씬 큼(§6) — 보통 move 단위 피처로 집약.</li>
   </ul>
   <table class="t-train">
-    <tr><th>접근</th><th class="num" style="width:90px">vCPU</th><th class="num" style="width:90px">RAM</th><th class="num" style="width:120px">GPU</th><th>학습시간(1회)</th></tr>
-    <tr><td><b>트리모형</b> (LightGBM/XGBoost) — 권장</td><td class="num">16</td><td class="num">64 GB</td><td class="num">—</td><td>수분 ~ 1시간</td></tr>
-    <tr><td>딥러닝 (선택: 시퀀스/그래프 모형)</td><td class="num">8</td><td class="num">32 GB</td><td class="num">1× T4(16G)/A10(24G)</td><td>수 시간</td></tr>
+    <tr><th>접근</th><th class="num" style="width:130px">vCPU 최소→권장</th><th class="num" style="width:130px">RAM 최소→권장</th><th class="num" style="width:150px">GPU</th><th>학습시간(1회)</th></tr>
+    <tr><td><b>트리모형</b> (LightGBM/XGBoost) — 권장</td><td class="num">16 → 32</td><td class="num">64 → 128 GB</td><td class="num">—</td><td>수분 ~ 1시간</td></tr>
+    <tr><td>딥러닝 (선택: 시퀀스/그래프 모형)</td><td class="num">8 → 16</td><td class="num">32 → 64 GB</td><td class="num">1× T4(16G)/A10(24G)/L4(24G)</td><td>수 시간</td></tr>
+    <tr><td>대형 딥러닝 (선택·여유)</td><td class="num">16 → 32</td><td class="num">64 → 128 GB</td><td class="num">1× A100(40–80G)</td><td>수 시간~</td></tr>
   </table>
-  <div class="note"><p><span class="h">학습 서버 권장</span>ETW·이동시간 예측은 트리모형으로 충분 → <b>16 vCPU · 64 GB (GPU 불필요)</b>. 예: c6i.4xlarge / e2-highmem-16 / Azure E16s. 배치라 <b>spot/preemptible</b>로 비용 절감, 학습 끝나면 종료. 야드 레이아웃을 쓰는 시퀀스/그래프 모형으로 확장하면 GPU 1장 추가. <b>학습 산출물(모형 파일, 수~수십 MB)만 서빙 노드로 배포</b>합니다.</p></div>
+  <div class="note"><p><span class="h">학습 서버 권장</span>ETW·이동시간 예측은 트리모형으로 충분 → <b>최소 16 vCPU·64 GB → 권장 32 vCPU·128 GB (GPU 불필요)</b>. 예: c6i.4xlarge / e2-highmem-16 → c6i.8xlarge / e2-highmem-32 / Azure E16s–E32s. 배치라 <b>spot/preemptible</b>로 비용 절감, 학습 끝나면 종료. 야드 레이아웃을 쓰는 시퀀스/그래프 모형으로 확장하면 <b>GPU 1장</b>(T4 16G / A10 24G / L4 24G — 예: AWS g4dn / g5, GCP는 L4) 추가, 무거운 딥러닝이면 <b>A100 40–80 GB</b>까지 고려. <b>학습 산출물(모형 파일, 수~수십 MB)만 서빙 노드로 배포</b>합니다. 사양을 넉넉히 잡아도 배치·spot이라 비용 부담이 작습니다.</p></div>
   <div class="note warn"><p><span class="h">학습은 데이터 누적이 선행</span>2단계 학습엔 수개월치가 필요합니다. TOS 보존은 ~15/35일뿐이라(<a href="./tos-db-reference-ko.html#retention" style="color:var(--accent)">레퍼런스 §2</a>), <b>1단계 운영과 동시에 매일 스냅샷을 적재</b>해 두어야 6–12개월 뒤 학습이 가능합니다(record-only 파이프라인, §6).</p></div>
 </section>
 
@@ -203,14 +206,14 @@
   <div class="kicker">Part 6</div>
   <h2>스토리지 · 네트워크</h2>
   <table>
-    <tr><th style="width:230px">항목</th><th>크기/대역</th><th>권장</th></tr>
-    <tr><td>서빙 PostgreSQL</td><td>KPI·스냅샷 수 GB, 느린 증가</td><td>50–100 GB SSD</td></tr>
-    <tr><td>학습데이터 (집약 피처)</td><td>~1–2 GB / 6개월</td><td>서빙 DB 또는 분석 저장소</td></tr>
-    <tr><td>GPS 원시 보관(학습용·선택)</td><td>~0.5–0.7 GB/일 → <b>~200 GB/년</b></td><td>샘플·집약 또는 오브젝트 스토리지(S3/GCS) 콜드</td></tr>
-    <tr><td>websocket 수신 대역</td><td>~90 msg/s × ~300 B ≈ <b>27 KB/s</b> in</td><td>무시 가능</td></tr>
-    <tr><td>대시보드 egress</td><td>positions ~150 KB × (사용자/2.5s) — 20명 ~1.2 MB/s</td><td>모뎀급, 무시 가능</td></tr>
+    <tr><th style="width:210px">항목</th><th>크기/대역</th><th>권장 (최소 → 권장 → 넉넉)</th></tr>
+    <tr><td>서빙 PostgreSQL</td><td>KPI·스냅샷 수 GB, 느린 증가</td><td>100 → 150 → 250 GB SSD (자동 확장 권장)</td></tr>
+    <tr><td>학습데이터 (집약 피처)</td><td>수 GB → 수십 GB / 누적</td><td>10 → 50 → 100 GB (서빙 DB 또는 분석 저장소)</td></tr>
+    <tr><td>GPS 원시 보관(학습용·선택)</td><td>~0.5–0.8 GB/일 → <b>~200–300 GB/년</b></td><td>오브젝트 스토리지(S3/GCS) 콜드 — 넉넉히 1–2 TB 할당</td></tr>
+    <tr><td>websocket 수신 대역</td><td>~90 msg/s × ~300 B ≈ <b>27 KB/s</b> in</td><td>무시 가능 (상한 넉넉히 ~1 Mbps)</td></tr>
+    <tr><td>대시보드 egress</td><td>positions ~150 KB × (사용자/2.5s) — 20명 ~1.2 MB/s</td><td>모뎀급, 상한 넉넉히 ~50 Mbps면 충분</td></tr>
   </table>
-  <div class="note warn"><p><span class="h">스토리지 주의 — GPS 원시</span>가장 큰 스토리지 항목은 학습용 <b>GPS 원시 보관</b>(연 ~200 GB)입니다. 대부분의 예측은 move 단위 집약 피처로 충분하므로, 원시는 <b>샘플링/집약하거나 오브젝트 스토리지 콜드 계층</b>에 두는 걸 권장합니다. 실시간 서빙은 GPS를 메모리에만 두고 DB에 안 쌓습니다(<a href="./websocket-data-ko.html" style="color:var(--accent)">websocket 문서</a>).</p></div>
+  <div class="note warn"><p><span class="h">스토리지 주의 — GPS 원시</span>가장 큰 스토리지 항목은 학습용 <b>GPS 원시 보관</b>(연 ~200–300 GB)입니다. 대부분의 예측은 move 단위 집약 피처로 충분하므로, 원시는 <b>샘플링/집약하거나 오브젝트 스토리지 콜드 계층</b>(넉넉히 1–2 TB 예산, 수명주기 정책으로 자동 만료)에 두는 걸 권장합니다. 서빙 SSD와 학습 데이터는 모두 자동 확장 가능한 볼륨으로 잡아 두면 안전합니다. 실시간 서빙은 GPS를 메모리에만 두고 DB에 안 쌓습니다(<a href="./websocket-data-ko.html" style="color:var(--accent)">websocket 문서</a>).</p></div>
 </section>
 
 <!-- 7 notes -->
@@ -218,13 +221,13 @@
   <div class="kicker">Part 7</div>
   <h2>권장 · 주의</h2>
   <ul>
-    <li><b>시작은 작게.</b> 1단계는 <b>4 vCPU·8 GB 단일 노드</b>로 시작해 실측 후 조정. 과다 산정보다 모니터링 기반 증설이 효율적.</li>
+    <li><b>넉넉히 시작, 실측 후 다운사이징.</b> 1단계는 <b>권장 8 vCPU·16 GB 단일 노드</b>(최소 4 vCPU·8 GB)로 출발해 모니터링 후 조정. 본 산정은 의도적으로 보수적(여유 포함)이라, 안정화되면 더 작은 사양으로 <b>right-size down</b>해 비용을 줄이는 방향을 권장.</li>
     <li><b>가용성(HA).</b> 배차가 운영에 직접 관여하면 앱·배차 노드를 이중화(2 AZ)하고 PostgreSQL은 관리형(자동 failover) 권장. 상태는 대부분 Postgres + 메모리 라이브맵(재구성 가능)이라 무상태에 가깝게 운영 가능.</li>
     <li><b>분리 원칙.</b> ① 서빙 ② 배차/추론 ③ 학습을 분리하면 장애·부하가 서로 안 번짐. 특히 <b>학습은 절대 서빙 클러스터에서 돌리지 않음</b>(이 문서의 전제).</li>
     <li><b>확장.</b> 사용자가 수백 명으로 늘면 API를 수평 확장(라이브맵 상태는 공유 캐시/단일 인제스트 + read replica). 현재 규모(내부 수십 명)에선 불필요.</li>
     <li><b>비용 절감.</b> 학습 노드는 spot/preemptible + 배치 종료, GPS 원시는 콜드 스토리지.</li>
   </ul>
-  <div class="note bad"><p><span class="h">전제·한계</span>위 수치는 <b>한 터미널(Westports) 규모·내부 사용자·측정된 메시지율</b> 기준의 추정이며 헤드룸을 포함했습니다. 실제 값은 (가) 동시 사용자 수, (나) 배차 결정 주기, (다) 2단계 모형 복잡도, (라) GPS 원시 보관 정책에 따라 달라집니다. <b>부하 테스트와 모니터링으로 검증</b> 후 확정하세요.</p></div>
+  <div class="note bad"><p><span class="h">전제·한계</span>위 수치는 <b>한 터미널(Westports) 규모·내부 사용자·측정된 메시지율</b> 기준의 추정이며 <b>의도적으로 보수적인(넉넉한) 헤드룸을 포함한 범위</b>로 제시했습니다. 실제 값은 (가) 동시 사용자 수, (나) 배차 결정 주기, (다) 2단계 모형 복잡도, (라) GPS 원시 보관 정책에 따라 달라집니다. 권장값엔 버퍼가 들어 있으니 <b>부하 테스트와 모니터링으로 검증</b> 후 필요하면 다운사이징해 확정하세요.</p></div>
 </section>
 
 <div class="foot">CLT Port Group · Digital Team — 클라우드 용량 산정 · 2026-06-09 · 추정(측정+헤드룸) · 학습 별도 산정 · TT AiOps Platform · 내부 공유용</div>
