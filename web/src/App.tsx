@@ -182,11 +182,26 @@ function useWsLive(): WsLive | null {
 //                are smoother than the per-second feed, so TOS leads on
 //                K_UTIL/K_MPH/K_QC_Q/K_CYCLE (the TOS truck-cycle approximation).
 //  • "tos"     — TOS only (no websocket counterpart, or the ws feed is down).
+//  • "wsOnly"  — only the websocket value is meaningful; the TOS value is not shown
+//                (K_UTIL: the TOS session number counts idle as utilized, so it is dropped).
 type CardSrc =
   | { kind: "tos" }
-  | { kind: "dual"; auxVal: string; auxTitle: string };
+  | { kind: "dual"; auxVal: string; auxTitle: string }
+  | { kind: "wsOnly"; val: string; title: string };
 
 function cardSrc(key: string, w: WsLive | null, ko: boolean): CardSrc {
+  if (key === "K_UTIL") {
+    // True utilization EXCLUDES idle. The TOS session value (login − stops) counts manned-idle
+    // time as utilized → overstates, so it is not shown. websocket-only; "—" when feed is down.
+    const real = w && w.connected ? (w.tt_engaged_live ?? null) : null;
+    return {
+      kind: "wsOnly",
+      val: real != null ? `${real}%` : "—",
+      title: ko
+        ? "진짜 가동률(유휴 제외) — 맨드(엔진ON) 트럭 중 실제 작업(이동·적재) 비율. TOS 세션 가동률(로그인−정지)은 유휴 대기를 가동으로 세 과대평가라 미표시. 빈 차 큐잉도 유휴로 세므로 하한값."
+        : "true utilization (idle excluded) — of manned trucks, the fraction actually working. The TOS session value counts idle-waiting as utilized (overstated), so it is not shown. A lower bound.",
+    };
+  }
   if (key === "K_CYCLE") {
     // Truck cycle. Headline = TOS approximation (raw_k_tt_cycle: per-truck consecutive
     // QC-move interval, ~14m), lower-variation and always available. Live GPS cycle (~13m,
@@ -206,20 +221,6 @@ function cardSrc(key: string, w: WsLive | null, ko: boolean): CardSrc {
     return { kind: "tos" };
   }
   if (!w || !w.connected) return { kind: "tos" };
-  if (key === "K_UTIL" && w.tt_engaged_live != null) {
-    // TRUE utilization excludes idle: of manned trucks, the fraction actually working
-    // (moving/carrying). TOS K_UTIL only subtracts formal stops, counting manned-idle time
-    // as utilized, so it overstates (~95%). The websocket sees movement → can exclude idle.
-    const real = w.tt_engaged_live;   // idle excluded
-    const manned = w.tt_util_live;    // manning (= TOS concept, idle included)
-    return {
-      kind: "dual",
-      auxVal: ko ? `실가동 ${real}%` : `util ${real}%`,
-      auxTitle: ko
-        ? `진짜 가동률(유휴 제외) ${real}% — 맨드 트럭 중 실제 작업(이동·적재) 비율. TOS K_UTIL(${manned ?? "~95"}% 부근)은 로그인−정지만 빼고 "유휴 대기"는 가동으로 세므로 과대평가. 유휴를 빼면 ${real}%가 진짜 가동률.`
-        : `true utilization (idle excluded) ${real}% — of manned trucks, the fraction actually working. TOS K_UTIL (~${manned ?? 95}%) only subtracts formal stops and counts idle-waiting as utilized, so it overstates. Subtracting idle gives ${real}%.`,
-    };
-  }
   if (key === "K_MPH" && w.crane_mph_live != null)
     return { kind: "dual", auxVal: `${w.crane_mph_live}/h`, auxTitle: ko ? "실시간 QC 평균 처리량 (PLC 사이클)" : "live avg QC throughput (PLC cycles)" };
   if (key === "K_QC_Q")
@@ -246,8 +247,11 @@ function WsAux({ val, title, ko }: { val: string; title: string; ko: boolean }) 
 }
 
 // the cycle KPI is stored in seconds but reads as a duration; everything else uses fmtValue.
+// K_UTIL: the TOS session value is never shown (idle-included → overstated), so its
+// non-live (historical) cell is "—"; the live value comes from the websocket (wsOnly).
 function mainValue(key: string, value: number | null, unit: string): { val: string; unit: string } {
   if (key === "K_CYCLE") return { val: value != null ? fmtCycle(value) : "—", unit: "" };
+  if (key === "K_UTIL") return { val: "—", unit: "" };
   return { val: fmtValue(value, unit), unit };
 }
 
@@ -264,6 +268,17 @@ function LiveCard({ c, lang, ws, extras }: { c: LiveKpi; lang: Lang; ws: WsLive 
     if (c.delta_pct != null) return `${arrow} ${Math.abs(c.delta_pct).toFixed(1)}%`;
     return `${arrow} ${Math.abs(c.delta_abs).toFixed(2)}`;
   })();
+  // K_UTIL: websocket-only (idle-excluded true utilization); TOS session value not shown.
+  if (src.kind === "wsOnly") {
+    return (
+      <div className={`kpi${c.tier === "PRIMARY" ? " primary" : ""}`} title={src.title}>
+        <div className="label">{nm}<SourceBadge src="ws" ko={ko} /></div>
+        <div className="vrow"><span className="val">{src.val}</span></div>
+        <div className="ws-sub mono">{ko ? "유휴 제외" : "idle excluded"}</div>
+        <div className="n" style={{ marginTop: "auto" }}>{ko ? "websocket GPS" : "from websocket GPS"}</div>
+      </div>
+    );
+  }
   return (
     <div className={`kpi${c.tier === "PRIMARY" ? " primary" : ""}`}>
       <div className="label">{nm}<SourceBadge src={src.kind === "dual" ? "dual" : "tos"} ko={ko} /></div>
@@ -313,6 +328,16 @@ function TodayCard({ c, lang, ws, extras }: { c: KpiCard; lang: Lang; ws: WsLive
   const mv = mainValue(c.key, c.value, c.unit);
   const imp = isImprovement(c);
   const dl = deltaLabel(c);
+  if (src.kind === "wsOnly") {
+    return (
+      <div className={`kpi${c.tier === "PRIMARY" ? " primary" : ""}`} title={src.title}>
+        <div className="label">{name(c, lang)}<SourceBadge src="ws" ko={ko} /></div>
+        <div className="vrow"><span className="val">{src.val}</span></div>
+        <div className="ws-sub mono">{ko ? "유휴 제외" : "idle excluded"}</div>
+        <div className="n" style={{ marginTop: "auto" }}>{ko ? "websocket GPS" : "from websocket GPS"}</div>
+      </div>
+    );
+  }
   return (
     <div className={`kpi${c.tier === "PRIMARY" ? " primary" : ""}`}>
       <div className="label">{name(c, lang)}<SourceBadge src={src.kind === "dual" ? "dual" : "tos"} ko={ko} /></div>
