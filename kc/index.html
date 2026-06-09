@@ -61,9 +61,9 @@
 
 <header class="hero">
   <div class="hero-in">
-    <div class="hb"><span class="logo">CLT <span class="accent">WP·TT</span></span><span class="div"></span><span class="sub">Knowledge Center</span></div>
-    <h1>WP-TT 지식센터</h1>
-    <p>Westports TT 배차·KPI 프로젝트의 연구 보고서와 데이터 레퍼런스 모음. 내부 공유용.</p>
+    <div class="hb"><span class="logo">CLT <span class="accent">TT AiOps</span></span><span class="div"></span><span class="sub">Knowledge Center</span></div>
+    <h1>TT AiOps Platform · 지식센터</h1>
+    <p>TT AiOps Platform의 데이터 원천·산출 로직·기능 문서와 연구 자료 모음. 적용 사이트 = Westports Malaysia. 내부 공유용.</p>
     <div class="meta">CLT Digital · 갱신 2026-06-09 · 내부(Tailscale) 전용</div>
     <div class="search"><span class="ic">🔍</span><input id="q" type="text" placeholder="문서 검색 (제목·설명·태그)…" oninput="filt()"></div>
   </div>
@@ -73,17 +73,27 @@
 
   <!-- 데이터 레퍼런스 -->
   <div class="cat" data-cat>
-    <div class="cat-h"><span class="bar"></span>데이터 레퍼런스 <span class="cnt">1</span></div>
+    <div class="cat-h"><span class="bar"></span>데이터 레퍼런스 <span class="cnt">2</span></div>
     <div class="docs">
-      <a class="doc flag" href="./tos-db-reference-ko.html" data-doc data-s="tos db 종합 레퍼런스 테이블 컬럼 보존 코드 websocket kpi oracle 데이터 reference schema retention">
-        <span class="new">NEW</span>
+      <a class="doc flag" href="./tos-db-reference-ko.html" data-doc data-s="tos db 종합 레퍼런스 테이블 컬럼 보존 코드 oracle 데이터 reference schema retention job order kpi 작업지시">
         <div class="dt">
           <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></span>
           <div><h3>TOS DB 종합 레퍼런스</h3>
-            <div class="desc">TOS Oracle·websocket 전체 — 테이블·컬럼 설명, 보존 기간, 코드 사전, 실시간 필드, 7개 KPI, 서빙 모델, 함정까지 총망라한 단일 진실 소스.</div>
+            <div class="desc">TOS Oracle <b>전용</b> — 테이블·컬럼 설명, 보존 기간, 코드 사전, 라이브 작업지시, 7개 KPI 소스까지. (실시간 websocket은 별도 문서로 분리)</div>
           </div>
         </div>
-        <div class="tags"><span class="tag">TOS DB</span><span class="tag">스키마</span><span class="tag">보존</span><span class="tag">websocket</span><span class="tag">KPI</span></div>
+        <div class="tags"><span class="tag">TOS DB</span><span class="tag">스키마</span><span class="tag">보존</span><span class="tag">코드</span><span class="tag">작업지시</span></div>
+        <div class="foot">2026-06-09 · 레퍼런스</div>
+      </a>
+      <a class="doc flag" href="./websocket-data-ko.html" data-doc data-s="websocket 실시간 데이터 gps plc wpt_gps ctab 라이브맵 차량풀 피드 헬스 활용 tunnel 터널 realtime">
+        <span class="new">NEW</span>
+        <div class="dt">
+          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.5a7 7 0 0 1 14 0"/><path d="M8.5 15a3.5 3.5 0 0 1 7 0"/><circle cx="12" cy="18" r="1"/></svg></span>
+          <div><h3>실시간 websocket 데이터 &amp; 활용</h3>
+            <div class="desc">장비 ~450대의 GPS/PLC 스트림 — TOS와 별개인 실시간 시스템. 필드·주기·터널, 그리고 라이브맵·차량 풀·작업 풀 융합·피드 헬스에 <b>어떻게 활용</b>되는지.</div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag">websocket</span><span class="tag">GPS/PLC</span><span class="tag">실시간</span><span class="tag">활용</span></div>
         <div class="foot">2026-06-09 · 레퍼런스</div>
       </a>
     </div>
@@ -91,17 +101,28 @@
 
   <!-- 구현 · 기능 -->
   <div class="cat" data-cat>
-    <div class="cat-h"><span class="bar"></span>구현 · 기능 <span class="cnt">1</span></div>
+    <div class="cat-h"><span class="bar"></span>구현 · 기능 <span class="cnt">2</span></div>
     <div class="docs">
-      <a class="doc flag" href="./work-pool-ko.html" data-doc data-s="라이브 작업 풀 work pool qc 시퀀스 배차 job order list queue schedule etw 실시간 plc gps 융합 dispatch live">
+      <a class="doc flag" href="./kpi-computation-ko.html" data-doc data-s="kpi 산출 계산 7개 지표 3계층 raw kpi_daily baseline 오늘 재스캔 교대 틱 야간 이력 일 주 월 agg 가동률 mph 공차 사이클">
+        <span class="new">NEW</span>
+        <div class="dt">
+          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5"/><path d="M4 19h16"/><rect x="7" y="11" width="3" height="6"/><rect x="12" y="7" width="3" height="10"/><rect x="17" y="13" width="3" height="4"/></svg></span>
+          <div><h3>KPI 산출 — 7개 지표 계산</h3>
+            <div class="desc">TOS에서 추출 → Postgres 3계층 누적 → 집계. 분자/분모 보존으로 정확한 기간 합산, "오늘"을 Oracle 재스캔 없이, 일/주/월 이력까지. 처음 보는 사람용.</div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag">KPI</span><span class="tag">3계층</span><span class="tag">집계</span><span class="tag">이력</span></div>
+        <div class="foot">2026-06-09 · 기능·아키텍처</div>
+      </a>
+      <a class="doc flag" href="./dispatch-pools-ko.html" data-doc data-s="차량 풀 작업 풀 갱신 tt dispatch 배차 상태 분류 idle soon_idle empty_travel wait_rtg 작업지시 etw qc 시퀀스 plc gps 융합 스왑 centroid 공급 수요">
         <span class="new">NEW</span>
         <div class="dt">
           <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
-          <div><h3>라이브 작업 풀</h3>
-            <div class="desc">TOS 라이브 작업지시(JOB_ORDER_LIST + JOB_QUEUE_SCHEDULE)를 90초마다 끌어와 QC별 작업 시퀀스·배차를 실시간으로. 공급(차량)↔수요(작업) 비대칭, 데이터 진실성, 화면 읽는 법까지 — 처음 보는 사람용.</div>
+          <div><h3>차량 풀 · 작업 풀 갱신 (TT Dispatch)</h3>
+            <div class="desc">배차의 두 축 — 차량 풀(공급, websocket 실시간 상태 분류)과 작업 풀(수요, TOS 90초 스냅샷)이 각각 어떻게 갱신되고, 화면에서 어떻게 융합되는지. 분류 결정 트리·ETW·스왑 판정까지.</div>
           </div>
         </div>
-        <div class="tags"><span class="tag">작업풀</span><span class="tag">QC 시퀀스</span><span class="tag">ETW</span><span class="tag">PLC/GPS 융합</span></div>
+        <div class="tags"><span class="tag">차량풀</span><span class="tag">작업풀</span><span class="tag">상태 분류</span><span class="tag">PLC/GPS 융합</span></div>
         <div class="foot">2026-06-09 · 기능·아키텍처</div>
       </a>
     </div>
@@ -144,7 +165,7 @@
   <div class="empty" id="empty">검색 결과가 없습니다.</div>
 </main>
 
-<footer>CLT Port Group · Digital Team — WP-TT Knowledge Center · 내부(Tailscale) 공유용 · 새 문서는 <span style="font-family:'JetBrains Mono',monospace">kc/</span>에 HTML 추가 + 카드 한 장</footer>
+<footer>CLT Port Group · Digital Team — TT AiOps Platform Knowledge Center · 적용 사이트 Westports Malaysia · 내부(Tailscale) 공유용</footer>
 
 <script>
 function filt(){
