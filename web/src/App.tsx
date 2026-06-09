@@ -154,7 +154,7 @@ type WsLive = {
   tt_cycle_littles_s?: number | null; tt_cycle_median_s?: number | null; tt_cycle_samples?: number;
   tt_cycle_min_samples?: number; tt_cycle_p25_s?: number | null; tt_cycle_p75_s?: number | null;
   tt_artifacts_60m?: number; tt_artifacts_near_60m?: number; window_fill_min?: number;
-  tt_util_live?: number | null; crane_mph_live?: number | null;
+  tt_util_live?: number | null; tt_engaged_live?: number | null; crane_mph_live?: number | null;
   qc_starving?: number; qc_wait_live_s?: number | null; active_trucks?: number; connected?: boolean;
 };
 function fmtCycle(s: number | null | undefined): string {
@@ -202,16 +202,28 @@ function cardSrc(key: string, w: WsLive | null, ko: boolean): CardSrc {
     return {
       kind: "wsMain",
       label: ko ? "TT 사이클 타임" : "TT Cycle Time",
-      val: have ? fmtCycle(cyc) : (ko ? `수집중 ${n}/${need}` : `…${n}/${need}`),
-      sub: have ? `n=${n}${spread ? ` · ${spread}` : ""}${fill < 60 ? ` · ${ko ? `윈도우 ${fill}/60분` : `win ${fill}/60m`}` : ""}` : "",
+      // no data yet (ws down or < n samples) → "—" per request, not a misleading number
+      val: have ? fmtCycle(cyc) : "—",
+      sub: have ? `n=${n}${spread ? ` · ${spread}` : ""}${fill < 60 ? ` · ${ko ? `윈도우 ${fill}/60분` : `win ${fill}/60m`}` : ""}`
+                : (n > 0 ? (ko ? `수집중 ${n}/${need}` : `collecting ${n}/${need}`) : ""),
       title: ko
-        ? `트럭 연속 배달 간격의 중앙값 — websocket GPS로 산출(이동 ≥150m 검증, n≥${need}부터). 유휴 포함이라 활성 사이클의 상한. TOS '작업 처리 시간'(생애 span ~40분)과 다른 값.`
-        : `median truck delivery-to-delivery interval from the websocket GPS feed (movement-validated ≥150m, shown from n≥${need}); upper bound incl. idle, distinct from the TOS ~40m handling span`,
+        ? `트럭 연속 배달 간격의 중앙값 — websocket GPS로 산출(이동 ≥150m 검증, n≥${need}부터). 데이터 없으면 —. 유휴 포함이라 활성 사이클의 상한. TOS '작업 처리 시간'(생애 span ~40분)은 내부 보관·미표출.`
+        : `median truck delivery-to-delivery interval from the websocket GPS feed (movement-validated ≥150m, shown from n≥${need}); "—" when no data. Upper bound incl. idle; the TOS ~40m handling span is kept internally, not shown`,
     };
   }
   if (!w || !w.connected) return { kind: "tos" };
-  if (key === "K_UTIL" && w.tt_util_live != null)
-    return { kind: "dual", auxVal: `${w.tt_util_live}%`, auxTitle: ko ? "실시간 비유휴 트럭 비율 (websocket GPS) — TOS 세션 가동률과 다른 즉시 지표" : "live non-idle truck fraction (websocket GPS) — distinct from TOS session utilization" };
+  if (key === "K_UTIL" && w.tt_util_live != null) {
+    // ws util now measures the SAME thing as TOS (manned/in-service fraction) → comparable.
+    // The engaged-now figure is appended as the websocket-only slack signal.
+    const eng = w.tt_engaged_live;
+    return {
+      kind: "dual",
+      auxVal: eng != null ? `${w.tt_util_live}% · ${ko ? "작업" : "act"} ${eng}%` : `${w.tt_util_live}%`,
+      auxTitle: ko
+        ? `실시간 가동(맨드)률 ${w.tt_util_live}% — TOS 세션 가동률과 같은 개념(엔진 ON=운전자 탑승). 그중 실제 작업(이동·적재) 중은 ${eng ?? "—"}%, 나머지는 대기/유휴(과잉공급 여유).`
+        : `live manned/in-service fraction ${w.tt_util_live}% — same concept as TOS session utilization (engine on = operator aboard). Of those, ${eng ?? "—"}% are actually engaged (moving/carrying); the rest are idle-waiting (over-supply slack).`,
+    };
+  }
   if (key === "K_MPH" && w.crane_mph_live != null)
     return { kind: "dual", auxVal: `${w.crane_mph_live}/h`, auxTitle: ko ? "실시간 QC 평균 처리량 (PLC 사이클)" : "live avg QC throughput (PLC cycles)" };
   if (key === "K_QC_Q")
