@@ -88,6 +88,16 @@ function distanceExtras(items: { key: string; value: number | null }[], key: str
   }
   return [{ label: ko ? "적재 비율" : "Loaded", value: `${(100 - R).toFixed(1)} %` }];
 }
+// per-jobtype TT cycle breakdown shown on the cycle card (discharge / load).
+function CycleSplit({ ds, ld, ko }: { ds?: number | null; ld?: number | null; ko: boolean }) {
+  if (ds == null && ld == null) return null;
+  return (
+    <div className="cyc-split mono">
+      <span><span className="cs-l">{ko ? "양하" : "DS"}</span> {fmtCycle(ds)}</span>
+      <span><span className="cs-l">{ko ? "적하" : "LD"}</span> {fmtCycle(ld)}</span>
+    </div>
+  );
+}
 function KpiExtras({ extras }: { extras?: KExtra[] }) {
   if (!extras || extras.length === 0) return null;
   return (
@@ -111,6 +121,7 @@ function SmallCard({ c, trend, lang, extras }: { c: KpiCard; trend?: TrendRespon
         <span className="unit">{mainValue(c.key, c.value, c.unit).unit}</span>
       </div>
       <KpiExtras extras={extras} />
+      {c.key === "K_CYCLE" && <CycleSplit ds={c.ds_cycle_s} ld={c.ld_cycle_s} ko={lang === "ko"} />}
       {dl ? (
         <div className={`delta ${imp ? "good" : "bad"}`}>{dl}<span className="vs">{s.vsBaseline}</span></div>
       ) : (
@@ -291,6 +302,7 @@ function LiveCard({ c, lang, ws, extras }: { c: LiveKpi; lang: Lang; ws: WsLive 
       <div className="vrow"><span className="val">{mv.val}</span><span className="unit">{mv.unit}</span></div>
       <KpiExtras extras={extras} />
       {src.kind === "dual" && <WsAux val={src.auxVal} title={src.auxTitle} ko={ko} />}
+      {c.key === "K_CYCLE" && <CycleSplit ds={c.ds_cycle_s} ld={c.ld_cycle_s} ko={ko} />}
       {deltaTxt
         ? <div className={`delta ${imp ? "good" : "bad"}`}>{deltaTxt}<span className="vs">{s.vsPrevShift}</span></div>
         : <div className="delta" style={{ color: "var(--text-mute)" }}>{s.noPrevShift}</div>}
@@ -350,6 +362,7 @@ function TodayCard({ c, lang, ws, extras }: { c: KpiCard; lang: Lang; ws: WsLive
       <div className="vrow"><span className="val">{mv.val}</span><span className="unit">{mv.unit}</span></div>
       <KpiExtras extras={extras} />
       {src.kind === "dual" && <WsAux val={src.auxVal} title={src.auxTitle} ko={ko} />}
+      {c.key === "K_CYCLE" && <CycleSplit ds={c.ds_cycle_s} ld={c.ld_cycle_s} ko={ko} />}
       {dl
         ? <div className={`delta ${imp ? "good" : "bad"}`}>{dl}<span className="vs">{s.vsBaseline}</span></div>
         : <div className="delta" style={{ color: "var(--text-mute)" }}>{s.baselinePending}</div>}

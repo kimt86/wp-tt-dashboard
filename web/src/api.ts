@@ -22,6 +22,8 @@ export interface KpiCard {
   excellent: number | null;
   meets_target: boolean | null;
   meets_excellent: boolean | null;
+  ds_cycle_s?: number | null;
+  ld_cycle_s?: number | null;
 }
 export interface KpisResponse {
   as_of: string;
@@ -54,6 +56,7 @@ export interface LiveKpi {
   value: number | null; sample_n: number | null;
   prev_value: number | null; delta_abs: number | null; delta_pct: number | null;
   target: number | null; excellent: number | null; meets_target: boolean | null;
+  ds_cycle_s?: number | null; ld_cycle_s?: number | null;
 }
 export interface LiveResponse {
   business_date: string; shift: string; shift_name_ko: string; shift_name_en: string;

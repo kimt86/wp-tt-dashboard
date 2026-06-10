@@ -64,6 +64,12 @@ pub async fn live(State(pool): State<PgPool>) -> Result<Json<LiveResponse>, AppE
             (Some(v), Some(th), Some(d)) => Some(if d == "LOWER_BETTER" { v <= th } else { v >= th }),
             _ => None,
         };
+        // per-jobtype cycle (DS/LD) for the cycle card — today's split
+        let (ds_cycle_s, ld_cycle_s) = if key == "K_CYCLE" {
+            crate::routes::cycle_by_jobtype(&pool, date, date).await.unwrap_or((None, None))
+        } else {
+            (None, None)
+        };
         kpis.push(LiveKpi {
             key: key.to_string(),
             name_en: kpi.name_en().to_string(),
@@ -79,6 +85,8 @@ pub async fn live(State(pool): State<PgPool>) -> Result<Json<LiveResponse>, AppE
             target: tgt.and_then(|t| t.target),
             excellent: tgt.and_then(|t| t.excellent),
             meets_target,
+            ds_cycle_s,
+            ld_cycle_s,
         });
     }
 

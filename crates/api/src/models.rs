@@ -26,6 +26,11 @@ pub struct KpiCard {
     pub excellent: Option<f64>,
     pub meets_target: Option<bool>,
     pub meets_excellent: Option<bool>,
+    /// per-jobtype TT cycle seconds (K_CYCLE only): discharge (DS) / load (LD)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ds_cycle_s: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ld_cycle_s: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -148,6 +153,11 @@ pub struct LiveKpi {
     pub target: Option<f64>,
     pub excellent: Option<f64>,
     pub meets_target: Option<bool>,
+    /// per-jobtype TT cycle seconds (K_CYCLE only): discharge (DS) / load (LD)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ds_cycle_s: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ld_cycle_s: Option<f64>,
 }
 
 #[derive(Serialize)]

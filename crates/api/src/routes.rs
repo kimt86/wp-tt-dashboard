@@ -85,6 +85,25 @@ pub(crate) async fn load_targets(pool: &PgPool) -> Result<std::collections::Hash
         .collect())
 }
 
+/// Per-jobtype TT cycle (seconds) over [from,to] — samples-weighted median of discharge (DS)
+/// and load (LD) cycles, for the cycle card breakdown.
+pub(crate) async fn cycle_by_jobtype(
+    pool: &PgPool,
+    from: chrono::NaiveDate,
+    to: chrono::NaiveDate,
+) -> anyhow::Result<(Option<f64>, Option<f64>)> {
+    let row: Option<(Option<f64>, Option<f64>)> = sqlx::query_as(
+        "SELECT round(sum(ds_med_sec*ds_samples)/nullif(sum(ds_samples),0), 1)::float8,
+                round(sum(ld_med_sec*ld_samples)/nullif(sum(ld_samples),0), 1)::float8
+           FROM raw_k_tt_cycle WHERE snapshot_date BETWEEN $1 AND $2",
+    )
+    .bind(from)
+    .bind(to)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.unwrap_or((None, None)))
+}
+
 /// Headline KPIs for the selected calendar period, with delta vs the immediately
 /// preceding equal period and a Welch significance test over the daily series.
 pub async fn kpis(
@@ -123,6 +142,12 @@ pub async fn kpis(
             (Some(v), Some(th), Some(d)) => Some(if d == "LOWER_BETTER" { v <= th } else { v >= th }),
             _ => None,
         };
+        // per-jobtype cycle (DS/LD) for the cycle card only
+        let (ds_cycle_s, ld_cycle_s) = if key == "K_CYCLE" {
+            cycle_by_jobtype(&pool, r.cur.from, r.cur.to).await?
+        } else {
+            (None, None)
+        };
 
         cards.push(KpiCard {
             key: key.to_string(),
@@ -146,6 +171,8 @@ pub async fn kpis(
             excellent: tgt.and_then(|t| t.excellent),
             meets_target: meets(tgt.and_then(|t| t.target)),
             meets_excellent: meets(tgt.and_then(|t| t.excellent)),
+            ds_cycle_s,
+            ld_cycle_s,
         });
     }
 
