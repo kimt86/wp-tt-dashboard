@@ -180,7 +180,13 @@ function LiveQcSequence({ lang, wp, snap }: { lang: Lang; wp: WorkpoolResponse |
       if (d.plc.mph != null && d.plc.mph > 0) craneMph.set(d.id, d.plc.mph);
     }
   }
-  const qcs = (wp?.qcs ?? []).slice(0, QC_CAP);
+  // working QCs = those with active moves (same definition as the "per-QC" card). Keep the
+  // busiest QC_CAP for height, but display them in QC-number order so the two cards line up.
+  const working = (wp?.qcs ?? []).filter((q) => q.active_moves > 0);
+  const qcs = working
+    .slice(0, QC_CAP)
+    .slice()
+    .sort((a, b) => a.qc.localeCompare(b.qc, undefined, { numeric: true }));
   const ageS = wp?.as_of ? Math.max(0, Math.round((Date.now() - Date.parse(wp.as_of)) / 1000)) : null;
   const fleetMph = snap?.crane_mph_live ?? null;
 
@@ -190,7 +196,7 @@ function LiveQcSequence({ lang, wp, snap }: { lang: Lang; wp: WorkpoolResponse |
         <h3>{ko(lang) ? "QC 작업 시퀀스 & 배차 (라이브)" : "QC Work Sequence & Dispatch (live)"}
           <span className="h3-sub">{ko(lang) ? "TOS 작업지시 + PLC/GPS 융합" : "TOS job orders fused with PLC/GPS"}</span></h3>
         <div className="head-sub">
-          <span className="pill good">{ko(lang) ? "가동 QC" : "Working QC"} {wp?.qc_count ?? 0}</span>
+          <span className="pill good">{ko(lang) ? "가동 QC" : "Working QC"} {working.length}</span>
           {fleetMph != null && (
             <span className="pill" style={{ borderColor: "#f59e0b", color: "#fbbf24", background: "rgba(245,158,11,0.10)" }}
               title={ko(lang) ? "websocket PLC 사이클로 계산한 실시간 QC 평균 처리량 (TOS K_MPH 교차검증)" : "live avg QC throughput from PLC cycles (cross-check for TOS K_MPH)"}>
@@ -206,8 +212,8 @@ function LiveQcSequence({ lang, wp, snap }: { lang: Lang; wp: WorkpoolResponse |
         <div className="qc-panel">
           {qcs.map((q) => <QcCol key={q.qc} q={q} lang={lang} ttState={ttState} working={craneFresh.get(q.qc) ?? false} mph={craneMph.get(q.qc)} />)}
         </div>
-        {(wp?.qcs.length ?? 0) > QC_CAP && (
-          <div className="lvp-note">{ko(lang) ? `+${(wp!.qcs.length - QC_CAP)} QC 더 (작업량 적은 순 생략)` : `+${wp!.qcs.length - QC_CAP} more QC (fewer active moves)`}</div>
+        {working.length > QC_CAP && (
+          <div className="lvp-note">{ko(lang) ? `작업량 많은 ${QC_CAP}개만 표시 · +${working.length - QC_CAP} QC 더 (전체는 위 'QC별 배차 현황' 참고)` : `showing the ${QC_CAP} busiest · +${working.length - QC_CAP} more QC (see "Trucks Assigned per QC" above for all)`}</div>
         )}
       </div>
     </section>
@@ -384,7 +390,7 @@ function QcAssignedCard({ lang, wp }: { lang: Lang; wp: WorkpoolResponse | null 
             <div className="qca-cell" key={x.qc} title={x.vessel ? `${x.qc} · ${x.vessel} · ${ko(lang) ? `작업 ${x.moves}건` : `${x.moves} moves`}` : x.qc}>
               <div className="qca-qc">{x.qc}</div>
               <div className="qca-n" style={{ color: qcAssignColor(x.count) }}>{x.count}<small>{ko(lang) ? "대" : ""}</small></div>
-              <div className="qca-vsl">{x.vessel || "—"}</div>
+              <div className="qca-vsl">{ko(lang) ? `${x.moves}작업` : `${x.moves} mv`}{x.vessel ? ` · ${x.vessel}` : ""}</div>
             </div>
           ))}
         </div>
