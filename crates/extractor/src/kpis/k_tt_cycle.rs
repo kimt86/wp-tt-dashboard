@@ -23,6 +23,10 @@ pub struct Row {
     pub med_sec: Option<f64>,
     pub p25_sec: Option<f64>,
     pub p75_sec: Option<f64>,
+    pub ds_samples: Option<f64>,
+    pub ds_med_sec: Option<f64>,
+    pub ld_samples: Option<f64>,
+    pub ld_med_sec: Option<f64>,
 }
 
 pub fn parse(raw: &str) -> Result<Vec<Row>> {
@@ -37,11 +41,14 @@ pub async fn upsert(pool: &PgPool, date: NaiveDate, run_id: i64, rows: &[Row]) -
     };
     sqlx::query(
         "INSERT INTO raw_k_tt_cycle
-           (snapshot_date, trucks, samples, avg_sec, med_sec, p25_sec, p75_sec, run_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+           (snapshot_date, trucks, samples, avg_sec, med_sec, p25_sec, p75_sec,
+            ds_samples, ds_med_sec, ld_samples, ld_med_sec, run_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
          ON CONFLICT (snapshot_date) DO UPDATE SET
            trucks=EXCLUDED.trucks, samples=EXCLUDED.samples, avg_sec=EXCLUDED.avg_sec,
            med_sec=EXCLUDED.med_sec, p25_sec=EXCLUDED.p25_sec, p75_sec=EXCLUDED.p75_sec,
+           ds_samples=EXCLUDED.ds_samples, ds_med_sec=EXCLUDED.ds_med_sec,
+           ld_samples=EXCLUDED.ld_samples, ld_med_sec=EXCLUDED.ld_med_sec,
            run_id=EXCLUDED.run_id, extracted_at=now()",
     )
     .bind(date)
@@ -51,6 +58,10 @@ pub async fn upsert(pool: &PgPool, date: NaiveDate, run_id: i64, rows: &[Row]) -
     .bind(r.med_sec)
     .bind(r.p25_sec)
     .bind(r.p75_sec)
+    .bind(r.ds_samples.map(|v| v as i32))
+    .bind(r.ds_med_sec)
+    .bind(r.ld_samples.map(|v| v as i32))
+    .bind(r.ld_med_sec)
     .bind(run_id)
     .execute(pool)
     .await
