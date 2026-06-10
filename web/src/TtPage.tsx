@@ -400,23 +400,25 @@ function QcAssignedCard({ lang, wp }: { lang: Lang; wp: WorkpoolResponse | null 
       </div>
       <div className="tcard-body">
         {qcs.length === 0 && <div className="lvp-empty">{ko(lang) ? "가동 중인 QC 없음" : "no active QC"}</div>}
-        {groups.map((g) => {
-          const vtrucks = g.items.reduce((a, x) => a + x.count, 0);
-          return (
-            <div className="qca-vgroup" key={g.vessel}>
-              <div className="qc-vgroup-h"><span className="vsl">{g.vessel}</span><span className="qc-vgroup-n">{g.items.length} QC · {vtrucks}{ko(lang) ? "대" : ""}</span></div>
-              <div className="qca-grid">
-                {g.items.map((x) => (
-                  <div className="qca-cell" key={x.qc} title={`${x.qc} · ${x.vessel} · ${ko(lang) ? `작업 ${x.moves}건` : `${x.moves} moves`}`}>
-                    <div className="qca-qc">{x.qc}</div>
-                    <div className="qca-n" style={{ color: qcAssignColor(x.count) }}>{x.count}<small>{ko(lang) ? "대" : ""}</small></div>
-                    <div className="qca-vsl">{ko(lang) ? `${x.moves}작업` : `${x.moves} mv`}</div>
-                  </div>
-                ))}
+        <div className="qca-cols">
+          {groups.map((g) => {
+            const vtrucks = g.items.reduce((a, x) => a + x.count, 0);
+            return (
+              <div className="qca-vgroup" key={g.vessel}>
+                <div className="qc-vgroup-h"><span className="vsl">{g.vessel}</span><span className="qc-vgroup-n">{g.items.length} QC · {vtrucks}{ko(lang) ? "대" : ""}</span></div>
+                <div className="qca-grid">
+                  {g.items.map((x) => (
+                    <div className="qca-cell" key={x.qc} title={`${x.qc} · ${x.vessel} · ${ko(lang) ? `작업 ${x.moves}건` : `${x.moves} moves`}`}>
+                      <div className="qca-qc">{x.qc}</div>
+                      <div className="qca-n" style={{ color: qcAssignColor(x.count) }}>{x.count}<small>{ko(lang) ? "대" : ""}</small></div>
+                      <div className="qca-vsl">{ko(lang) ? `${x.moves}작업` : `${x.moves} mv`}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </section>
   );

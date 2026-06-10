@@ -144,15 +144,19 @@ body {
 .cyc-split { display: flex; gap: 10px; font-size: 10px; color: var(--text-dim); margin: 1px 0 2px; }
 .cyc-split .cs-l { color: var(--text-mute); font-weight: 600; margin-right: 2px; }
 /* per-QC assigned-trucks card (TT dispatch page) */
-.qca-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px; }
-.qca-cell { background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px;
-  padding: 8px 6px; text-align: center; }
+.qca-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.qca-cell { flex: 0 0 auto; width: 78px; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 9px; padding: 8px 6px; text-align: center; }
 .qca-cell .qca-qc { font-family: "JetBrains Mono", monospace; font-size: 12px; font-weight: 700; color: var(--text-dim); }
 .qca-cell .qca-n { font-family: "Manrope", sans-serif; font-size: 26px; font-weight: 800; line-height: 1.1; letter-spacing: -1px; }
 .qca-cell .qca-n small { font-size: 11px; font-weight: 600; color: var(--text-mute); margin-left: 1px; }
 .qca-cell .qca-vsl { font-size: 9.5px; color: var(--text-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* vessel grouping headings (per-QC card + work-sequence card) */
-.qc-vgroup, .qca-vgroup { margin-bottom: 14px; }
+.qc-vgroup { margin-bottom: 14px; }
+/* per-QC card: pack vessel groups across the row (flex-wrap), sized to content,
+   so small vessels share a row and the total row count is minimised. */
+.qca-cols { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: flex-start; }
+.qca-vgroup { max-width: 286px; }   /* up to ~3 QC cells per row; small vessels stay narrow */
 .qc-vgroup-h { display: flex; align-items: baseline; gap: 8px; margin: 4px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
 .qc-vgroup-h .vsl { font-family: "Manrope", sans-serif; font-weight: 800; font-size: 13px; color: var(--text); letter-spacing: -0.2px; }
 .qc-vgroup-h .qc-vgroup-n { font-size: 10.5px; color: var(--text-mute); }
