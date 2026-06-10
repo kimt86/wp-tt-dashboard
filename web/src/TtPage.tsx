@@ -65,18 +65,8 @@ const DSP_META: Record<string, { ko: string; en: string; color: string }> = {
 };
 const DSP_ORDER = ["idle", "soon_idle", "delivering", "wait_rtg", "empty_travel"];
 
-// ETW countdown (ETW − now), recomputed each positions poll
-function etwLabel(etw: string | null, lang: Lang): { text: string; cls: string } | null {
-  if (!etw) return null;
-  const sec = Math.round((Date.parse(etw) - Date.now()) / 1000);
-  const abs = Math.abs(sec);
-  const mm = Math.floor(abs / 60), ss = abs % 60;
-  const t = mm > 0 ? `${mm}:${String(ss).padStart(2, "0")}` : `${ss}s`;
-  if (sec < -30) return { text: ko(lang) ? `지연 ${t}` : `overdue ${t}`, cls: "bad" };
-  if (sec < 90) return { text: ko(lang) ? `곧 ${t}` : t, cls: "bad" };
-  if (sec < 240) return { text: t, cls: "warn" };
-  return { text: t, cls: "ok" };
-}
+// ETW badge is hidden for now (the live ETW is unreliable); a more accurate ETW source
+// will be wired in later, at which point this countdown can be restored.
 
 const kindChip = (jt: string | null) => (jt === "DS" ? "dsc" : jt === "LD" ? "lod" : "shf");
 const kindLabel = (jt: string | null) => (jt === "DS" ? "DSC" : jt === "LD" ? "LOD" : "SHF");
@@ -244,7 +234,6 @@ function QcCol({ q, lang, ttState, working, mph }: { q: WpQc; lang: Lang; ttStat
       <div className="qc-progress-bar"><div className="fill" style={{ width: `${pct}%` }} /></div>
       {moves.length === 0 && <div className="lvp-empty" style={{ padding: "10px 0" }}>{ko(lang) ? "활성 작업 없음" : "no active move"}</div>}
       {moves.map((m, i) => {
-        const etw = etwLabel(m.etw_ts, lang);
         const tt = m.ytno ? ttState.get(m.ytno) : undefined;
         const dot = tt?.dispatch ? DSP_META[tt.dispatch]?.color : undefined;
         return (
@@ -254,7 +243,7 @@ function QcCol({ q, lang, ttState, working, mph }: { q: WpQc; lang: Lang; ttStat
               <div className="top"><span className={`type-${kindChip(m.jobtype)}`}>{kindLabel(m.jobtype)}</span> {m.contno ?? "—"}{m.twintandem ? ` · ${m.twintandem}` : ""}</div>
               <div className="bot">
                 {m.jobtype === "DS" ? `${m.yt_topos ?? m.from_pos ?? "?"} → ${m.armgc ?? "RTG"}` : `${m.armgc ?? m.yt_topos ?? "?"} → ${q.qc}`}
-                {etw && <span className={`jetw ${etw.cls}`} style={{ marginLeft: 6 }}>ETW {etw.text}</span>}
+                {/* ETW badge hidden — a more accurate ETW source will feed this later */}
               </div>
             </div>
             <div className="assign">
