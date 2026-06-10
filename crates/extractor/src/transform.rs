@@ -58,6 +58,20 @@ async fn kpi_daily(pool: &PgPool, date: NaiveDate, provisional: bool) -> Result<
         provisional,
     ).await?;
 
+    // K_CYCLE_DS / K_CYCLE_LD — per-jobtype TT cycle (trend-only, not a headline card).
+    upsert_daily(
+        pool, date, "K_CYCLE_DS", "s", "DS samples-weighted median from raw_k_tt_cycle",
+        "SELECT round(sum(ds_med_sec*ds_samples)/nullif(sum(ds_samples),0), 1), sum(ds_samples)::int
+           FROM raw_k_tt_cycle WHERE snapshot_date = $1 HAVING sum(ds_samples) > 0",
+        provisional,
+    ).await?;
+    upsert_daily(
+        pool, date, "K_CYCLE_LD", "s", "LD samples-weighted median from raw_k_tt_cycle",
+        "SELECT round(sum(ld_med_sec*ld_samples)/nullif(sum(ld_samples),0), 1), sum(ld_samples)::int
+           FROM raw_k_tt_cycle WHERE snapshot_date = $1 HAVING sum(ld_samples) > 0",
+        provisional,
+    ).await?;
+
     // K_CRANE_Q — in-range-weighted mean wait seconds.
     upsert_daily(
         pool, date, "K_CRANE_Q", "s", "in_range-weighted mean(avg_sec)",

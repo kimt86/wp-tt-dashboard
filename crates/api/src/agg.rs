@@ -88,6 +88,18 @@ pub async fn aggregate(pool: &PgPool, from: NaiveDate, to: NaiveDate) -> Result<
         let (vw, w, nt) = t("K_CYCLE");
         m.insert("K_CYCLE", finish(num + vw, den + w, nr + nt, 1, 1.0));
     }
+    // K_CYCLE_DS / K_CYCLE_LD (s): per-jobtype, samples-weighted median. raw_k_tt_cycle has
+    // today's provisional row already (tick-written), so read the full [from,to] directly.
+    {
+        let (num, den, nr) = raw_nd(pool,
+            "SELECT sum(ds_med_sec*ds_samples)::float8, sum(ds_samples)::float8, sum(ds_samples)::int8
+               FROM raw_k_tt_cycle WHERE snapshot_date BETWEEN $1 AND $2", from, to).await?;
+        m.insert("K_CYCLE_DS", finish(num, den, nr, 1, 1.0));
+        let (num, den, nr) = raw_nd(pool,
+            "SELECT sum(ld_med_sec*ld_samples)::float8, sum(ld_samples)::float8, sum(ld_samples)::int8
+               FROM raw_k_tt_cycle WHERE snapshot_date BETWEEN $1 AND $2", from, to).await?;
+        m.insert("K_CYCLE_LD", finish(num, den, nr, 1, 1.0));
+    }
     // K_CRANE_Q (s): weight = in_range.
     {
         let (num, den, nr) = raw_nd(pool,

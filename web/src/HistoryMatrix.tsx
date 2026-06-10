@@ -39,9 +39,14 @@ export default function HistoryMatrix({ lang }: { lang: Lang }) {
   // hide buckets with no data at all (e.g. days/weeks before extraction began)
   const buckets = (data?.buckets ?? []).filter((b) => cols.some((c) => b.cells[c.key]?.value != null));
   const expCol = cols.find((c) => c.key === expanded);
-  // chronological series for the expanded KPI
+  // cycle KPIs are stored in seconds but read better as minutes in the matrix/chart.
+  const isCycle = (k: string) => k.startsWith("K_CYCLE");
+  const fmtCell = (key: string, v: number | null, unit: string): string =>
+    v == null ? "—" : isCycle(key) ? `${(v / 60).toFixed(1)}m` : fmtValue(v, unit);
+  const colUnit = (key: string, unit: string) => (isCycle(key) ? "min" : unit);
+  // chronological series for the expanded KPI (cycle → minutes)
   const chronological = buckets.slice().reverse();
-  const series = expCol ? chronological.map((b) => { const v = b.cells[expCol.key]?.value; return v == null ? NaN : v; }) : [];
+  const series = expCol ? chronological.map((b) => { const v = b.cells[expCol.key]?.value; return v == null ? NaN : isCycle(expCol.key) ? v / 60 : v; }) : [];
   const chartLabels = expCol ? chronological.map((b) => bucketLabel(b, gran)) : [];
 
   return (
@@ -73,7 +78,7 @@ export default function HistoryMatrix({ lang }: { lang: Lang }) {
         <>
           {expCol && (
             <div className="hist-chart">
-              <div className="hist-chart-h">{lang === "ko" ? expCol.name_ko : expCol.name_en} <span className="unit">{expCol.unit}</span>
+              <div className="hist-chart-h">{lang === "ko" ? expCol.name_ko : expCol.name_en} <span className="unit">{colUnit(expCol.key, expCol.unit)}</span>
                 <button className="hist-chart-x" onClick={() => setExpanded(null)} aria-label="close">×</button>
               </div>
               <div className="hist-chart-body">
@@ -89,7 +94,7 @@ export default function HistoryMatrix({ lang }: { lang: Lang }) {
                   {cols.map((c) => (
                     <th key={c.key} className={`hist-kpi${expanded === c.key ? " sel" : ""}`} onClick={() => setExpanded(expanded === c.key ? null : c.key)} title={lang === "ko" ? "추이 차트 보기" : "show trend chart"}>
                       <span className="hk-name">{lang === "ko" ? c.name_ko : c.name_en}</span>
-                      <span className="hk-unit">{c.unit}</span>
+                      <span className="hk-unit">{colUnit(c.key, c.unit)}</span>
                     </th>
                   ))}
                 </tr>
@@ -103,7 +108,7 @@ export default function HistoryMatrix({ lang }: { lang: Lang }) {
                     </td>
                     {cols.map((c) => (
                       <td key={c.key} className={`hist-val${expanded === c.key ? " sel" : ""}`}>
-                        {fmtValue(b.cells[c.key]?.value ?? null, c.unit)}
+                        {fmtCell(c.key, b.cells[c.key]?.value ?? null, c.unit)}
                       </td>
                     ))}
                   </tr>
