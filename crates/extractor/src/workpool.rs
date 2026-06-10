@@ -21,6 +21,7 @@ use crate::runner::Toolbox;
 
 const SQL_WORKQUEUE: &str = include_str!("../sql/workqueue.sql");
 const SQL_WORKPOOL: &str = include_str!("../sql/workpool.sql");
+const SQL_ASSIGNED: &str = include_str!("../sql/assigned_tt.sql");
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
@@ -82,8 +83,31 @@ pub async fn tick_workpool(pool: &PgPool, target: &str) -> Result<()> {
     }
     step!("workqueue", src_workqueue(pool, target, date, as_of));
     step!("workpool", src_workpool(pool, target, date, as_of));
+    step!("assigned", src_assigned(pool, target, date, as_of));
     tracing::info!(%as_of, "workpool tick done");
     Ok(())
+}
+
+/// All TTs with an active assignment of ANY job type (for utilization). Refills
+/// live_assigned_tt each tick. Separate from live_workpool (DS/LD only, for dispatch).
+async fn src_assigned(pool: &PgPool, target: &str, date: chrono::NaiveDate, as_of: DateTime<Utc>) -> Result<()> {
+    run_logged(pool, "ASSIGNED_TT", date, |_| async move {
+        let raw = Toolbox::from_env(target)?.run_sql(SQL_ASSIGNED).await?;
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "UPPERCASE")]
+        struct YtRow { ytno: String }
+        let rows: Vec<YtRow> = parse_rows(&raw).context("parsing assigned_tt rows")?;
+        let mut tx = pool.begin().await?;
+        sqlx::query("DELETE FROM live_assigned_tt").execute(&mut *tx).await?;
+        for r in &rows {
+            let yt = r.ytno.trim();
+            if yt.is_empty() { continue; }
+            sqlx::query("INSERT INTO live_assigned_tt (ytno, as_of_ts) VALUES ($1,$2)")
+                .bind(yt).bind(as_of).execute(&mut *tx).await.context("insert live_assigned_tt")?;
+        }
+        tx.commit().await?;
+        Ok(rows.len() as u64)
+    }).await.map(|_| ())
 }
 
 async fn src_workqueue(pool: &PgPool, target: &str, date: chrono::NaiveDate, as_of: DateTime<Utc>) -> Result<()> {

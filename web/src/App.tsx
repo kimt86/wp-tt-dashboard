@@ -206,8 +206,8 @@ function cardSrc(key: string, w: WsLive | null, ko: boolean): CardSrc {
         ? (ko ? `교대 평균 · 현재 ${now ?? "—"}%` : `shift avg · now ${now ?? "—"}%`)
         : (now != null ? (ko ? "현재 · 교대평균 수집중" : "now · shift avg collecting") : ""),
       title: ko
-        ? `진짜 가동률(시간기반) — 작업 할당이 있는 트럭 / 가동 트럭을 60초마다 표본화해 교대 평균. 할당~완료(크레인 전달) 사이는 멈춰 있어도(큐잉 포함) 가동, 유휴 = 할당 없이 대기. 할당 출처 = TOS 작업풀(배정 YT). 헤드라인=교대 평균, 보조=현재값 ${now ?? "—"}%(이 중 이동·적재 중 ${moving ?? "—"}%). TOS 세션값은 미표시.`
-        : `true utilization (time-based) — trucks with an active job / on-duty trucks, sampled every 60s and averaged over the shift. Allocation→completion counts as utilized even while stopped (queuing incl.); idle = unassigned waiting. Assignment source = TOS work pool (assigned YT). Headline = shift average, secondary = current ${now ?? "—"}% (of which ${moving ?? "—"}% moving). TOS session value not shown.`,
+        ? `진짜 가동률(시간기반) — 작업 할당이 있는 트럭 / 가동 트럭을 60초마다 표본화해 교대 평균. 할당~완료(크레인 전달) 사이는 멈춰 있어도(큐잉 포함) 가동, 유휴 = 할당 없이 대기. 할당 출처 = TOS 활성 작업의 배정 YT(양·적하 DS/LD + 야드이동 MI/MO/LC 포함). 헤드라인=교대 평균, 보조=현재값 ${now ?? "—"}%(이 중 이동·적재 중 ${moving ?? "—"}%). TOS 세션값은 미표시.`
+        : `true utilization (time-based) — trucks with an active job / on-duty trucks, sampled every 60s and averaged over the shift. Allocation→completion counts as utilized even while stopped (queuing incl.); idle = unassigned waiting. Assignment source = assigned YT of every active TOS job (vessel DS/LD + yard moves MI/MO/LC). Headline = shift average, secondary = current ${now ?? "—"}% (of which ${moving ?? "—"}% moving). TOS session value not shown.`,
     };
   }
   if (key === "K_CYCLE") {

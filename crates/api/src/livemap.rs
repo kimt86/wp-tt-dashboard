@@ -626,9 +626,10 @@ pub async fn positions(State(lm): State<Arc<LiveMap>>, State(pool): State<PgPool
     // even while stopped/queued at a crane. Idle = on-duty but with NO assignment.
     // The GPS job fields (topos1/jobtype) are INTERMITTENT — they ride only on assignment
     // events, not on every 3s heartbeat, so a point-in-time snapshot misses most assigned
-    // trucks. The authoritative source is the TOS work pool (live_workpool.ytno = the TT
-    // assigned to each active/incomplete job), refreshed every ~90s. So:
-    //   utilized = TTs assigned in the work pool ;  on-duty = those ∪ manned (GPS engine on).
+    // trucks. The authoritative source is the TOS work pool — `live_assigned_tt` = every TT
+    // with an active job of ANY type (vessel DS/LD AND yard moves MI/MO/LC; the DS/LD-only
+    // pool undercounts), refreshed ~90s. So:
+    //   utilized = TTs with an active assignment ;  on-duty = those ∪ manned (GPS engine on).
     let fresh_tt = || map.values().filter(|p| p.cls == "TT" && (now - p.last_seen_ms) / 1000 <= STALE_AFTER_S);
     let in_service = fresh_tt().filter(|p| p.engine == 1).count(); // manned (operator aboard)
     let manned_ids: std::collections::HashSet<&str> = map
@@ -638,8 +639,8 @@ pub async fn positions(State(lm): State<Arc<LiveMap>>, State(pool): State<PgPool
         .collect();
     // assigned TTs from the work pool (fresh snapshot only; empty on staleness/error → "—")
     let assigned_ids: Vec<String> = sqlx::query_scalar::<_, String>(
-        "SELECT DISTINCT ytno FROM live_workpool
-          WHERE ytno IS NOT NULL AND ytno <> '' AND as_of_ts > now() - interval '5 minutes'",
+        "SELECT DISTINCT ytno FROM live_assigned_tt
+          WHERE as_of_ts > now() - interval '5 minutes'",
     )
     .fetch_all(&pool)
     .await
@@ -868,9 +869,9 @@ pub async fn health(State(lm): State<Arc<LiveMap>>) -> Json<HealthOut> {
 // ───────────────────────── ingest loop ─────────────────────────
 
 /// Spawn the background ingest task + a periodic pruner.
-/// (assigned, manned, on-duty) TT counts. assigned = distinct ytno in the fresh work pool
-/// (the authoritative allocation source); manned = GPS engine-on; on-duty = assigned ∪
-/// manned. `manned` is returned separately so the sampler can skip warm-up (empty GPS map).
+/// (assigned, manned, on-duty) TT counts. assigned = TTs with an active job of any type
+/// (live_assigned_tt — vessel DS/LD + yard MI/MO/LC); manned = GPS engine-on; on-duty =
+/// assigned ∪ manned. `manned` is returned separately so the sampler can skip warm-up.
 pub async fn assigned_on_duty(lm: &LiveMap, pool: &PgPool) -> (usize, usize, usize) {
     let now = Utc::now().timestamp_millis();
     let manned: std::collections::HashSet<String> = {
@@ -881,8 +882,8 @@ pub async fn assigned_on_duty(lm: &LiveMap, pool: &PgPool) -> (usize, usize, usi
             .collect()
     };
     let assigned_ids: Vec<String> = sqlx::query_scalar::<_, String>(
-        "SELECT DISTINCT ytno FROM live_workpool
-          WHERE ytno IS NOT NULL AND ytno <> '' AND as_of_ts > now() - interval '5 minutes'",
+        "SELECT DISTINCT ytno FROM live_assigned_tt
+          WHERE as_of_ts > now() - interval '5 minutes'",
     )
     .fetch_all(pool)
     .await
