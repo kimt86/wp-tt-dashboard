@@ -95,15 +95,16 @@ async fn src_assigned(pool: &PgPool, target: &str, date: chrono::NaiveDate, as_o
         let raw = Toolbox::from_env(target)?.run_sql(SQL_ASSIGNED).await?;
         #[derive(serde::Deserialize)]
         #[serde(rename_all = "UPPERCASE")]
-        struct YtRow { ytno: String }
+        struct YtRow { ytno: String, jobstatus: Option<String> }
         let rows: Vec<YtRow> = parse_rows(&raw).context("parsing assigned_tt rows")?;
         let mut tx = pool.begin().await?;
         sqlx::query("DELETE FROM live_assigned_tt").execute(&mut *tx).await?;
         for r in &rows {
             let yt = r.ytno.trim();
             if yt.is_empty() { continue; }
-            sqlx::query("INSERT INTO live_assigned_tt (ytno, as_of_ts) VALUES ($1,$2)")
-                .bind(yt).bind(as_of).execute(&mut *tx).await.context("insert live_assigned_tt")?;
+            sqlx::query("INSERT INTO live_assigned_tt (ytno, jobstatus, as_of_ts) VALUES ($1,$2,$3)")
+                .bind(yt).bind(r.jobstatus.as_deref().map(str::trim))
+                .bind(as_of).execute(&mut *tx).await.context("insert live_assigned_tt")?;
         }
         tx.commit().await?;
         Ok(rows.len() as u64)

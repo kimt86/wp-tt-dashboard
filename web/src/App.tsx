@@ -197,7 +197,6 @@ function cardSrc(key: string, w: WsLive | null, ko: boolean): CardSrc {
     // Idle = manned but unassigned (awaiting dispatch). TOS session value is not shown.
     const now = w && w.connected ? (w.tt_util_live ?? null) : null;          // instantaneous
     const shift = w && w.connected ? (w.tt_util_shift_avg ?? null) : null;    // time-based shift avg
-    const moving = w?.tt_engaged_live;
     const headline = shift ?? now; // prefer the time-based shift average (history-bearing)
     return {
       kind: "wsOnly",
@@ -206,8 +205,8 @@ function cardSrc(key: string, w: WsLive | null, ko: boolean): CardSrc {
         ? (ko ? `교대 평균 · 현재 ${now ?? "—"}%` : `shift avg · now ${now ?? "—"}%`)
         : (now != null ? (ko ? "현재 · 교대평균 수집중" : "now · shift avg collecting") : ""),
       title: ko
-        ? `진짜 가동률(시간기반) — 작업 할당이 있는 트럭 / 가동 트럭을 60초마다 표본화해 교대 평균. 할당~완료(크레인 전달) 사이는 멈춰 있어도(큐잉 포함) 가동, 유휴 = 할당 없이 대기. 할당 출처 = TOS 활성 작업의 배정 YT(양·적하 DS/LD + 야드이동 MI/MO/LC 포함). 헤드라인=교대 평균, 보조=현재값 ${now ?? "—"}%(이 중 이동·적재 중 ${moving ?? "—"}%). TOS 세션값은 미표시.`
-        : `true utilization (time-based) — trucks with an active job / on-duty trucks, sampled every 60s and averaged over the shift. Allocation→completion counts as utilized even while stopped (queuing incl.); idle = unassigned waiting. Assignment source = assigned YT of every active TOS job (vessel DS/LD + yard moves MI/MO/LC). Headline = shift average, secondary = current ${now ?? "—"}% (of which ${moving ?? "—"}% moving). TOS session value not shown.`,
+        ? `진짜 가동률(시간기반, 100% TOS) — 활성 작업 중 트럭(A) / 배치된 트럭(A·블록·큐, 모든 작업유형 DS/LD+MI/MO/LC)을 60초마다 표본화해 교대 평균. 할당~완료(크레인 전달) 사이는 멈춰 있어도(큐잉 포함) 가동. 분모도 TOS 작업풀(GPS 미사용). 헤드라인=교대 평균, 보조=현재 ${now ?? "—"}%.`
+        : `true utilization (time-based, 100% TOS) — actively-dispatched trucks (status A) / tasked fleet (A+blocked+queued, all job types DS/LD+MI/MO/LC), sampled every 60s and averaged over the shift. Allocation→completion counts even while stopped (queuing incl.). Denominator is also the TOS work pool (no GPS). Headline = shift average, secondary = now ${now ?? "—"}%.`,
     };
   }
   if (key === "K_CYCLE") {
@@ -279,10 +278,10 @@ function LiveCard({ c, lang, ws, extras }: { c: LiveKpi; lang: Lang; ws: WsLive 
   if (src.kind === "wsOnly") {
     return (
       <div className={`kpi${c.tier === "PRIMARY" ? " primary" : ""}`} title={src.title}>
-        <div className="label">{nm}<SourceBadge src="dual" ko={ko} /></div>
+        <div className="label">{nm}<SourceBadge src="tos" ko={ko} /></div>
         <div className="vrow"><span className="val">{src.val}</span></div>
         <div className="ws-sub mono">{src.sub || (ko ? "할당 기준" : "by assignment")}</div>
-        <div className="n" style={{ marginTop: "auto" }}>{ko ? "TOS 작업풀 + 실시간 GPS" : "TOS work pool + live GPS"}</div>
+        <div className="n" style={{ marginTop: "auto" }}>{ko ? "TOS 작업풀" : "TOS work pool"}</div>
       </div>
     );
   }
@@ -338,10 +337,10 @@ function TodayCard({ c, lang, ws, extras }: { c: KpiCard; lang: Lang; ws: WsLive
   if (src.kind === "wsOnly") {
     return (
       <div className={`kpi${c.tier === "PRIMARY" ? " primary" : ""}`} title={src.title}>
-        <div className="label">{name(c, lang)}<SourceBadge src="dual" ko={ko} /></div>
+        <div className="label">{name(c, lang)}<SourceBadge src="tos" ko={ko} /></div>
         <div className="vrow"><span className="val">{src.val}</span></div>
         <div className="ws-sub mono">{src.sub || (ko ? "할당 기준" : "by assignment")}</div>
-        <div className="n" style={{ marginTop: "auto" }}>{ko ? "TOS 작업풀 + 실시간 GPS" : "TOS work pool + live GPS"}</div>
+        <div className="n" style={{ marginTop: "auto" }}>{ko ? "TOS 작업풀" : "TOS work pool"}</div>
       </div>
     );
   }
