@@ -178,8 +178,18 @@ function LiveDispatchPool({ lang, snap, err }: { lang: Lang; snap: Snap | null; 
 }
 
 // ───────────────────────── live QC work sequence ─────────────────────────
-const QC_CAP = 12;     // columns shown
-const MOVE_CAP = 5;    // active move cards per QC
+// group QCs by vessel (a QC serves one vessel at a time); QCs sorted by number within each.
+function groupByVessel<T>(items: T[], vesselOf: (t: T) => string, qcOf: (t: T) => string): { vessel: string; items: T[] }[] {
+  const map = new Map<string, T[]>();
+  for (const it of items) {
+    const v = vesselOf(it) || "—";
+    const arr = map.get(v);
+    if (arr) arr.push(it); else map.set(v, [it]);
+  }
+  return [...map.entries()]
+    .map(([vessel, list]) => ({ vessel, items: list.slice().sort((a, b) => qcOf(a).localeCompare(qcOf(b), undefined, { numeric: true })) }))
+    .sort((a, b) => a.vessel.localeCompare(b.vessel));
+}
 
 function LiveQcSequence({ lang, wp, snap }: { lang: Lang; wp: WorkpoolResponse | null; snap: Snap | null }) {
   // fuse: live crane PLC (cycling now + live move/hr) + per-TT dispatch state
@@ -193,14 +203,9 @@ function LiveQcSequence({ lang, wp, snap }: { lang: Lang; wp: WorkpoolResponse |
       if (d.plc.mph != null && d.plc.mph > 0) craneMph.set(d.id, d.plc.mph);
     }
   }
-  const [showAll, setShowAll] = useState(false);
-  // working QCs = those with active moves (same definition as the "per-QC" card). Collapsed:
-  // the busiest QC_CAP; expanded: all. Either way display in QC-number order so the two cards
-  // line up.
+  // working QCs (active moves), grouped by vessel — same set/definition as the per-QC card.
   const working = (wp?.qcs ?? []).filter((q) => q.active_moves > 0);
-  const qcs = (showAll ? working : working.slice(0, QC_CAP))
-    .slice()
-    .sort((a, b) => a.qc.localeCompare(b.qc, undefined, { numeric: true }));
+  const groups = groupByVessel(working, (q) => q.vessels[0] ?? "—", (q) => q.qc);
   const ageS = wp?.as_of ? Math.max(0, Math.round((Date.now() - Date.parse(wp.as_of)) / 1000)) : null;
   const fleetMph = snap?.crane_mph_live ?? null;
 
@@ -222,29 +227,25 @@ function LiveQcSequence({ lang, wp, snap }: { lang: Lang; wp: WorkpoolResponse |
         </div>
       </div>
       <div className="tcard-body">
-        {qcs.length === 0 && <div className="lvp-empty">{ko(lang) ? "가동 중인 QC 없음" : "no working QC"}</div>}
-        <div className="qc-panel">
-          {qcs.map((q) => <QcCol key={q.qc} q={q} lang={lang} ttState={ttState} working={craneFresh.get(q.qc) ?? false} mph={craneMph.get(q.qc)} />)}
-        </div>
-        {working.length > QC_CAP && (
-          <button className="qc-toggle" onClick={() => setShowAll((v) => !v)}>
-            {showAll
-              ? (ko(lang) ? `▲ 접기 (작업량 많은 ${QC_CAP}개만)` : `▲ Collapse (top ${QC_CAP} only)`)
-              : (ko(lang) ? `▼ 전체 ${working.length}개 QC 펼치기 (+${working.length - QC_CAP})` : `▼ Show all ${working.length} QCs (+${working.length - QC_CAP})`)}
-          </button>
-        )}
+        {working.length === 0 && <div className="lvp-empty">{ko(lang) ? "가동 중인 QC 없음" : "no working QC"}</div>}
+        {groups.map((g) => (
+          <div className="qc-vgroup" key={g.vessel}>
+            <div className="qc-vgroup-h"><span className="vsl">{g.vessel}</span><span className="qc-vgroup-n">{g.items.length} QC</span></div>
+            <div className="qc-panel">
+              {g.items.map((q) => <QcCol key={q.qc} q={q} lang={lang} ttState={ttState} working={craneFresh.get(q.qc) ?? false} mph={craneMph.get(q.qc)} />)}
+            </div>
+          </div>
+        ))}
       </div>
     </section>
   );
 }
 
 function QcCol({ q, lang, ttState, working, mph }: { q: WpQc; lang: Lang; ttState: Map<string, Dev>; working: boolean; mph?: number }) {
-  const [open, setOpen] = useState(false);
   const tot = q.queues.reduce((a, x) => a + x.total, 0);
   const done = q.queues.reduce((a, x) => a + x.done, 0);
   const pct = tot > 0 ? Math.round((done / tot) * 100) : 0;
-  const moves = open ? q.moves : q.moves.slice(0, MOVE_CAP);
-  const extra = q.moves.length - MOVE_CAP;
+  const moves = q.moves; // always show every move (card is at the bottom)
   return (
     <div className="qc-col">
       <div className="qc-head">
@@ -277,11 +278,6 @@ function QcCol({ q, lang, ttState, working, mph }: { q: WpQc; lang: Lang; ttStat
           </div>
         );
       })}
-      {extra > 0 && (
-        <button className="qc-more" onClick={() => setOpen((v) => !v)}>
-          {open ? (ko(lang) ? "접기 ▲" : "collapse ▲") : (ko(lang) ? `+${extra} 작업 더 보기 ▼` : `+${extra} more ▼`)}
-        </button>
-      )}
     </div>
   );
 }
@@ -391,6 +387,7 @@ function QcAssignedCard({ lang, wp }: { lang: Lang; wp: WorkpoolResponse | null 
     .sort((a, b) => a.qc.localeCompare(b.qc, undefined, { numeric: true }));
   const totalTrucks = qcs.reduce((a, x) => a + x.count, 0);
   const starved = qcs.filter((x) => x.count === 0).length;
+  const groups = groupByVessel(qcs, (x) => x.vessel || "—", (x) => x.qc);
   return (
     <section className="tcard">
       <div className="tcard-head">
@@ -402,16 +399,24 @@ function QcAssignedCard({ lang, wp }: { lang: Lang; wp: WorkpoolResponse | null 
         </div>
       </div>
       <div className="tcard-body">
-        <div className="qca-grid">
-          {qcs.length === 0 && <div className="lvp-empty">{ko(lang) ? "가동 중인 QC 없음" : "no active QC"}</div>}
-          {qcs.map((x) => (
-            <div className="qca-cell" key={x.qc} title={x.vessel ? `${x.qc} · ${x.vessel} · ${ko(lang) ? `작업 ${x.moves}건` : `${x.moves} moves`}` : x.qc}>
-              <div className="qca-qc">{x.qc}</div>
-              <div className="qca-n" style={{ color: qcAssignColor(x.count) }}>{x.count}<small>{ko(lang) ? "대" : ""}</small></div>
-              <div className="qca-vsl">{ko(lang) ? `${x.moves}작업` : `${x.moves} mv`}{x.vessel ? ` · ${x.vessel}` : ""}</div>
+        {qcs.length === 0 && <div className="lvp-empty">{ko(lang) ? "가동 중인 QC 없음" : "no active QC"}</div>}
+        {groups.map((g) => {
+          const vtrucks = g.items.reduce((a, x) => a + x.count, 0);
+          return (
+            <div className="qca-vgroup" key={g.vessel}>
+              <div className="qc-vgroup-h"><span className="vsl">{g.vessel}</span><span className="qc-vgroup-n">{g.items.length} QC · {vtrucks}{ko(lang) ? "대" : ""}</span></div>
+              <div className="qca-grid">
+                {g.items.map((x) => (
+                  <div className="qca-cell" key={x.qc} title={`${x.qc} · ${x.vessel} · ${ko(lang) ? `작업 ${x.moves}건` : `${x.moves} moves`}`}>
+                    <div className="qca-qc">{x.qc}</div>
+                    <div className="qca-n" style={{ color: qcAssignColor(x.count) }}>{x.count}<small>{ko(lang) ? "대" : ""}</small></div>
+                    <div className="qca-vsl">{ko(lang) ? `${x.moves}작업` : `${x.moves} mv`}</div>
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
-        </div>
+          );
+        })}
       </div>
     </section>
   );
