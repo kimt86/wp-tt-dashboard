@@ -108,8 +108,14 @@ function LiveDispatchPool({ lang, snap, err }: { lang: Lang; snap: Snap | null; 
   const soon = tts.filter((d) => d.dispatch === "soon_idle").sort((a, b) => a.id.localeCompare(b.id));
   const idle = tts.filter((d) => d.dispatch === "idle").sort((a, b) => a.id.localeCompare(b.id));
   const empties = tts.filter((d) => d.dispatch === "empty_travel");
-  const swap = empties.filter((d) => d.swappable).sort((a, b) => (b.dest_remaining_m ?? 1e9) - (a.dest_remaining_m ?? 1e9));
-  const swapExcluded = empties.length - swap.length;
+  // swap pool: empty trucks still far enough from their pickup, EXCLUDING yard moves (MI/MO)
+  // — only vessel work (DS/LD) is swappable. Distance threshold is operator-adjustable.
+  const [swapMinM, setSwapMinM] = useState(500);
+  const isYardMove = (d: LiveTT) => ["MI", "MO"].includes((d.jobtype ?? "").toUpperCase());
+  const swap = empties
+    .filter((d) => !isYardMove(d) && (d.dest_remaining_m ?? 0) >= swapMinM)
+    .sort((a, b) => (b.dest_remaining_m ?? 1e9) - (a.dest_remaining_m ?? 1e9));
+  const swapExcluded = empties.filter((d) => !isYardMove(d)).length - swap.length;
   const ageS = snap?.as_of ? Math.max(0, Math.round((Date.now() - Date.parse(snap.as_of)) / 1000)) : null;
 
   return (
@@ -158,7 +164,12 @@ function LiveDispatchPool({ lang, snap, err }: { lang: Lang; snap: Snap | null; 
           </div>
           <div className="lvp-col">
             <div className="lvp-col-h"><span className="sw" style={{ background: DSP_META.empty_travel.color }} />{ko(lang) ? "스왑 가능한 공차" : "Swappable empty"}<span className="lvp-cn">{swap.length}</span></div>
-            <div className="lvp-sub">{ko(lang) ? `픽업까지 잔여 ≥150m · 근접/회송 ${swapExcluded} 제외` : `≥150m left to pickup · ${swapExcluded} excluded`}</div>
+            <div className="lvp-sub">{ko(lang) ? `픽업까지 잔여 ≥${swapMinM}m · MI/MO 제외 · 기준미달 ${swapExcluded} 제외` : `≥${swapMinM}m left to pickup · MI/MO excluded · ${swapExcluded} below threshold`}</div>
+            <div className="lvp-swapctl">
+              <span className="lvp-swapctl-l">{ko(lang) ? "기준 거리" : "min dist"}</span>
+              <input type="range" min={100} max={1500} step={50} value={swapMinM} onChange={(e) => setSwapMinM(Number(e.target.value))} />
+              <span className="lvp-swapctl-v mono">{swapMinM}m</span>
+            </div>
             <div className="lvp-list">
               {swap.length === 0 && <div className="lvp-empty">{ko(lang) ? "없음" : "none"}</div>}
               {swap.map((d) => (

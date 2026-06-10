@@ -362,7 +362,7 @@ pub struct PositionsOut {
 
 const RTG_BAY_M: f64 = 30.0; // RTG within this of a TT ≈ same bay (engaged)
 const IDLE_SPEED_KMH: f64 = 3.0;
-const SWAP_MIN_M: f64 = 150.0; // an empty TT closer than this to its pickup isn't worth swapping
+const SWAP_MIN_M: f64 = 500.0; // default swap threshold (frontend slider overrides for display)
 
 /// A topos1 like "C46"/"M4"/"Z6" = a quay/dynamic crane (vs a block code like "03U-21").
 fn is_crane_code(s: &str) -> bool {
