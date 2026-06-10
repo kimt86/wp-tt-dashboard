@@ -79,7 +79,8 @@ export interface VesselsResponse { shift: string; as_of: string; vessels: Vessel
 export interface WpMove {
   qc: string | null; queuename: string; vessel: string; jobtype: string | null;
   yt_status: string | null; ytno: string | null; armgc: string | null;
-  etw_ts: string | null; contno: string | null; yt_topos: string | null;
+  etw_ts: string | null; etw_accurate?: string | null; etw_expires?: string | null;
+  contno: string | null; yt_topos: string | null;
   from_pos: string | null; to_pos: string | null; twintandem: string | null;
 }
 export interface WpQueue {

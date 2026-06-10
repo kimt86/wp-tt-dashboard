@@ -65,8 +65,21 @@ const DSP_META: Record<string, { ko: string; en: string; color: string }> = {
 };
 const DSP_ORDER = ["idle", "soon_idle", "delivering", "wait_rtg", "empty_travel"];
 
-// ETW badge is hidden for now (the live ETW is unreliable); a more accurate ETW source
-// will be wired in later, at which point this countdown can be restored.
+// ETW countdown from the accurate TOS ETW RPC (qc_etw_utc via the tos_etw_gateway). The
+// snapshot has a TTL (expires); past it, the value is stale and shown dimmed.
+function etwLabel(etw: string | null | undefined, expires: string | null | undefined, lang: Lang): { text: string; cls: string } | null {
+  if (!etw) return null;
+  const sec = Math.round((Date.parse(etw) - Date.now()) / 1000);
+  const stale = expires != null && Date.parse(expires) < Date.now();
+  const abs = Math.abs(sec);
+  const hh = Math.floor(abs / 3600), mm = Math.floor((abs % 3600) / 60);
+  const t = hh > 0 ? `${hh}h${String(mm).padStart(2, "0")}` : (mm > 0 ? `${mm}:${String(abs % 60).padStart(2, "0")}` : `${abs}s`);
+  if (stale) return { text: ko(lang) ? `${t} (만료)` : `${t} (stale)`, cls: "lo" };
+  if (sec < -30) return { text: ko(lang) ? `지연 ${t}` : `overdue ${t}`, cls: "bad" };
+  if (sec < 90) return { text: ko(lang) ? `곧 ${t}` : t, cls: "bad" };
+  if (sec < 600) return { text: t, cls: "warn" };
+  return { text: t, cls: "ok" };
+}
 
 const kindChip = (jt: string | null) => (jt === "DS" ? "dsc" : jt === "LD" ? "lod" : "shf");
 const kindLabel = (jt: string | null) => (jt === "DS" ? "DSC" : jt === "LD" ? "LOD" : "SHF");
@@ -254,7 +267,7 @@ function QcCol({ q, lang, ttState, working, mph }: { q: WpQc; lang: Lang; ttStat
               <div className="top"><span className={`type-${kindChip(m.jobtype)}`}>{kindLabel(m.jobtype)}</span> {m.contno ?? "—"}{m.twintandem ? ` · ${m.twintandem}` : ""}</div>
               <div className="bot">
                 {m.jobtype === "DS" ? `${m.yt_topos ?? m.from_pos ?? "?"} → ${m.armgc ?? "RTG"}` : `${m.armgc ?? m.yt_topos ?? "?"} → ${q.qc}`}
-                {/* ETW badge hidden — a more accurate ETW source will feed this later */}
+                {(() => { const e = etwLabel(m.etw_accurate, m.etw_expires, lang); return e && <span className={`jetw ${e.cls}`} style={{ marginLeft: 6 }} title={ko(lang) ? "TOS ETW RPC 기반 정확 ETW" : "accurate ETW from the TOS ETW RPC"}>ETW {e.text}</span>; })()}
               </div>
             </div>
             <div className="assign">

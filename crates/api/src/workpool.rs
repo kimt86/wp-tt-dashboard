@@ -34,6 +34,8 @@ struct MoveRow {
     ytno: Option<String>,
     armgc: Option<String>,
     etw_ts: Option<DateTime<Utc>>,
+    etw_accurate: Option<DateTime<Utc>>,
+    etw_expires: Option<DateTime<Utc>>,
     contno: Option<String>,
     yt_topos: Option<String>,
     from_pos: Option<String>,
@@ -51,6 +53,10 @@ struct MoveOut {
     ytno: Option<String>,
     armgc: Option<String>,
     etw_ts: Option<DateTime<Utc>>,
+    /// accurate ETW from the TOS ETW RPC gateway (qc_etw_utc, else vessel_etw_utc)
+    etw_accurate: Option<DateTime<Utc>>,
+    /// when that accurate ETW snapshot expires (stale after this)
+    etw_expires: Option<DateTime<Utc>>,
     contno: Option<String>,
     yt_topos: Option<String>,
     from_pos: Option<String>,
@@ -134,9 +140,13 @@ pub async fn workpool(State(pool): State<PgPool>) -> Result<Json<WorkpoolOut>, A
     .await?;
 
     let moves: Vec<MoveRow> = sqlx::query_as(
-        "SELECT qc, queuename, vessel, jobtype, yt_status, ytno, armgc, etw_ts,
-                contno, yt_topos, from_pos, to_pos, twintandem
-           FROM live_workpool",
+        "SELECT w.qc, w.queuename, w.vessel, w.jobtype, w.yt_status, w.ytno, w.armgc, w.etw_ts,
+                coalesce(e.qc_etw_utc, e.vessel_etw_utc) AS etw_accurate,
+                e.expires_at_utc AS etw_expires,
+                w.contno, w.yt_topos, w.from_pos, w.to_pos, w.twintandem
+           FROM live_workpool w
+           LEFT JOIN tos_etw_cntr e
+                  ON e.vessel = w.vessel AND e.voyage = w.voyage AND e.cntr_no = w.contno",
     )
     .fetch_all(&pool)
     .await?;
@@ -156,6 +166,8 @@ pub async fn workpool(State(pool): State<PgPool>) -> Result<Json<WorkpoolOut>, A
         ytno: m.ytno.clone(),
         armgc: m.armgc.clone(),
         etw_ts: m.etw_ts,
+        etw_accurate: m.etw_accurate,
+        etw_expires: m.etw_expires,
         contno: m.contno.clone(),
         yt_topos: m.yt_topos.clone(),
         from_pos: m.from_pos.clone(),
@@ -195,7 +207,9 @@ pub async fn workpool(State(pool): State<PgPool>) -> Result<Json<WorkpoolOut>, A
         let mut qrows = q_by_qc.remove(qc).unwrap_or_default();
         qrows.sort_by_key(|q| q.seq.unwrap_or(i32::MAX));
         let mut mrows = m_by_qc.remove(qc).unwrap_or_default();
-        mrows.sort_by(|a, b| match (a.etw_ts, b.etw_ts) {
+        // soonest ETW first — prefer the accurate gateway ETW, fall back to the DB ETW.
+        let etw = |m: &MoveRow| m.etw_accurate.or(m.etw_ts);
+        mrows.sort_by(|a, b| match (etw(a), etw(b)) {
             (Some(x), Some(y)) => x.cmp(&y),
             (Some(_), None) => std::cmp::Ordering::Less,
             (None, Some(_)) => std::cmp::Ordering::Greater,
@@ -256,10 +270,10 @@ pub async fn workpool(State(pool): State<PgPool>) -> Result<Json<WorkpoolOut>, A
     // (drops the few orphan rows whose queue is gone and whose ETW is stale)
     let mut front: Vec<MoveOut> = moves
         .iter()
-        .filter(|m| m.etw_ts.is_some() && m.qc.as_deref().is_some_and(|s| !s.is_empty()))
+        .filter(|m| (m.etw_accurate.or(m.etw_ts)).is_some() && m.qc.as_deref().is_some_and(|s| !s.is_empty()))
         .map(to_move)
         .collect();
-    front.sort_by_key(|m| m.etw_ts);
+    front.sort_by_key(|m| m.etw_accurate.or(m.etw_ts));
     front.truncate(POOL_CAP);
 
     let active_moves = moves.len();

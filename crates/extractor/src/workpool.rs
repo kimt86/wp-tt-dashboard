@@ -84,8 +84,67 @@ pub async fn tick_workpool(pool: &PgPool, target: &str) -> Result<()> {
     step!("workqueue", src_workqueue(pool, target, date, as_of));
     step!("workpool", src_workpool(pool, target, date, as_of));
     step!("assigned", src_assigned(pool, target, date, as_of));
+    step!("etw", src_etw(pool, date));
     tracing::info!(%as_of, "workpool tick done");
     Ok(())
+}
+
+/// Accurate per-container ETW from the Azure tos_etw_gateway (TOS ETW RPC). For each active
+/// voyage in the work pool, GET /v1/voyages/{vessel}/{voyage}/snapshot (via the wp-etw-bridge
+/// SSH tunnel) and upsert the ETW of containers we actually have in live_workpool. No Oracle.
+async fn src_etw(pool: &PgPool, date: chrono::NaiveDate) -> Result<()> {
+    run_logged(pool, "ETW", date, |_| async move {
+        let base = std::env::var("ETW_GATEWAY_URL").unwrap_or_else(|_| "http://127.0.0.1:18080".into());
+        // only keep ETW for containers we display (the active work pool) — the per-voyage
+        // snapshot returns ~1000+ containers each; filtering keeps this table small.
+        let pool_cntrs: std::collections::HashSet<String> = sqlx::query_scalar::<_, String>(
+            "SELECT DISTINCT contno FROM live_workpool WHERE contno IS NOT NULL AND contno <> ''",
+        ).fetch_all(pool).await?.into_iter().collect();
+        let voyages: Vec<(String, String)> = sqlx::query_as(
+            "SELECT DISTINCT vessel, voyage FROM live_workpool WHERE voyage IS NOT NULL AND voyage <> ''",
+        ).fetch_all(pool).await?;
+        let parse_ts = |v: Option<&str>| v.and_then(|s| DateTime::parse_from_rfc3339(s).ok()).map(|d| d.with_timezone(&Utc));
+
+        let mut tx = pool.begin().await?;
+        let mut n = 0u64;
+        for (vessel, voyage) in &voyages {
+            let voye = voyage.replace('/', "%2F");
+            let url = format!("{base}/v1/voyages/{vessel}/{voye}/snapshot");
+            let out = tokio::process::Command::new("curl")
+                .args(["-fsS", "-m", "8", &url]).output().await;
+            let body = match out {
+                Ok(o) if o.status.success() => o.stdout,
+                _ => { tracing::warn!(%vessel, %voyage, "etw snapshot fetch failed"); continue; }
+            };
+            let snap: serde_json::Value = match serde_json::from_slice(&body) { Ok(v) => v, Err(_) => continue };
+            let fetched = parse_ts(snap.get("fetched_at_utc").and_then(|v| v.as_str()));
+            let expires = parse_ts(snap.get("expires_at_utc").and_then(|v| v.as_str()));
+            for c in snap.get("cntr_list").and_then(|v| v.as_array()).into_iter().flatten() {
+                let cntr = c.get("cntr_no").and_then(|v| v.as_str()).unwrap_or("");
+                if cntr.is_empty() || !pool_cntrs.contains(cntr) { continue; }
+                let disld = c.get("dis_ld").and_then(|v| v.as_str());
+                let qc = parse_ts(c.get("qc_etw_utc").and_then(|v| v.as_str()));
+                let vsl = parse_ts(c.get("vessel_etw_utc").and_then(|v| v.as_str()));
+                sqlx::query(
+                    "INSERT INTO tos_etw_cntr
+                       (vessel,voyage,cntr_no,dis_ld,qc_etw_utc,vessel_etw_utc,fetched_at_utc,expires_at_utc,updated_at)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now())
+                     ON CONFLICT (vessel,voyage,cntr_no) DO UPDATE SET
+                       dis_ld=EXCLUDED.dis_ld, qc_etw_utc=EXCLUDED.qc_etw_utc,
+                       vessel_etw_utc=EXCLUDED.vessel_etw_utc, fetched_at_utc=EXCLUDED.fetched_at_utc,
+                       expires_at_utc=EXCLUDED.expires_at_utc, updated_at=now()",
+                )
+                .bind(vessel).bind(voyage).bind(cntr).bind(disld).bind(qc).bind(vsl).bind(fetched).bind(expires)
+                .execute(&mut *tx).await.context("upsert tos_etw_cntr")?;
+                n += 1;
+            }
+        }
+        // drop ETW for containers no longer in any active pool (not refreshed in 2h)
+        sqlx::query("DELETE FROM tos_etw_cntr WHERE updated_at < now() - interval '2 hours'")
+            .execute(&mut *tx).await?;
+        tx.commit().await?;
+        Ok(n)
+    }).await.map(|_| ())
 }
 
 /// All TTs with an active assignment of ANY job type (for utilization). Refills

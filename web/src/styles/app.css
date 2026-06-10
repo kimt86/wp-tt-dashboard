@@ -508,6 +508,7 @@ td.mono { font-family: "JetBrains Mono", monospace; color: var(--text); }
 .jetw.bad { background: var(--bad-bg); color: #fca5a5; border: 1px solid var(--bad-border); }
 .jetw.warn { background: var(--warn-bg); color: #fcd34d; border: 1px solid var(--warn-border); }
 .jetw.ok { background: var(--surface-3); color: var(--text-dim); }
+.jetw.lo { background: transparent; color: var(--text-mute); border: 1px dashed var(--border); opacity: 0.7; }
 
 /* ===================== HEALTH PAGE — AI Dispatch Health Monitor (mock) ===================== */
 .hp-root { display: flex; flex-direction: column; gap: 12px; }
