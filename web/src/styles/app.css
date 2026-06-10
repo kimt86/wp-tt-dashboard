@@ -299,6 +299,10 @@ td.mono { font-family: "JetBrains Mono", monospace; color: var(--text); }
 .pill.bad { background: var(--bad-bg); color: #fca5a5; border: 1px solid var(--bad-border); }
 
 /* QC sequence panel */
+.qc-toggle { display: block; width: 100%; margin-top: 10px; padding: 7px 0; text-align: center;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text-dim); font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.qc-toggle:hover { border-color: var(--brand); color: var(--text); }
 .qc-panel { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 @media (max-width: 1100px) { .qc-panel { grid-template-columns: repeat(2, 1fr); } }
 .qc-col { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px; display: flex; flex-direction: column; gap: 6px; }

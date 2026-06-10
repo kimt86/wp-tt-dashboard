@@ -180,11 +180,12 @@ function LiveQcSequence({ lang, wp, snap }: { lang: Lang; wp: WorkpoolResponse |
       if (d.plc.mph != null && d.plc.mph > 0) craneMph.set(d.id, d.plc.mph);
     }
   }
-  // working QCs = those with active moves (same definition as the "per-QC" card). Keep the
-  // busiest QC_CAP for height, but display them in QC-number order so the two cards line up.
+  const [showAll, setShowAll] = useState(false);
+  // working QCs = those with active moves (same definition as the "per-QC" card). Collapsed:
+  // the busiest QC_CAP; expanded: all. Either way display in QC-number order so the two cards
+  // line up.
   const working = (wp?.qcs ?? []).filter((q) => q.active_moves > 0);
-  const qcs = working
-    .slice(0, QC_CAP)
+  const qcs = (showAll ? working : working.slice(0, QC_CAP))
     .slice()
     .sort((a, b) => a.qc.localeCompare(b.qc, undefined, { numeric: true }));
   const ageS = wp?.as_of ? Math.max(0, Math.round((Date.now() - Date.parse(wp.as_of)) / 1000)) : null;
@@ -213,7 +214,11 @@ function LiveQcSequence({ lang, wp, snap }: { lang: Lang; wp: WorkpoolResponse |
           {qcs.map((q) => <QcCol key={q.qc} q={q} lang={lang} ttState={ttState} working={craneFresh.get(q.qc) ?? false} mph={craneMph.get(q.qc)} />)}
         </div>
         {working.length > QC_CAP && (
-          <div className="lvp-note">{ko(lang) ? `작업량 많은 ${QC_CAP}개만 표시 · +${working.length - QC_CAP} QC 더 (전체는 위 'QC별 배차 현황' 참고)` : `showing the ${QC_CAP} busiest · +${working.length - QC_CAP} more QC (see "Trucks Assigned per QC" above for all)`}</div>
+          <button className="qc-toggle" onClick={() => setShowAll((v) => !v)}>
+            {showAll
+              ? (ko(lang) ? `▲ 접기 (작업량 많은 ${QC_CAP}개만)` : `▲ Collapse (top ${QC_CAP} only)`)
+              : (ko(lang) ? `▼ 전체 ${working.length}개 QC 펼치기 (+${working.length - QC_CAP})` : `▼ Show all ${working.length} QCs (+${working.length - QC_CAP})`)}
+          </button>
         )}
       </div>
     </section>
