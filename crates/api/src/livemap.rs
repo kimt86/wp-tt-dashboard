@@ -351,6 +351,9 @@ pub struct PositionsOut {
     /// secondary (%) — of manned trucks, the fraction physically moving/carrying right now
     /// (the remainder of the assigned ones are queued/waiting within their job).
     tt_engaged_live: Option<i64>,
+    /// shift-to-date TIME-BASED utilization (%) — mean of the 60s assignment samples this
+    /// shift (assigned/on-duty). The history-bearing figure; live value is the instant.
+    tt_util_shift_avg: Option<i64>,
     /// live K_QC_Q — quay cranes currently starving (idle, no truck) + their avg wait (s)
     qc_starving: usize,
     qc_wait_live_s: Option<i64>,
@@ -627,7 +630,6 @@ pub async fn positions(State(lm): State<Arc<LiveMap>>, State(pool): State<PgPool
     // assigned to each active/incomplete job), refreshed every ~90s. So:
     //   utilized = TTs assigned in the work pool ;  on-duty = those ∪ manned (GPS engine on).
     let fresh_tt = || map.values().filter(|p| p.cls == "TT" && (now - p.last_seen_ms) / 1000 <= STALE_AFTER_S);
-    let total_tt = fresh_tt().count();
     let in_service = fresh_tt().filter(|p| p.engine == 1).count(); // manned (operator aboard)
     let manned_ids: std::collections::HashSet<&str> = map
         .iter()
@@ -652,6 +654,20 @@ pub async fn positions(State(lm): State<Arc<LiveMap>>, State(pool): State<PgPool
     // secondary context: of manned trucks, how many are physically moving/carrying right now
     // (the rest of the assigned ones are queued/waiting within their job — still utilized).
     let tt_engaged_live = (in_service > 0).then(|| (active_trucks as f64 / in_service as f64 * 100.0).round() as i64);
+    // shift-to-date TIME-BASED utilization: mean of the 60s assignment samples this shift.
+    let (bd_cur, sh_cur) = wp_core::shift::current(wp_core::shift::terminal_now().naive_local());
+    let tt_util_shift_avg: Option<i64> = sqlx::query_scalar::<_, Option<f64>>(
+        "SELECT round(avg(100.0*assigned/nullif(on_duty,0)))::float8
+           FROM util_tt_sample WHERE business_date=$1 AND shift=$2",
+    )
+    .bind(bd_cur)
+    .bind(sh_cur.label())
+    .fetch_optional(&pool)
+    .await
+    .ok()
+    .flatten()
+    .flatten()
+    .map(|v| v as i64);
 
     // ── live K_QC_Q (QC waiting for a truck) ── direct starvation: a working quay crane
     // that's been idle past a normal inter-move gap with NO assigned TT arrived at it.
@@ -702,6 +718,7 @@ pub async fn positions(State(lm): State<Arc<LiveMap>>, State(pool): State<PgPool
         active_trucks,
         tt_util_live,
         tt_engaged_live,
+        tt_util_shift_avg,
         qc_starving,
         qc_wait_live_s,
         devices,
@@ -851,6 +868,62 @@ pub async fn health(State(lm): State<Arc<LiveMap>>) -> Json<HealthOut> {
 // ───────────────────────── ingest loop ─────────────────────────
 
 /// Spawn the background ingest task + a periodic pruner.
+/// (assigned, manned, on-duty) TT counts. assigned = distinct ytno in the fresh work pool
+/// (the authoritative allocation source); manned = GPS engine-on; on-duty = assigned ∪
+/// manned. `manned` is returned separately so the sampler can skip warm-up (empty GPS map).
+pub async fn assigned_on_duty(lm: &LiveMap, pool: &PgPool) -> (usize, usize, usize) {
+    let now = Utc::now().timestamp_millis();
+    let manned: std::collections::HashSet<String> = {
+        let map = lm.devices.read().await;
+        map.iter()
+            .filter(|(_, p)| p.cls == "TT" && p.engine == 1 && (now - p.last_seen_ms) / 1000 <= STALE_AFTER_S)
+            .map(|(id, _)| id.clone())
+            .collect()
+    };
+    let assigned_ids: Vec<String> = sqlx::query_scalar::<_, String>(
+        "SELECT DISTINCT ytno FROM live_workpool
+          WHERE ytno IS NOT NULL AND ytno <> '' AND as_of_ts > now() - interval '5 minutes'",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+    let assigned_n = assigned_ids.len();
+    let on_duty: std::collections::HashSet<&str> =
+        manned.iter().map(|s| s.as_str()).chain(assigned_ids.iter().map(|s| s.as_str())).collect();
+    (assigned_n, manned.len(), on_duty.len())
+}
+
+/// Every 60s, snapshot (assigned, on-duty) into util_tt_sample. Averaging these over a shift
+/// yields a TIME-BASED utilization (allocation→completion incl. queuing; idle = unassigned)
+/// that accrues history forward — the per-truck historical allocation time is not in TOS.
+pub fn spawn_util_sampler(lm: Arc<LiveMap>, pool: PgPool) {
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(Duration::from_secs(60));
+        loop {
+            ticker.tick().await;
+            let (assigned, manned, on_duty) = assigned_on_duty(&lm, &pool).await;
+            // skip warm-up / feed gaps: without a populated GPS map the on-duty denominator
+            // is just the work pool → a spurious ~100%. Require a real manned fleet present.
+            if manned < 20 || on_duty == 0 {
+                continue;
+            }
+            let (bd, sh) = wp_core::shift::current(wp_core::shift::terminal_now().naive_local());
+            if let Err(e) = sqlx::query(
+                "INSERT INTO util_tt_sample (business_date, shift, assigned, on_duty) VALUES ($1,$2,$3,$4)",
+            )
+            .bind(bd)
+            .bind(sh.label())
+            .bind(assigned as i32)
+            .bind(on_duty as i32)
+            .execute(&pool)
+            .await
+            {
+                tracing::warn!(error = %e, "util_tt_sample insert failed");
+            }
+        }
+    });
+}
+
 pub fn spawn(lm: Arc<LiveMap>) {
     // pruner: drop fixes older than LOST_AFTER_S so the maps can't grow unbounded.
     {

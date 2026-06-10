@@ -78,6 +78,7 @@ async fn main() -> anyhow::Result<()> {
     let pool = db::pool().await?;
     let livemap = livemap::LiveMap::new();
     livemap::spawn(livemap.clone()); // background GPS ingest (via local SSH tunnel)
+    livemap::spawn_util_sampler(livemap.clone(), pool.clone()); // 60s TT-utilization samples
     let state = AppState { pool, livemap };
 
     let addr = std::env::var("API_ADDR").unwrap_or_else(|_| "127.0.0.1:8080".to_string());
