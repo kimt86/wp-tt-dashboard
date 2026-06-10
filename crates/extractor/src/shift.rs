@@ -14,7 +14,6 @@ use crate::params::{self, TimeCol};
 use crate::runner::Toolbox;
 
 // same SQL files as the day path; now token-parameterized for the shift window
-const SQL_UTIL: &str = include_str!("../sql/e3a_k_util_tt_merged.sql");
 const SQL_MPH: &str = include_str!("../sql/c07_k_mph_realtime.sql");
 const SQL_QCQ: &str = include_str!("../sql/f2_k_qc_q.sql");
 const SQL_EMPTY: &str = include_str!("../sql/e4_k_empty_decomposition.sql");
@@ -126,35 +125,21 @@ async fn fetch<T: serde::de::DeserializeOwned>(
 
 // ---- per-source extract+fold (mirrors transform.rs headline formulas) ----
 
-async fn src_util(pool: &PgPool, target: &str, date: NaiveDate, sh: Shift, start: NaiveDateTime, end: NaiveDateTime) -> Result<()> {
+async fn src_util(pool: &PgPool, _target: &str, date: NaiveDate, sh: Shift, start: NaiveDateTime, end: NaiveDateTime) -> Result<()> {
+    // TIME-BASED utilization from the API's work-pool assignment samples (no Oracle). Mean of
+    // assigned/on-duty over this shift's 60s samples. (TOS session util is no longer used.)
     run_logged(pool, "K_UTIL_SHIFT", date, |_| async move {
-        let sql = params::render_shift(SQL_UTIL, date, start, end, None)?;
-        let rows: Vec<crate::kpis::k_util_tt::Row> = fetch(target, &sql).await?;
-        let n = rows.len();
-        let value = if n == 0 { None } else {
-            Some(rows.iter().filter_map(|r| r.k_util_capped).sum::<f64>() / n as f64 * 100.0)
-        };
-        // headline shift value: avg-of-ratios (display only; not combined across shifts)
-        upsert_shift(pool, date, sh, "K_UTIL", "%", value, Some(n as i64), None, start, end).await?;
-
-        // per-TT components → util_tt_shift, so the "today" K_UTIL can recombine EXACTLY
-        // (Σ productive_min / Σ elapsed_min, capped, then averaged). Same elapsed denom
-        // the SQL used: window minutes capped at the business day, ≥ 1.
-        let day_end = date.and_hms_opt(23, 59, 59).unwrap();
-        let end_capped = end.min(day_end).max(start);
-        let elapsed_min = ((end_capped - start).num_seconds() as f64 / 60.0).max(1.0);
-        let mut tx = pool.begin().await?;
-        sqlx::query("DELETE FROM util_tt_shift WHERE business_date=$1 AND shift=$2")
-            .bind(date).bind(sh.label()).execute(&mut *tx).await?;
-        for r in &rows {
-            sqlx::query(
-                "INSERT INTO util_tt_shift (business_date, shift, machno, productive_min, elapsed_min)
-                 VALUES ($1,$2,$3,$4,$5)",
-            )
-            .bind(date).bind(sh.label()).bind(&r.machno).bind(r.productive_min).bind(elapsed_min)
-            .execute(&mut *tx).await?;
-        }
-        tx.commit().await?;
+        let (value, n): (Option<f64>, i64) = sqlx::query_as(
+            "SELECT round(avg(100.0*assigned/nullif(on_duty,0)),1)::float8, count(*)::int8
+               FROM util_tt_sample WHERE business_date=$1 AND shift=$2",
+        )
+        .bind(date)
+        .bind(sh.label())
+        .fetch_one(pool)
+        .await
+        .unwrap_or((None, 0));
+        // weight None: not combined across shifts (today K_UTIL is recomputed from samples directly)
+        upsert_shift(pool, date, sh, "K_UTIL", "%", value, Some(n), None, start, end).await?;
         Ok(n as u64)
     }).await.map(|_| ())
 }

@@ -23,11 +23,13 @@ pub async fn run_marked(pool: &PgPool, date: NaiveDate, provisional: bool) -> Re
 }
 
 async fn kpi_daily(pool: &PgPool, date: NaiveDate, provisional: bool) -> Result<()> {
-    // K_UTIL — mean of per-TT capped utilisation, as %.
+    // K_UTIL — TIME-BASED utilization: mean of the 60s assignment samples (assigned/on-duty)
+    // over the day. Assignment from the TOS work pool (allocation→completion incl. queuing;
+    // idle = unassigned). The TOS session value (raw_k_util_tt) is no longer displayed.
     upsert_daily(
-        pool, date, "K_UTIL", "%", "mean(k_util_capped) over TTs",
-        "SELECT round(avg(k_util_capped)*100, 4), count(*)
-           FROM raw_k_util_tt WHERE snapshot_date = $1 HAVING count(*) > 0",
+        pool, date, "K_UTIL", "%", "mean(assigned/on_duty) over util_tt_sample",
+        "SELECT round(avg(100.0*assigned/nullif(on_duty,0)), 1), count(*)
+           FROM util_tt_sample WHERE business_date = $1 HAVING count(*) > 0",
         provisional,
     ).await?;
 

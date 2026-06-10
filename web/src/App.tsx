@@ -159,6 +159,7 @@ type WsLive = {
 };
 function fmtCycle(s: number | null | undefined): string {
   if (s == null) return "—";
+  s = Math.round(s); // whole seconds — the source value can carry a .5 decimal
   return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
 }
 // poll the per-second websocket feed (shared by the KPI cards so each can show its live
@@ -254,11 +255,10 @@ function WsAux({ val, title, ko }: { val: string; title: string; ko: boolean }) 
 }
 
 // the cycle KPI is stored in seconds but reads as a duration; everything else uses fmtValue.
-// K_UTIL: the TOS session value is never shown (idle-included → overstated), so its
-// non-live (historical) cell is "—"; the live value comes from the websocket (wsOnly).
+// (K_UTIL kpi_daily is now the TIME-BASED utilization aggregated from work-pool samples, so
+// historical/period cells show it normally; the LIVE cards use the websocket shift average.)
 function mainValue(key: string, value: number | null, unit: string): { val: string; unit: string } {
   if (key === "K_CYCLE") return { val: value != null ? fmtCycle(value) : "—", unit: "" };
-  if (key === "K_UTIL") return { val: "—", unit: "" };
   return { val: fmtValue(value, unit), unit };
 }
 

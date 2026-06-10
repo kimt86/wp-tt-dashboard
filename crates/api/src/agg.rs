@@ -114,26 +114,20 @@ pub async fn aggregate(pool: &PgPool, from: NaiveDate, to: NaiveDate) -> Result<
         m.insert("K_QC_Q", finish(num + vw, den + w, nr + nt, 1, 1.0));
     }
 
-    // ---- K_UTIL: avg-of-ratios. Past days exact (avg over TT-day rows). Today is
-    // recombined EXACTLY from util_tt_shift: per TT day_util = min(1, Σ productive_min /
-    // Σ shift_elapsed_min), then averaged — equivalent to a single full-day computation
-    // (not a weighted-mean approximation). ----
+    // ---- K_UTIL: TIME-BASED utilization = mean of the 60s assignment samples over the
+    // whole range (today included — samples carry business_date). value = Σ(ratio)/Σ(1).
+    // The TOS session value is no longer used (it counted manned-idle time as utilized). ----
     {
-        let (num, den, nr) = raw_nd(pool,
-            "SELECT coalesce(sum(k_util_capped)*100,0)::float8, count(*)::float8, count(distinct machno)::int8
-               FROM raw_k_util_tt WHERE snapshot_date BETWEEN $1 AND $2", from, raw_to).await?;
-        let (util_sum, util_n) = if include_today {
-            let row: Option<(Option<f64>, Option<f64>)> = sqlx::query_as(
-                "WITH el AS (SELECT COALESCE(SUM(elapsed_min),0) AS d
-                               FROM (SELECT DISTINCT shift, elapsed_min FROM util_tt_shift WHERE business_date=$1) s),
-                      tt AS (SELECT machno, SUM(productive_min) AS prod FROM util_tt_shift WHERE business_date=$1 GROUP BY machno)
-                 SELECT COALESCE(SUM(LEAST(1.0, prod / NULLIF((SELECT d FROM el),0)))*100, 0)::float8, COUNT(*)::float8 FROM tt",
-            )
-            .bind(today)
-            .fetch_optional(pool).await?;
-            row.map(|(s, n)| (s.unwrap_or(0.0), n.unwrap_or(0.0))).unwrap_or((0.0, 0.0))
-        } else { (0.0, 0.0) };
-        m.insert("K_UTIL", finish(num + util_sum, den + util_n, nr + util_n as i64, 4, 1.0));
+        let row: Option<(Option<f64>, Option<i64>)> = sqlx::query_as(
+            "SELECT sum(100.0*assigned/nullif(on_duty,0))::float8, count(*)::int8
+               FROM util_tt_sample WHERE business_date BETWEEN $1 AND $2",
+        )
+        .bind(from)
+        .bind(to)
+        .fetch_optional(pool)
+        .await?;
+        let (num, n) = row.map(|(s, c)| (s.unwrap_or(0.0), c.unwrap_or(0))).unwrap_or((0.0, 0));
+        m.insert("K_UTIL", finish(num, n as f64, n, 1, 1.0));
     }
 
     Ok(m)
