@@ -200,8 +200,8 @@ function cardSrc(key: string, w: WsLive | null, ko: boolean): CardSrc {
       kind: "wsOnly",
       val: real != null ? `${real}%` : "—",
       title: ko
-        ? `진짜 가동률 — 맨드(엔진ON) 트럭 중 작업 할당이 있는 비율. 할당~완료(크레인 전달) 사이는 멈춰 있어도(크레인 앞 큐잉 포함) 가동. 유휴 = 할당을 못 받고 대기하는 시간뿐. 할당 신호=container1/topos1/jobtype. (이 중 실제 이동·적재 중은 ${moving ?? "—"}%) TOS 세션값(유휴 포함)은 미표시.`
-        : `true utilization — of manned trucks, the fraction with an active job assignment. From allocation to completion (handover at the crane) the truck counts as utilized even while stopped (incl. queuing); idle = only time spent unassigned. Assignment signal = container1/topos1/jobtype. (Of these, ${moving ?? "—"}% are physically moving/carrying now.) The TOS session value is not shown.`,
+        ? `진짜 가동률 — 작업 할당이 있는 트럭 / 가동 중인 트럭. 할당~완료(크레인 전달) 사이는 멈춰 있어도(크레인 앞 큐잉 포함) 가동. 유휴 = 할당 없이 대기하는 시간뿐. 할당 출처 = TOS 작업풀(JOB_ORDER_LIST의 배정 YT) — GPS 작업필드는 간헐적이라 신뢰 불가. (이 중 실제 이동·적재 중은 ${moving ?? "—"}%, 나머지는 할당받고 대기.) TOS 세션 가동률(할당 없는 시간 포함)은 미표시.`
+        : `true utilization — trucks with an active job / on-duty trucks. From allocation to completion (handover at the crane) a truck is utilized even while stopped (incl. queuing); idle = only unassigned waiting. Assignment source = the TOS work pool (assigned YT in JOB_ORDER_LIST) — the GPS job fields are intermittent and unreliable. (Of these, ${moving ?? "—"}% are physically moving/carrying now.) The TOS session value is not shown.`,
     };
   }
   if (key === "K_CYCLE") {

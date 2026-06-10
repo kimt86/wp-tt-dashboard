@@ -17,6 +17,7 @@ use std::time::Duration;
 
 use axum::extract::State;
 use axum::Json;
+use sqlx::PgPool;
 use chrono::{DateTime, Utc};
 use futures_util::{SinkExt, StreamExt};
 use serde::Serialize;
@@ -468,7 +469,7 @@ fn classify_tt(
 }
 
 /// `GET /api/livemap/positions` — active device fixes (age ≤ 120s).
-pub async fn positions(State(lm): State<Arc<LiveMap>>) -> Json<PositionsOut> {
+pub async fn positions(State(lm): State<Arc<LiveMap>>, State(pool): State<PgPool>) -> Json<PositionsOut> {
     let now = Utc::now().timestamp_millis();
     // observation window for the live move/hr rate: capped at 1h, but right after a
     // restart we've collected less, so divide the move count by the actual elapsed
@@ -619,25 +620,37 @@ pub async fn positions(State(lm): State<Arc<LiveMap>>) -> Json<PositionsOut> {
 
     // ── live K_UTIL (TT utilization) ──
     // A truck is utilized from job ALLOCATION to COMPLETION (container handed to the crane) —
-    // even while stopped (queued at a crane, waiting to lift). Idle is ONLY the time a manned
-    // truck has NO assignment (awaiting dispatch). The GPS feed carries the live assignment:
-    // a carried container1, or a target job (topos1 destination / jobtype). So:
-    //   utilized = manned AND has-assignment ;  idle = manned AND no-assignment.
-    // This fixes the prior "moving/carrying now" proxy, which wrongly counted an assigned
-    // truck queued at a crane as idle. (TOS K_UTIL can't do this — it only subtracts formal
-    // stops, counting even unassigned manned time as utilized, so it overstates; not shown.)
+    // even while stopped/queued at a crane. Idle = on-duty but with NO assignment.
+    // The GPS job fields (topos1/jobtype) are INTERMITTENT — they ride only on assignment
+    // events, not on every 3s heartbeat, so a point-in-time snapshot misses most assigned
+    // trucks. The authoritative source is the TOS work pool (live_workpool.ytno = the TT
+    // assigned to each active/incomplete job), refreshed every ~90s. So:
+    //   utilized = TTs assigned in the work pool ;  on-duty = those ∪ manned (GPS engine on).
     let fresh_tt = || map.values().filter(|p| p.cls == "TT" && (now - p.last_seen_ms) / 1000 <= STALE_AFTER_S);
     let total_tt = fresh_tt().count();
     let in_service = fresh_tt().filter(|p| p.engine == 1).count(); // manned (operator aboard)
-    let has_job = |p: &&Pos| {
-        p.container1.as_deref().is_some_and(|s| !s.is_empty())
-            || p.topos1.as_deref().is_some_and(|s| !s.is_empty())
-            || p.jobtype.as_deref().is_some_and(|s| !s.is_empty())
-    };
-    let assigned = fresh_tt().filter(|p| p.engine == 1).filter(has_job).count();
-    let tt_util_live = (in_service > 0).then(|| (assigned as f64 / in_service as f64 * 100.0).round() as i64);
+    let manned_ids: std::collections::HashSet<&str> = map
+        .iter()
+        .filter(|(_, p)| p.cls == "TT" && p.engine == 1 && (now - p.last_seen_ms) / 1000 <= STALE_AFTER_S)
+        .map(|(id, _)| id.as_str())
+        .collect();
+    // assigned TTs from the work pool (fresh snapshot only; empty on staleness/error → "—")
+    let assigned_ids: Vec<String> = sqlx::query_scalar::<_, String>(
+        "SELECT DISTINCT ytno FROM live_workpool
+          WHERE ytno IS NOT NULL AND ytno <> '' AND as_of_ts > now() - interval '5 minutes'",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap_or_default();
+    let assigned_n = assigned_ids.len();
+    // on-duty = manned ∪ assigned (an assigned truck is on duty even if its GPS engine flickers;
+    // a manned-but-unassigned truck is on-duty-idle and belongs in the denominator).
+    let on_duty: std::collections::HashSet<&str> =
+        manned_ids.iter().copied().chain(assigned_ids.iter().map(|s| s.as_str())).collect();
+    let tt_util_live = (assigned_n > 0 && !on_duty.is_empty())
+        .then(|| (assigned_n as f64 / on_duty.len() as f64 * 100.0).round() as i64);
     // secondary context: of manned trucks, how many are physically moving/carrying right now
-    // (the rest with a job are queued/waiting within an assignment — still utilized above).
+    // (the rest of the assigned ones are queued/waiting within their job — still utilized).
     let tt_engaged_live = (in_service > 0).then(|| (active_trucks as f64 / in_service as f64 * 100.0).round() as i64);
 
     // ── live K_QC_Q (QC waiting for a truck) ── direct starvation: a working quay crane
