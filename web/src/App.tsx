@@ -279,10 +279,10 @@ function LiveCard({ c, lang, ws, extras }: { c: LiveKpi; lang: Lang; ws: WsLive 
   if (src.kind === "wsOnly") {
     return (
       <div className={`kpi${c.tier === "PRIMARY" ? " primary" : ""}`} title={src.title}>
-        <div className="label">{nm}<SourceBadge src="ws" ko={ko} /></div>
+        <div className="label">{nm}<SourceBadge src="dual" ko={ko} /></div>
         <div className="vrow"><span className="val">{src.val}</span></div>
         <div className="ws-sub mono">{src.sub || (ko ? "할당 기준" : "by assignment")}</div>
-        <div className="n" style={{ marginTop: "auto" }}>{ko ? "websocket GPS" : "from websocket GPS"}</div>
+        <div className="n" style={{ marginTop: "auto" }}>{ko ? "TOS 작업풀 + 실시간 GPS" : "TOS work pool + live GPS"}</div>
       </div>
     );
   }
@@ -338,10 +338,10 @@ function TodayCard({ c, lang, ws, extras }: { c: KpiCard; lang: Lang; ws: WsLive
   if (src.kind === "wsOnly") {
     return (
       <div className={`kpi${c.tier === "PRIMARY" ? " primary" : ""}`} title={src.title}>
-        <div className="label">{name(c, lang)}<SourceBadge src="ws" ko={ko} /></div>
+        <div className="label">{name(c, lang)}<SourceBadge src="dual" ko={ko} /></div>
         <div className="vrow"><span className="val">{src.val}</span></div>
         <div className="ws-sub mono">{src.sub || (ko ? "할당 기준" : "by assignment")}</div>
-        <div className="n" style={{ marginTop: "auto" }}>{ko ? "websocket GPS" : "from websocket GPS"}</div>
+        <div className="n" style={{ marginTop: "auto" }}>{ko ? "TOS 작업풀 + 실시간 GPS" : "TOS work pool + live GPS"}</div>
       </div>
     );
   }
