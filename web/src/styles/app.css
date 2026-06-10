@@ -143,6 +143,14 @@ body {
 /* per-jobtype TT cycle split (discharge / load) on the cycle card */
 .cyc-split { display: flex; gap: 10px; font-size: 10px; color: var(--text-dim); margin: 1px 0 2px; }
 .cyc-split .cs-l { color: var(--text-mute); font-weight: 600; margin-right: 2px; }
+/* per-QC assigned-trucks card (TT dispatch page) */
+.qca-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px; }
+.qca-cell { background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px;
+  padding: 8px 6px; text-align: center; }
+.qca-cell .qca-qc { font-family: "JetBrains Mono", monospace; font-size: 12px; font-weight: 700; color: var(--text-dim); }
+.qca-cell .qca-n { font-family: "Manrope", sans-serif; font-size: 26px; font-weight: 800; line-height: 1.1; letter-spacing: -1px; }
+.qca-cell .qca-n small { font-size: 11px; font-weight: 600; color: var(--text-mute); margin-left: 1px; }
+.qca-cell .qca-vsl { font-size: 9.5px; color: var(--text-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* extra sub-values inside the distance / ratio cards (loaded, total, loaded-ratio) */
 .kpi-extras { display: flex; flex-direction: column; gap: 1px; margin: 1px 0 2px; padding-top: 3px; border-top: 1px dashed var(--border-soft); }
 .kpi-extra { display: flex; justify-content: space-between; align-items: baseline; font-size: 10.5px; }

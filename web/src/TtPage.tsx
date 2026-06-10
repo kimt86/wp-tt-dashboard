@@ -349,11 +349,56 @@ function LiveCandidatePool({ lang, wp }: { lang: Lang; wp: WorkpoolResponse | nu
   );
 }
 
+// Per-QC live assignment: how many distinct trucks are currently assigned to each quay
+// crane (from live_workpool — the DS/LD dispatch pool). Starvation (0–2 trucks) is colour-cued.
+function qcAssignColor(n: number): string {
+  if (n === 0) return "#ef4444";   // starved
+  if (n <= 2) return "#f59e0b";    // thin
+  return "#22c55e";                // healthy
+}
+function QcAssignedCard({ lang, wp }: { lang: Lang; wp: WorkpoolResponse | null }) {
+  const qcs = (wp?.qcs ?? [])
+    .map((q) => {
+      const trucks = new Set<string>();
+      for (const m of q.moves) if (m.ytno && m.ytno.trim()) trucks.add(m.ytno.trim());
+      return { qc: q.qc, count: trucks.size, moves: q.active_moves, vessel: q.vessels[0] ?? "" };
+    })
+    .filter((x) => x.moves > 0 || x.count > 0) // only working QCs (a 0 here = real starvation)
+    .sort((a, b) => a.qc.localeCompare(b.qc, undefined, { numeric: true }));
+  const totalTrucks = qcs.reduce((a, x) => a + x.count, 0);
+  const starved = qcs.filter((x) => x.count === 0).length;
+  return (
+    <section className="tcard">
+      <div className="tcard-head">
+        <h3>{ko(lang) ? "QC별 배차 현황" : "Trucks Assigned per QC"}
+          <span className="h3-sub">{ko(lang) ? "각 안벽크레인에 현재 배차된 트럭 수 (실시간)" : "trucks currently assigned to each quay crane (live)"}</span></h3>
+        <div className="head-sub">
+          <span className="muted">{ko(lang) ? `가동 QC ${qcs.length} · 배차 ${totalTrucks}대` : `${qcs.length} QCs · ${totalTrucks} trucks`}</span>
+          {starved > 0 && <span style={{ color: "#ef4444", marginLeft: 8 }}>{ko(lang) ? `· 굶주림 ${starved}` : `· ${starved} starved`}</span>}
+        </div>
+      </div>
+      <div className="tcard-body">
+        <div className="qca-grid">
+          {qcs.length === 0 && <div className="lvp-empty">{ko(lang) ? "가동 중인 QC 없음" : "no active QC"}</div>}
+          {qcs.map((x) => (
+            <div className="qca-cell" key={x.qc} title={x.vessel ? `${x.qc} · ${x.vessel} · ${ko(lang) ? `작업 ${x.moves}건` : `${x.moves} moves`}` : x.qc}>
+              <div className="qca-qc">{x.qc}</div>
+              <div className="qca-n" style={{ color: qcAssignColor(x.count) }}>{x.count}<small>{ko(lang) ? "대" : ""}</small></div>
+              <div className="qca-vsl">{x.vessel || "—"}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function TtPage({ lang }: { lang: Lang }) {
   const { snap, err } = usePositions();
   const { data: wp } = useWorkpool();
   return (
     <div className="content tt-page">
+      <QcAssignedCard lang={lang} wp={wp} />
       <LiveDispatchPool lang={lang} snap={snap} err={err} />
       <LiveCandidatePool lang={lang} wp={wp} />
       <LiveQcSequence lang={lang} wp={wp} snap={snap} />
