@@ -134,8 +134,8 @@ curl -s localhost:8080/api/livemap/positions | python3 -c \
   <ul>
     <li>v1 단계 컬럼(<code>pickup_arrived_at</code> 등) 산출을 v2 로직으로 교체 — 또는 CYCLES API가 <code>tt_cycle_v2</code>를 읽도록 전환.</li>
     <li><code>CyclesPage</code>의 <code>phasesOf</code> · <a href="cycle-detection-ko.html">사이클 감지 로직(v1)</a> 문서 갱신, 승격 기록.</li>
-    <li>받기/주기(체류) + 공차이동시작을 CYCLES 막대에 노출 검토 (6-이벤트 모델, <a href="cycle-v2-design-ko.html#handover">§5</a>).</li>
-    <li>P2 trip 커버리지 개선 — 레그 1개만 잡히는 ~37% 사이클의 두 번째 trip 포착(레그 미형성 보강).</li>
+    <li><s>받기/주기(체류) + 공차이동시작을 CYCLES 막대에 노출</s> — ✅ 완료: CYCLES 페이지에 v2 6이벤트 5세그먼트 막대 + v1/v2 토글(미관측=빈칸). detail API가 <code>tt_cycle_v2</code> LEFT JOIN.</li>
+    <li><s>P2 trip 커버리지 — 레그 미형성 보강</s> — ✅ v2.6 픽업 레그 보장(픽업 채움 84%). 잔존은 관측 불가(NULL).</li>
   </ul>
   <h3>T4. 백로그 (급하지 않음)</h3>
   <ul>

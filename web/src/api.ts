@@ -119,6 +119,9 @@ export interface CycleRow {
   jobtype: string | null; vessel: string | null; voyage: string | null; container: string | null; qc: string | null;
   cycle_s: number | null; laden_leg_s: number | null; laden_leg_m: number | null;
   empty_leg_s: number | null; empty_leg_m: number | null; container_to_container: boolean;
+  // v2 shadow 6-event model (null where unobserved / no v2 row)
+  v2_opened_at: string | null; v2_empty_travel_start_at: string | null; v2_empty_arrived_at: string | null;
+  v2_pickup_left_at: string | null; v2_laden_arrived_at: string | null;
 }
 export interface CycleDetail { ytno: string; hours: number; cycles: CycleRow[]; }
 

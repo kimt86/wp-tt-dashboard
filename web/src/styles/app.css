@@ -806,11 +806,18 @@ td.mono { font-family: "JetBrains Mono", monospace; color: var(--text); }
 .cyc-lanes { display: flex; flex-direction: column; gap: 4px; max-height: 460px; overflow-y: auto; padding-right: 2px; }
 .cyc-lane { display: grid; grid-template-columns: 46px 1fr minmax(120px, 200px) 48px; gap: 9px; align-items: center; padding: 3px 0; }
 .cyc-lane-time { font-size: 10px; color: var(--text-mute); text-align: right; }
-.cyc-lane-track { display: flex; align-items: center; height: 16px; background: var(--bg-soft); border-radius: 5px; overflow: hidden; }
+.cyc-lane-track { position: relative; display: flex; align-items: center; height: 16px; background: var(--bg-soft); border-radius: 5px; overflow: hidden; }
 .cyc-seg-ph { height: 100%; min-width: 2px; transition: filter .12s; }
 .cyc-seg-ph:first-child { border-radius: 5px 0 0 5px; }
 .cyc-seg-ph:last-child { border-radius: 0 5px 5px 0; }
 .cyc-lane:hover .cyc-seg-ph { filter: brightness(1.18); }
+/* v2 6-event: absolute-positioned segments (unobserved phases leave gaps — no fabrication) */
+.cyc-seg-abs { position: absolute; top: 0; bottom: 0; min-width: 2px; border-radius: 2px; transition: filter .12s; }
+.cyc-lane:hover .cyc-seg-abs { filter: brightness(1.18); }
+/* v1/v2 model toggle */
+.cyc-model-tog { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; margin-right: 10px; }
+.cyc-model-tog button { font: inherit; font-size: 11px; padding: 2px 8px; background: transparent; color: var(--text-dim); border: 0; cursor: pointer; }
+.cyc-model-tog button.active { background: #2563eb; color: #fff; }
 .cyc-phase-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .cyc-phase-h .cyc-sec-h { margin-bottom: 4px; }
 .cyc-phase-legend { display: flex; flex-wrap: wrap; gap: 11px; font-size: 10px; color: var(--text-dim); margin-bottom: 4px; }

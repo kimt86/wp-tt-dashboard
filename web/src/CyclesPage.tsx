@@ -29,6 +29,18 @@ const PHASES = [
 ] as const;
 const PHASE_C: Record<string, string> = Object.fromEntries(PHASES.map((p) => [p.key, p.c]));
 
+// v2 shadow 6-event model: 사이클시작 → [배차대기] 공차이동시작 → [공차이동] 공차완료
+//   → [받기] 부하이동시작 → [부하이동] 부하완료 → [주기] 사이클종료
+const PHASES_V2 = [
+  { key: "wait", ko: "배차대기", en: "Assign wait", c: "#94a3b8" },
+  { key: "empty", ko: "공차이동", en: "Empty travel", c: "#64748b" },
+  { key: "pickup", ko: "받기", en: "Pick up", c: "#22c55e" },
+  { key: "laden", ko: "부하이동", en: "Laden travel", c: "#0ea5e9" },
+  { key: "drop", ko: "주기", en: "Drop", c: "#f59e0b" },
+] as const;
+const PHASE_V2_C: Record<string, string> = Object.fromEntries(PHASES_V2.map((p) => [p.key, p.c]));
+type Model = "v1" | "v2";
+
 // split one cycle into the four phases (seconds each). container1/pickup_at is the TOS
 // ASSIGNMENT instant (the box is pre-assigned at the previous drop), so the physical phases
 // come from the side-classified ARRIVED timestamps:
@@ -53,6 +65,26 @@ function phasesOf(c: CycleRow): { key: string; sec: number }[] {
     { key: "laden", sec: seg(ladenStart, arr ?? drop) },
     { key: "drop", sec: arr ? seg(arr, drop) : 0 },
   ];
+}
+
+// v2 6-event segments, absolute-positioned (startSec from the cycle open). Unobserved events
+// leave gaps — we never fabricate a phase. Returns null when v2 has no usable row.
+function phasesV2(c: CycleRow): { totalSec: number; segs: { key: string; startSec: number; sec: number }[] } | null {
+  const ms = (s: string | null) => (s ? Date.parse(s) : null);
+  const t0 = ms(c.v2_opened_at);
+  const drop = ms(c.dropped_at);
+  if (t0 == null || drop == null || drop <= t0) return null;
+  const ets = ms(c.v2_empty_travel_start_at), ea = ms(c.v2_empty_arrived_at);
+  const pl = ms(c.v2_pickup_left_at), la = ms(c.v2_laden_arrived_at);
+  const segs: { key: string; startSec: number; sec: number }[] = [];
+  const add = (key: string, a: number | null, b: number | null) => {
+    if (a != null && b != null && b > a && a >= t0 && b <= drop) segs.push({ key, startSec: (a - t0) / 1000, sec: (b - a) / 1000 });
+  };
+  if (ets != null) { add("wait", t0, ets); add("empty", ets, ea); } else { add("empty", t0, ea); }
+  add("pickup", ea, pl);
+  add("laden", pl, la);
+  add("drop", la, drop);
+  return { totalSec: (drop - t0) / 1000, segs };
 }
 
 const mmss = (s: number | null | undefined) =>
@@ -102,24 +134,35 @@ function TruckRow({ t, max, sel, onSel, lang }: { t: CycleTruckAgg; max: number;
   );
 }
 
-// one cycle as a single segmented bar: 공차이동 · 받기 · 부하이동 · 주기, width ∝ seconds.
-function CycleLane({ c, scale, lang }: { c: CycleRow; scale: number; lang: Lang }) {
-  const phases = phasesOf(c);
-  const phaseName = (k: string) => { const p = PHASES.find((x) => x.key === k)!; return ko(lang) ? p.ko : p.en; };
+// one cycle as a single segmented bar. v1: 4 phases (flex). v2: 6-event model (absolute-
+// positioned; unobserved phases show as gaps). width ∝ seconds, shared scale across cycles.
+function CycleLane({ c, scale, lang, model }: { c: CycleRow; scale: number; lang: Lang; model: Model }) {
+  const v2 = model === "v2" ? phasesV2(c) : null;
+  const nameV2 = (k: string) => { const p = PHASES_V2.find((x) => x.key === k)!; return ko(lang) ? p.ko : p.en; };
+  const nameV1 = (k: string) => { const p = PHASES.find((x) => x.key === k)!; return ko(lang) ? p.ko : p.en; };
   return (
     <div className="cyc-lane">
       <span className="cyc-lane-time mono">{hhmm(c.dropped_at)}</span>
       <span className="cyc-lane-track">
-        {phases.map((ph) =>
-          ph.sec > 0 ? (
-            <span
-              key={ph.key}
-              className="cyc-seg-ph"
-              style={{ width: `${scale > 0 ? (ph.sec / scale) * 100 : 0}%`, background: PHASE_C[ph.key] }}
-              title={`${phaseName(ph.key)} · ${mmss(ph.sec)}`}
-            />
-          ) : null
-        )}
+        {v2
+          ? v2.segs.map((s) => (
+              <span
+                key={s.key}
+                className="cyc-seg-abs"
+                style={{ left: `${scale > 0 ? (s.startSec / scale) * 100 : 0}%`, width: `${scale > 0 ? (s.sec / scale) * 100 : 0}%`, background: PHASE_V2_C[s.key] }}
+                title={`${nameV2(s.key)} · ${mmss(s.sec)}`}
+              />
+            ))
+          : phasesOf(c).map((ph) =>
+              ph.sec > 0 ? (
+                <span
+                  key={ph.key}
+                  className="cyc-seg-ph"
+                  style={{ width: `${scale > 0 ? (ph.sec / scale) * 100 : 0}%`, background: PHASE_C[ph.key] }}
+                  title={`${nameV1(ph.key)} · ${mmss(ph.sec)}`}
+                />
+              ) : null
+            )}
       </span>
       <span className="cyc-lane-meta">
         {c.jobtype && <span className="cyc-lane-job" style={{ borderColor: jobColor(c.jobtype), color: jobColor(c.jobtype) }}>{c.jobtype.toUpperCase()}</span>}
@@ -133,7 +176,7 @@ function CycleLane({ c, scale, lang }: { c: CycleRow; scale: number; lang: Lang 
   );
 }
 
-function TruckDetail({ ytno, hours, lang }: { ytno: string; hours: number; lang: Lang }) {
+function TruckDetail({ ytno, hours, lang, model, setModel }: { ytno: string; hours: number; lang: Lang; model: Model; setModel: (m: Model) => void }) {
   const [det, setDet] = useState<CycleDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const cur = useRef("");
@@ -147,7 +190,10 @@ function TruckDetail({ ytno, hours, lang }: { ytno: string; hours: number; lang:
 
   const cycles = det?.cycles ?? [];
   // shared time scale across the shown cycles = the longest total cycle, so bars compare 1:1
-  const scale = useMemo(() => Math.max(1, ...cycles.map((c) => phasesOf(c).reduce((a, p) => a + p.sec, 0) || (c.cycle_s ?? 0))), [cycles]);
+  const scale = useMemo(() => Math.max(1, ...cycles.map((c) => {
+    const v1tot = phasesOf(c).reduce((a, p) => a + p.sec, 0) || (c.cycle_s ?? 0);
+    return Math.max(phasesV2(c)?.totalSec ?? 0, v1tot);
+  })), [cycles]);
   const trend = useMemo(() => [...cycles].reverse().map((c) => c.cycle_s ?? 0).filter((v) => v > 0), [cycles]);
   const stats = useMemo(() => {
     if (!cycles.length) return null;
@@ -185,16 +231,27 @@ function TruckDetail({ ytno, hours, lang }: { ytno: string; hours: number; lang:
 
       <div className="cyc-phase-h">
         <span className="cyc-sec-h">{ko(lang) ? "사이클 단계별 타임라인 (최신순)" : "Cycle timeline by phase (latest first)"}</span>
-        <span className="cyc-phase-legend">
-          {PHASES.map((p) => (
-            <span key={p.key}><span className="cyc-dot" style={{ background: p.c }} />{ko(lang) ? p.ko : p.en}</span>
-          ))}
+        <span className="cyc-phase-right" style={{ display: "flex", alignItems: "center", flexWrap: "wrap" }}>
+          <span className="cyc-model-tog" title={ko(lang) ? "v2=그림자 6이벤트 · v1=현행 4단계" : "v2 = shadow 6-event · v1 = current 4-phase"}>
+            <button className={model === "v2" ? "active" : ""} onClick={() => setModel("v2")}>{ko(lang) ? "6이벤트 v2" : "6-event v2"}</button>
+            <button className={model === "v1" ? "active" : ""} onClick={() => setModel("v1")}>{ko(lang) ? "4단계 v1" : "4-phase v1"}</button>
+          </span>
+          <span className="cyc-phase-legend">
+            {(model === "v2" ? PHASES_V2 : PHASES).map((p) => (
+              <span key={p.key}><span className="cyc-dot" style={{ background: p.c }} />{ko(lang) ? p.ko : p.en}</span>
+            ))}
+          </span>
         </span>
       </div>
+      {model === "v2" && (
+        <div className="cyc-sec-h" style={{ fontWeight: 400, opacity: 0.7, marginTop: -2 }}>
+          {ko(lang) ? "그림자 v2 · 빈칸 = 미관측(허위 생성 안 함)" : "shadow v2 · gaps = unobserved (not fabricated)"}
+        </div>
+      )}
       <div className="cyc-lanes">
         {loading && <div className="cyc-empty">{ko(lang) ? "불러오는 중…" : "loading…"}</div>}
         {!loading && cycles.length === 0 && <div className="cyc-empty">{ko(lang) ? "이 범위에 사이클 없음" : "no cycles in range"}</div>}
-        {cycles.map((c, i) => <CycleLane key={c.dropped_at + i} c={c} scale={scale} lang={lang} />)}
+        {cycles.map((c, i) => <CycleLane key={c.dropped_at + i} c={c} scale={scale} lang={lang} model={model} />)}
       </div>
     </div>
   );
@@ -206,6 +263,7 @@ export default function CyclesPage({ lang }: { lang: Lang }) {
   const [sel, setSel] = useState<string>("");
   const [q, setQ] = useState("");
   const [err, setErr] = useState(false);
+  const [model, setModel] = useState<Model>("v2"); // segment-bar model: v2 6-event (default) / v1 4-phase
 
   useEffect(() => {
     let alive = true;
@@ -281,7 +339,7 @@ export default function CyclesPage({ lang }: { lang: Lang }) {
         </div>
 
         <div className="cyc-pane">
-          {sel ? <TruckDetail ytno={sel} hours={hours} lang={lang} /> : <div className="cyc-empty">{ko(lang) ? "트럭을 선택하세요" : "select a truck"}</div>}
+          {sel ? <TruckDetail ytno={sel} hours={hours} lang={lang} model={model} setModel={setModel} /> : <div className="cyc-empty">{ko(lang) ? "트럭을 선택하세요" : "select a truck"}</div>}
         </div>
       </div>
     </div>
