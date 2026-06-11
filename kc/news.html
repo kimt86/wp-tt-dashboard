@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<script>(function(){try{var s=localStorage.getItem('kc-theme');var t=(s==='light'||s==='dark')?s:'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>업데이트 소식 (NEWS) — WP-TT 지식센터</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kc-shell.css" />
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Inter", "Malgun Gothic", system-ui, sans-serif; font-size: 14.5px; line-height: 1.75; -webkit-font-smoothing: antialiased; }
+  h1, h2, h3 { font-family: "Manrope", "Malgun Gothic", sans-serif; }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 36px 28px 80px; }
+  .kc-hero { margin: 0 0 18px; }
+  .kc-hero .kicker { font-size: 11.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+  .kc-hero h1 { font-size: 30px; letter-spacing: -.02em; margin: 6px 0 10px; color: var(--ink); }
+  .kc-hero .lede { font-size: 15.5px; color: var(--ink-soft); margin: 0; }
+  p { color: var(--ink); }
+  .card a, a { color: var(--accent); }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 14px 0 8px; font-size: 12px; color: var(--ink-soft); align-items: center; }
+  .tag { display: inline-block; font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; border: 1.5px solid var(--border); white-space: nowrap; }
+  .tag.new { border-color: var(--good); color: var(--good); }
+  .tag.upd { border-color: var(--accent); color: var(--accent); }
+  .tag.imp { border-color: var(--muted); color: var(--ink-soft); }
+  .daygroup { margin-top: 22px; }
+  .daygroup > .day { font-family: "JetBrains Mono", monospace; font-size: 13px; font-weight: 700; color: var(--ink); border-bottom: 2px solid var(--border); padding-bottom: 6px; margin-bottom: 4px; }
+  .item { display: grid; grid-template-columns: 76px 1fr; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--border); }
+  .item .tags { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+  .item h3 { font-size: 15px; margin: 0 0 4px; color: var(--ink); }
+  .item p { margin: 0; font-size: 13.5px; color: var(--ink-soft); }
+  .item code { font-family: "JetBrains Mono", monospace; font-size: 12px; background: var(--soft); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; color: var(--ink); }
+  .note { border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 10px 10px 0; padding: 12px 16px; margin: 18px 0; font-size: 13px; color: var(--ink); }
+  footer.foot { margin-top: 28px; color: var(--muted); font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="kc-hero">
+  <div class="kicker">NEWS · 업데이트 소식</div>
+  <h1>지식센터 업데이트 (최신순)</h1>
+  <p class="lede">이 지식센터에 새로 추가되거나 바뀐 문서를 시간 역순으로 정리합니다.
+  무엇이 언제 왜 바뀌었는지 한눈에 — 연구 서사 자체는 <a href="research-log.html">연구 일지</a>를 보세요.</p>
+</header>
+
+<div class="legend">
+  <span><span class="tag new">신규</span> 새 문서</span>
+  <span><span class="tag upd">갱신</span> 기존 문서에 내용 추가/수정</span>
+  <span><span class="tag imp">개선</span> 구조·표현 개선(내용 동일)</span>
+</div>
+
+<!-- 새 항목은 이 주석 바로 아래에 daygroup을 추가(또는 기존 daygroup에 item 추가)하세요. 최신이 맨 위. -->
+
+<div class="daygroup">
+  <div class="day">2026-06-11</div>
+  <div class="item">
+    <div class="tags"><span class="tag upd">갱신</span></div>
+    <div>
+      <h3><a href="cycle-v2-design-ko.html#results">사이클 v2 — P2 픽업 레그 보장 (v2.6)</a></h3>
+      <p>"레그 1개" 사이클의 픽업 누락을 메움: <code>container1</code> 픽업 순간에 픽업 레그를 보장(없으면 합성).
+      <b>픽업 도착 채움 66%→84%</b>(v1 추월), 드롭전용 1-레그 LD 211→6·DS 196→8 거의 소멸. 잔존(크레인 드롭 미관측)은 NULL 유지.</p>
+    </div>
+  </div>
+  <div class="item">
+    <div class="tags"><span class="tag upd">갱신</span></div>
+    <div>
+      <h3><a href="cycle-v2-design-ko.html#handover">사이클 v2 — 6-이벤트 모델로 정리 (핸드오버 수집 포기)</a></h3>
+      <p>수집 우선순위를 ①열림/닫힘 ②trip별 시작·도착으로 재정렬. 관측 불가한 크레인 핸드오버 <b>시작 시각 수집 포기</b>,
+      <b>공차이동 시작</b>(배차 후 출발) 추가 → <code>사이클시작·공차이동시작·공차완료·부하시작·부하완료·사이클종료</code>.
+      받기/주기는 도착~출발 체류로 대체. (마이그레이션 0025)</p>
+    </div>
+  </div>
+  <div class="item">
+    <div class="tags"><span class="tag upd">갱신</span></div>
+    <div>
+      <h3><a href="cycle-v2-design-ko.html#results">사이클 v2 설계 — §9 반복 개선과 실측 결과 (v2.2 → v2.4)</a></h3>
+      <p>그림자 v2를 페어드 평가로 네 차례 수정. <b>크레인측 도착 오차 ~200초 → 1초 해결</b>(cur_loc→arr_dtime 업그레이드),
+      mode2 분할 이월, v1 블록도착 백필로 블록 포착이 v1 추월. 진단·수치·게이트 결과를 §9에 기록.</p>
+    </div>
+  </div>
+  <div class="item">
+    <div class="tags"><span class="tag new">신규</span></div>
+    <div>
+      <h3><a href="ops-runbook-ko.html">운영 런북 &amp; 로드맵</a></h3>
+      <p>환경·서비스·빌드/재시작·검증 명령과 다음 할 일(로드맵)을 한 곳에. 세션 인수인계용 <code>HANDOVER.md</code>를
+      대체 — 앞으로 운영 지식은 이 문서에 누적합니다.</p>
+    </div>
+  </div>
+  <div class="item">
+    <div class="tags"><span class="tag new">신규</span></div>
+    <div>
+      <h3><a href="news.html">업데이트 소식 (NEWS)</a></h3>
+      <p>지금 보고 있는 이 페이지. 지식센터 변경 이력을 최신순으로 모읍니다.</p>
+    </div>
+  </div>
+</div>
+
+<div class="daygroup">
+  <div class="day">2026-06-10</div>
+  <div class="item">
+    <div class="tags"><span class="tag imp">개선</span></div>
+    <div>
+      <h3>지식센터 전면 개편 — 공통 셸 · 다크/라이트 · 홈 온보딩</h3>
+      <p>모든 문서에 공통 사이드바 셸(<code>kc-shell.js</code> 단일 NAV), 테마 토글, 읽기시간 배지 적용.
+      홈을 "처음 오신 분" 온보딩 + 5챕터 타임라인으로 재구성, prev/next 챕터 체인 연결.</p>
+    </div>
+  </div>
+  <div class="item">
+    <div class="tags"><span class="tag new">신규</span></div>
+    <div>
+      <h3>신규 문서 6종</h3>
+      <p><a href="glossary.html">용어집 &amp; FAQ</a> · <a href="summary.html">5분 요약</a> ·
+      <a href="research-log.html">연구 일지(시간순)</a> · <a href="cycle-detection-ko.html">사이클 감지 로직(v1)</a> ·
+      <a href="websocket-fields-ko.html">websocket 원본 필드 레퍼런스</a> · <a href="cycle-v2-design-ko.html">사이클 v2 설계(그림자)</a>.</p>
+    </div>
+  </div>
+</div>
+
+<div class="daygroup">
+  <div class="day">2026-06-09</div>
+  <div class="item">
+    <div class="tags"><span class="tag new">신규</span></div>
+    <div>
+      <h3>지식센터 개설 — 데이터·지표 기반 문서</h3>
+      <p><a href="tos-db-reference-ko.html">TOS DB 레퍼런스</a> · <a href="websocket-data-ko.html">실시간 websocket 데이터</a> ·
+      <a href="kpi-computation-ko.html">KPI 산출</a> · <a href="websocket-kpi-accuracy-ko.html">정확도 보강</a> ·
+      <a href="dispatch-pools-ko.html">배차 풀(라이브)</a>. KPI 7종 운영 개시와 함께 문서화 시작.</p>
+    </div>
+  </div>
+</div>
+
+<div class="note"><b>유지 방법</b> — 지식센터에 문서를 추가하거나 크게 고치면, 위 주석 표시 위치에 한 줄(신규/갱신/개선 + 링크 + 한 줄 요약)을 더하세요.
+새 문서는 <code>kc-shell.js</code>의 NAV에도 등록해야 사이드바에 나타납니다.</div>
+
+<footer class="foot">WP-TT 지식센터 · 업데이트 소식 · 최신순</footer>
+</div>
+<script defer src="kc-shell.js"></script>
+</body>
+</html>

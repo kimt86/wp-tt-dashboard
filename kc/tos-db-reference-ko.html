@@ -1,8 +1,10 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
+<script>(function(){try{var s=localStorage.getItem('kc-theme');var t=(s==='light'||s==='dark')?s:'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="kc-shell.css" />
 <title>TOS DB 종합 레퍼런스 — wp-tt 데이터 원천 · 테이블 · 보존 · 코드 (2026-06)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -13,26 +15,29 @@
     --bg:#eef1f5; --card:#ffffff; --soft:#f4f6f9; --soft-2:#eef2f7;
     --good:#15803d; --good-bg:#dcfce7; --warn:#b45309; --warn-bg:#fef3c7; --bad:#b91c1c; --bad-bg:#fee2e2;
     --tos:#3730a3; --ws:#86198f; --pg:#0f766e;
+    --th-bg:#001b44; --code-ink:#0b3b8c;
     --r:10px;
   }
   *{margin:0;padding:0;box-sizing:border-box}
   body{font-family:'Inter','Malgun Gothic','Apple SD Gothic Neo',sans-serif;color:var(--ink);background:var(--bg);line-height:1.7;-webkit-font-smoothing:antialiased}
-  .layout{display:grid;grid-template-columns:240px 1fr;gap:34px;max-width:1340px;margin:0 auto;padding:0 28px}
-  nav.toc{position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;padding:24px 8px 24px 0;font-size:13px}
-  nav.toc .brand{font-family:'Manrope';font-weight:800;font-size:14px;color:var(--primary);letter-spacing:-.02em}
-  nav.toc .brandsub{font-size:11px;color:var(--muted);margin:2px 0 14px}
-  nav.toc a{display:block;color:var(--ink-2);text-decoration:none;padding:5px 10px;border-radius:7px;border-left:2px solid transparent;margin-bottom:1px}
-  nav.toc a:hover{background:var(--soft-2);color:var(--primary)}
-  nav.toc a.sec{font-weight:700;color:var(--primary);margin-top:11px}
-  nav.toc a small{display:block;font-size:10.5px;color:var(--muted);font-weight:400}
-  nav.toc .home{font-size:11px;color:var(--accent);text-decoration:none;display:inline-block;margin-bottom:10px}
-  main{padding:34px 0 120px;min-width:0}
-  .hero{background:linear-gradient(135deg,#001b44,#013a86);color:#fff;border-radius:16px;padding:34px 40px;margin-bottom:26px;box-shadow:0 10px 30px rgba(0,27,68,.18)}
-  .hero .tag{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#9ec5ff;font-weight:600}
-  .hero h1{font-family:'Manrope';font-weight:800;font-size:30px;letter-spacing:-.03em;line-height:1.2;margin:9px 0 10px}
-  .hero p{color:#dbe7fb;font-size:14.5px;font-weight:300;max-width:780px}
-  .hero .meta{margin-top:15px;font-size:12px;color:#a9c4ee}
-  .hero .meta b{color:#fff;font-weight:600}
+  main.wrap{display:block;max-width:980px;margin:0 auto;padding:36px 28px 110px;min-width:0}
+  .kc-hero { margin: 0 0 18px; }
+  .kc-hero .kicker { font-size: 11.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+  .kc-hero h1 { font-family:'Manrope'; font-weight:800; font-size: 30px; letter-spacing: -.02em; margin: 6px 0 10px; color: var(--ink); }
+  .kc-hero .lede { font-size: 15.5px; color: var(--ink-soft); margin: 0; }
+  .kc-hero .lede a { color: var(--accent); }
+  .kc-hero .meta { margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .kc-hero .meta b { color: var(--ink); font-weight: 600; }
+  .doc-toc { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 18px; margin: 0 0 18px; }
+  .doc-toc summary { cursor: pointer; font-weight: 800; font-size: 13px; color: var(--ink); }
+  .doc-toc-links { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 12.5px; }
+  .doc-toc-links a { color: var(--accent); text-decoration: none; }
+  .doc-toc-links a:hover { text-decoration: underline; }
+  .chapter-nav { display: flex; gap: 12px; margin: 34px auto 8px; max-width: 980px; }
+  .chapter-nav .sp { flex: 0 0 0; }
+  .chapter-nav a { flex: 1; display: block; padding: 14px 18px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; color: var(--accent); text-decoration: none; font-weight: 700; font-size: 13.5px; }
+  .chapter-nav a:hover { border-color: var(--accent); }
+  .chapter-nav a.next { text-align: right; }
   section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:28px 32px;margin-bottom:20px;scroll-margin-top:16px}
   .kicker{font-size:11.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--accent)}
   h2{font-family:'Manrope';font-weight:800;font-size:23px;color:var(--primary);letter-spacing:-.02em;margin:6px 0 14px;padding-bottom:11px;border-bottom:2px solid var(--soft-2)}
@@ -43,25 +48,27 @@
   ul,ol{padding-left:20px;margin-bottom:10px}
   li{font-size:14px;color:var(--ink-2);margin-bottom:4px}
   strong{color:var(--ink);font-weight:600}
-  code,.mono{font-family:'JetBrains Mono',monospace;font-size:.86em;background:var(--soft-2);padding:1px 6px;border-radius:5px;color:#0b3b8c}
+  code,.mono{font-family:'JetBrains Mono',monospace;font-size:.86em;background:var(--soft-2);padding:1px 6px;border-radius:5px;color:var(--code-ink)}
   .note{border-left:3px solid var(--accent);background:var(--soft);border-radius:0 10px 10px 0;padding:12px 16px;margin:14px 0}
   .note.good{border-left-color:var(--good);background:var(--good-bg)}
   .note.warn{border-left-color:var(--warn);background:var(--warn-bg)}
   .note.bad{border-left-color:var(--bad);background:var(--bad-bg)}
-  .note.key{border-left-color:var(--primary-2);background:#eef4ff}
+  .note.key{border-left-color:var(--primary-2);background:var(--accent-soft)}
   .note p{margin:0;font-size:13.5px}
   .note .h{font-weight:700;color:var(--ink);display:block;margin-bottom:3px}
   table{width:100%;border-collapse:separate;border-spacing:0;margin:13px 0;font-size:12.5px}
-  th{font-family:'Manrope';font-weight:700;font-size:11.5px;background:var(--primary);color:#fff;text-align:left;padding:8px 11px}
+  th{font-family:'Manrope';font-weight:700;font-size:11.5px;background:var(--th-bg);color:#fff;text-align:left;padding:8px 11px}
   th:first-child{border-radius:9px 0 0 0}th:last-child{border-radius:0 9px 0 0}
   td{padding:7px 11px;border-bottom:1px solid var(--line);color:var(--ink-2);vertical-align:top}
   tr:nth-child(even) td{background:var(--soft)}
-  tbody tr:hover td{background:#eef4ff}
+  tbody tr:hover td{background:var(--accent-soft)}
   td .mono{font-size:11px}
   .t-col th{background:var(--tos)} .t-col.ws th{background:var(--ws)} .t-col.pg th{background:var(--pg)}
+  tr td.td-group{background:var(--accent-soft);font-weight:700;color:var(--primary-2)}
   .b{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:700;white-space:nowrap}
   .b-tos{background:#e0e7ff;color:#3730a3}.b-ws{background:#fae8ff;color:#86198f}.b-pg{background:#ccfbf1;color:#0f766e}
   .b-ld{background:#dcfce7;color:#15803d}.b-ds{background:#dbeafe;color:#1e40af}.b-key{background:#fef3c7;color:#92400e}
+  .b-qy{background:#ffedd5;color:#9a3412}.b-out{background:#fee2e2;color:#b91c1c}.b-na{background:#e2e8f0;color:#475569}.b-x{background:#f1f5f9;color:#64748b}
   pre{background:#0b1727;color:#d7e3f4;border-radius:10px;padding:13px 15px;overflow-x:auto;font-family:'JetBrains Mono',monospace;font-size:11.5px;line-height:1.6;margin:11px 0}
   pre .k{color:#7cc4ff}pre .s{color:#9ae6b4}pre .n{color:#fbbf72}pre .c{color:#64748b}
   .grid{display:grid;gap:13px;margin:13px 0}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
@@ -72,47 +79,59 @@
   .pill-row{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
   hr.soft{border:0;border-top:1px solid var(--line);margin:18px 0}
   .foot{font-size:12px;color:var(--muted);text-align:center;padding:18px}
-  @media(max-width:920px){.layout{grid-template-columns:1fr}nav.toc{display:none}.g3,.g2{grid-template-columns:1fr}}
-/* ===== dark mode ===== invert the light theme uniformly; hero / code blocks /
-     table headers are double-inverted so they keep their original dark color. This
-     also flips inline light styles automatically (no per-element edits). ===== */
-  html{filter:invert(1) hue-rotate(180deg)}
-  .hero,pre,th{filter:invert(1) hue-rotate(180deg)}
+  @media(max-width:920px){.g3,.g2{grid-template-columns:1fr}}
+/* ===== kc-shell retrofit ===== shared tokens come from kc-shell.css per
+     [data-theme]; the old invert-filter dark hack is gone (it would flip the
+     injected sidebar). Only doc-local vars + badge palettes are re-tuned here
+     for dark; the doc's own :root values already suit the light theme. ===== */
+  :root[data-theme="dark"]{
+    --primary-2:#8ab4f8; --ink-2:#b4bcd0; --line-2:#2e3650; --soft-2:#212b44;
+    --ws:#e879f9; --th-bg:#223152; --code-ink:#9ec5ff;
+  }
+  :root[data-theme="dark"] .b-tos{background:rgba(129,140,248,.18);color:#a5b4fc}
+  :root[data-theme="dark"] .b-ws{background:rgba(232,121,249,.16);color:#f0abfc}
+  :root[data-theme="dark"] .b-pg{background:rgba(45,212,191,.15);color:#5eead4}
+  :root[data-theme="dark"] .b-ld{background:rgba(52,211,153,.15);color:#6ee7b7}
+  :root[data-theme="dark"] .b-ds{background:rgba(96,165,250,.16);color:#93c5fd}
+  :root[data-theme="dark"] .b-key{background:rgba(251,191,36,.16);color:#fcd34d}
+  :root[data-theme="dark"] .b-qy{background:rgba(251,146,60,.16);color:#fdba74}
+  :root[data-theme="dark"] .b-out{background:rgba(248,113,113,.15);color:#fca5a5}
+  :root[data-theme="dark"] .b-na{background:rgba(148,163,184,.16);color:#cbd5e1}
+  :root[data-theme="dark"] .b-x{background:rgba(148,163,184,.10);color:#94a3b8}
   ::selection{background:#1e6feb;color:#fff}
 </style>
 </head>
 <body>
-<div class="layout">
+<main class="wrap">
 
-<nav class="toc">
-  <a class="home" href="./index.html">← 지식센터</a>
-  <div class="brand">TOS DB 종합 레퍼런스</div>
-  <div class="brandsub">TT AiOps Platform · 2026-06</div>
-  <a class="sec" href="#overview">0 · 개요·데이터 아키텍처</a>
-  <a href="#sources">1 · 두 원천 한눈에</a>
-  <a href="#retention">2 · 보존 기간 (핵심)</a>
-  <a class="sec" href="#tos">3 · TOS Oracle 테이블</a>
-  <a href="#job">3.1 JOB_ORDER_HISTORY</a>
-  <a href="#mch">3.2 MCH_OPERATION</a>
-  <a href="#vss">3.3 VSS_STATISTICS</a>
-  <a href="#wt">3.4 작업시간·장비 마스터</a>
-  <a href="#live-job">3.5 라이브 작업지시 (작업풀)</a>
-  <a class="sec" href="#codes">4 · 코드·의미 사전</a>
-  <a href="#codes">4.1 작업종류 / 장비</a>
-  <a href="#pos">4.2 위치·블록·POINT_TYPE</a>
-  <a class="sec" href="#kpi">5 · 7개 KPI 정의</a>
-  <a href="#serving">6 · 서빙 모델 (Postgres)</a>
-  <a href="#gotchas">7 · 함정·운영 노트</a>
-  <a class="sec" href="./websocket-data-ko.html" style="color:var(--ws)">↗ websocket 데이터 (별도)</a>
-</nav>
-
-<main>
-<div class="hero">
-  <div class="tag">TT AiOps Platform · TOS DB Reference</div>
+<header class="kc-hero">
+  <div class="kicker">여정 02 · 데이터</div>
   <h1>TOS DB 종합 레퍼런스</h1>
-  <p>Westports <b>TOS(Oracle)</b> — 제품이 쓰는 권위적 데이터 원천의 <b>테이블·컬럼·보존특성·코드</b>를 총망라. "어디에서 무엇이 나오고, 얼마나 오래 남고, 무엇을 조심해야 하는가"의 단일 진실 소스. <b>실시간 websocket 데이터는 TOS가 아니며 <a href="./websocket-data-ko.html" style="color:#9ec5ff">별도 문서</a>로 분리</b>했습니다.</p>
+  <p class="lede">Westports <b>TOS(Oracle)</b> — 제품이 쓰는 권위적 데이터 원천의 <b>테이블·컬럼·보존특성·코드</b>를 총망라. "어디에서 무엇이 나오고, 얼마나 오래 남고, 무엇을 조심해야 하는가"의 단일 진실 소스. <b>실시간 websocket 데이터는 TOS가 아니며 <a href="./websocket-data-ko.html">별도 문서</a>로 분리</b>했습니다.</p>
   <div class="meta">기준 <b>2026-06-09</b> · 원천 = <b>TOS Oracle</b>(websocket 제외) · 서빙 = PostgreSQL 3-tier · 절대제약 <b>prod Oracle은 추출기만 접근</b></div>
-</div>
+</header>
+
+<details class="doc-toc" open>
+  <summary>이 문서의 목차</summary>
+  <div class="doc-toc-links">
+    <a href="#overview">0 · 개요·데이터 아키텍처</a>
+    <a href="#sources">1 · 두 원천 한눈에</a>
+    <a href="#retention">2 · 보존 기간 (핵심)</a>
+    <a href="#tos">3 · TOS Oracle 테이블</a>
+    <a href="#job">3.1 JOB_ORDER_HISTORY</a>
+    <a href="#mch">3.2 MCH_OPERATION</a>
+    <a href="#vss">3.3 VSS_STATISTICS</a>
+    <a href="#wt">3.4 작업시간·장비 마스터</a>
+    <a href="#live-job">3.5 라이브 작업지시 (작업풀)</a>
+    <a href="#codes">4 · 코드·의미 사전</a>
+    <a href="#codes-jobtype">4.1 작업종류 / 장비</a>
+    <a href="#pos">4.2 위치·블록·POINT_TYPE</a>
+    <a href="#kpi">5 · 7개 KPI 정의</a>
+    <a href="#serving">6 · 서빙 모델 (Postgres)</a>
+    <a href="#gotchas">7 · 함정·운영 노트</a>
+    <a href="./websocket-data-ko.html" style="color:var(--ws)">↗ websocket 데이터 (별도)</a>
+  </div>
+</details>
 
 <!-- 0 -->
 <section id="overview">
@@ -131,8 +150,8 @@
   <div class="kicker">Part 1</div>
   <h2>두 원천 한눈에</h2>
   <div class="grid g2">
-    <div class="card" style="border-top:3px solid #3730a3"><h4><span class="b b-tos">TOS Oracle</span> tos-db-research</h4><p>완료된 작업의 권위적 기록. 컨테이너 이벤트·크레인 작업·항차 계획·장비 가동. 타임스탬프 <b>초</b> 단위. <b>보존 기간 제한</b>(§2). 스키마 <span class="mono">TOSADM.*</span>.</p></div>
-    <div class="card" style="border-top:3px solid #86198f"><h4><span class="b b-ws">websocket</span> 실시간 2 zone</h4><p>장비 ~450대의 GPS/PLC(<code>wpt_gps</code>·<code>ctab</code>). <b>TOS가 아닌 별도 실시간 시스템</b> — 이 문서 범위 밖. → <a href="./websocket-data-ko.html" style="color:var(--accent)">websocket 데이터 &amp; 활용</a> 문서.</p></div>
+    <div class="card" style="border-top:3px solid var(--tos)"><h4><span class="b b-tos">TOS Oracle</span> tos-db-research</h4><p>완료된 작업의 권위적 기록. 컨테이너 이벤트·크레인 작업·항차 계획·장비 가동. 타임스탬프 <b>초</b> 단위. <b>보존 기간 제한</b>(§2). 스키마 <span class="mono">TOSADM.*</span>.</p></div>
+    <div class="card" style="border-top:3px solid var(--ws)"><h4><span class="b b-ws">websocket</span> 실시간 2 zone</h4><p>장비 ~450대의 GPS/PLC(<code>wpt_gps</code>·<code>ctab</code>). <b>TOS가 아닌 별도 실시간 시스템</b> — 이 문서 범위 밖. → <a href="./websocket-data-ko.html" style="color:var(--accent)">websocket 데이터 &amp; 활용</a> 문서.</p></div>
   </div>
   <table>
     <tr><th style="width:120px">구분</th><th>TOS Oracle</th><th>websocket</th></tr>
@@ -221,15 +240,15 @@
   <p>위 3.1~3.4는 <strong>완료된</strong> 작업의 이력입니다. 반면 <strong>지금 이 순간 처리해야 할 작업</strong>(라이브 작업 풀)은 두 테이블에 살아있습니다 — 계속 갱신(<span class="mono">UPD_DT</span>=현재)되는 운영 테이블. 90초 주기로 추출해 대시보드 TT 페이지의 QC 시퀀스/배차 화면을 채웁니다. 자세한 갱신·융합은 <a href="./dispatch-pools-ko.html#work" style="color:var(--accent)">차량·작업 풀 갱신</a> 문서 참조.</p>
   <table class="t-col">
     <tr><th style="width:215px">컬럼</th><th>의미 · 예</th></tr>
-    <tr><td colspan="2" style="background:#eef4ff;font-weight:700;color:var(--primary-2)"><span class="mono">JOB_ORDER_LIST</span> — 개별 컨테이너 move (HISTORY의 라이브 판; 단, 완료행도 보관되므로 라이브만 필터 필수)</td></tr>
-    <tr><td><span class="mono">JOB_ODR_JOBSTATUS</span></td><td><b>작업 상태</b> — <span class="b b-key">A</span>활성(배차됨·진행중) · <span class="b b-key">Q</span>대기(백로그) · <span class="b b-key">P</span>계획 · <span class="b b-key">B</span>차단 · <span class="b" style="background:#e2e8f0;color:#475569">C</span>완료. 라이브 = A/Q/P/B + <span class="mono">COMPDATE IS NULL</span>.</td></tr>
+    <tr><td colspan="2" class="td-group"><span class="mono">JOB_ORDER_LIST</span> — 개별 컨테이너 move (HISTORY의 라이브 판; 단, 완료행도 보관되므로 라이브만 필터 필수)</td></tr>
+    <tr><td><span class="mono">JOB_ODR_JOBSTATUS</span></td><td><b>작업 상태</b> — <span class="b b-key">A</span>활성(배차됨·진행중) · <span class="b b-key">Q</span>대기(백로그) · <span class="b b-key">P</span>계획 · <span class="b b-key">B</span>차단 · <span class="b b-na">C</span>완료. 라이브 = A/Q/P/B + <span class="mono">COMPDATE IS NULL</span>.</td></tr>
     <tr><td><span class="mono">JOB_ODR_QUEUENAME</span></td><td>큐 이름(예 <span class="mono">34H-D</span>=베이34 선창 양하, <span class="mono">42D-L</span>=베이42 갑판 적하). 큐 스케줄과의 <b>조인 키</b>. 주의: 항차마다 재사용됨(과거판 다수).</td></tr>
     <tr><td><span class="mono">JOB_ODR_YTNO</span></td><td><b>배정된 TT</b>(예 <span class="mono">TT1153</span>). GPS device id와 일치 → 라이브 위치/상태 머지. 활성 작업은 전부 배정됨.</td></tr>
     <tr><td><span class="mono">JOB_ODR_ETW_DT</span></td><td><b>ETW = 크레인 준비 시각</b>(YYYYMMDDHH24MISS[mmm], MYT). <span class="mono">ETW − 현재</span> = 작업 시급도. <b>예측 연구의 ②목표를 TOS가 라이브로 제공</b>.</td></tr>
     <tr><td><span class="mono">JOB_ODR_ARMGC</span> / <span class="mono">JOB_ODR_CONTNO</span></td><td>야드크레인(RTG) / 컨테이너 번호.</td></tr>
     <tr><td><span class="mono">JOB_ODR_YT_TOPOS</span> · <span class="mono">CRNT_PSN_IDX_NO1</span> · <span class="mono">YT_TO_PSN_IDX_NO1</span></td><td>야드 블록-베이(예 <span class="mono">10Q-0405</span>) · 출발 위치 · 도착 위치.</td></tr>
     <tr><td><span class="mono">JOB_ODR_TWINTANDEM</span> · <span class="mono">SWAP_FLG</span> · <span class="mono">CRE_DT</span></td><td>트윈/탠덤 · 스왑 플래그 · 생성시각(스캔 경계 <span class="mono">≥ SYSDATE−2</span>로 stale 고아 제거).</td></tr>
-    <tr><td colspan="2" style="background:#eef4ff;font-weight:700;color:var(--primary-2)"><span class="mono">JOB_QUEUE_SCHEDULE</span> — QC별 작업 큐 계획 (작고 깨끗, 한 큐당 1행)</td></tr>
+    <tr><td colspan="2" class="td-group"><span class="mono">JOB_QUEUE_SCHEDULE</span> — QC별 작업 큐 계획 (작고 깨끗, 한 큐당 1행)</td></tr>
     <tr><td><span class="mono">JOB_QUE_CRANENO</span></td><td><b>QC(안벽크레인)</b> — 실제 id <span class="mono">C11..C55 · M·Z · DC##</span>. <span class="mono">C##</span>는 websocket GPS/PLC 크레인 id와 직접 매칭.</td></tr>
     <tr><td><span class="mono">JOB_QUE_QUEUENAME</span> / <span class="mono">JOB_QUE_VESSEL</span></td><td>큐 이름(=LIST의 조인 키) / 선박. (선박·큐이름) <b>유일</b> — 그래서 QC는 Postgres에서 이 깨끗한 스냅샷으로 붙임(Oracle 조인은 과거 큐와 fan-out).</td></tr>
     <tr><td><span class="mono">JOB_QUE_DISLOAD</span> / <span class="mono">JOB_QUE_SEQ</span></td><td>양하(D)/적하(L) / QC가 큐를 처리하는 순서.</td></tr>
@@ -243,7 +262,7 @@
   <div class="kicker">Part 4</div>
   <h2>코드 · 의미 사전</h2>
 
-  <h3>4.1 작업종류(jobtype) / 장비 프리픽스</h3>
+  <h3 id="codes-jobtype">4.1 작업종류(jobtype) / 장비 프리픽스</h3>
   <div class="grid g2">
     <div class="card"><h4>작업종류 (JOBTYPE)</h4>
       <p><span class="b b-ld">LD</span> 적하(yard→vessel) · <span class="b b-ds">DS</span> 양하(vessel→yard) · <b>MO/MI</b> 구내이적(out/in) · <b>RH</b> 재취급 · <b>GI/GO</b> 게이트 in/out · 그 외 AH·LC·GC 관측. 배차 핵심은 LD·DS·MO·MI.</p></div>
@@ -263,15 +282,15 @@
   </table>
   <h4>POINT_TYPE 코드 (레이아웃 매칭)</h4>
   <div class="pill-row">
-    <span class="b" style="background:#ffedd5;color:#9a3412">1 안벽작업(quay)</span>
-    <span class="b" style="background:#ccfbf1;color:#0f766e">2 블록 side</span>
-    <span class="b" style="background:#ccfbf1;color:#0f766e">3 블록 end</span>
-    <span class="b" style="background:#e2e8f0;color:#475569">4 buffer</span>
-    <span class="b" style="background:#dcfce7;color:#15803d">5 게이트 IN</span>
-    <span class="b" style="background:#fee2e2;color:#b91c1c">6 게이트 OUT</span>
-    <span class="b" style="background:#e2e8f0;color:#475569">7 battery</span>
-    <span class="b" style="background:#e2e8f0;color:#475569">10 handler · 11 pinning</span>
-    <span class="b" style="background:#f1f5f9;color:#64748b">0 extra · 8/9 new/del(제외)</span>
+    <span class="b b-qy">1 안벽작업(quay)</span>
+    <span class="b b-pg">2 블록 side</span>
+    <span class="b b-pg">3 블록 end</span>
+    <span class="b b-na">4 buffer</span>
+    <span class="b b-ld">5 게이트 IN</span>
+    <span class="b b-out">6 게이트 OUT</span>
+    <span class="b b-na">7 battery</span>
+    <span class="b b-na">10 handler · 11 pinning</span>
+    <span class="b b-x">0 extra · 8/9 new/del(제외)</span>
   </div>
   <p style="font-size:12.5px;color:var(--muted)">레이아웃(블록/도로/포인트/노드/링크)은 mm CAD 좌표 → 등거리+6-파라미터 아핀 투영으로 lat/lon 변환(RMS ~70m). 라이브맵·매칭에서 사용.</p>
 </section>
@@ -289,7 +308,7 @@
     <tr><td><b>K_UTIL</b> TT 가동률</td><td>% · 높을수록↑</td><td><b>TT별 min(1, 가동분/경과분)의 평균</b>·100 — avg-of-ratios(단순 가중평균 아님) (MCH_WORKTIME/STOP)</td><td>(평균)</td></tr>
     <tr><td><b>K_QC_Q</b> QC 대기</td><td>s · 낮을수록↑</td><td>QC 병합 active 구간 사이 유휴 갭 평균 (MCH_OPERATION C##)</td><td>idle_periods</td></tr>
     <tr><td><b>K_MPH</b> QC 처리량</td><td>move/hr · 높을수록↑</td><td>QC move/active-hour의 active_hours-가중평균 (MCH_OPERATION)</td><td>active_hours</td></tr>
-    <tr><td><b>K_CRANE_Q</b> 야드 핸드오버 대기 <span class="b" style="background:#e2e8f0;color:#475569">숨김</span></td><td>s · 낮을수록↑</td><td>(ACTV_DT − YT_DIS_DT) — TT 하차→야드 핸드오버 (JOB_ORDER_HISTORY). 안벽 QC 대기가 아님(ARMGC=RTG/ES).</td><td>in_range</td></tr>
+    <tr><td><b>K_CRANE_Q</b> 야드 핸드오버 대기 <span class="b b-na">숨김</span></td><td>s · 낮을수록↑</td><td>(ACTV_DT − YT_DIS_DT) — TT 하차→야드 핸드오버 (JOB_ORDER_HISTORY). 안벽 QC 대기가 아님(ARMGC=RTG/ES).</td><td>in_range</td></tr>
   </table>
   <div class="note"><p><span class="h">K_UTIL 특수</span>avg-of-ratios라 주/월 버킷은 일 단위 raw에서 재계산해야 정확(단순 평균 불가). 오늘분은 <span class="mono">util_tt_shift</span>(TT별 productive_min + 쉬프트 elapsed_min)에서 정확 재조합.</p></div>
 </section>
@@ -338,7 +357,13 @@
 
 <div class="foot">CLT Port Group · Digital Team — TOS DB 종합 레퍼런스 · 2026-06-09 · 원천: 추출 SQL + websocket 캡처 + 실측 보존/주기 + 서빙 코드(agg.rs/periods.rs) · 내부 공유용</div>
 
+<nav class="chapter-nav">
+  <a class="prev" href="tt-assignment-session-ko.html">← 01 문제 — 스마트 TT 배차</a>
+  <span class="sp"></span>
+  <a class="next" href="websocket-data-ko.html">02 데이터 — 실시간 websocket →</a>
+</nav>
+
 </main>
-</div>
+<script defer src="kc-shell.js"></script>
 </body>
 </html>

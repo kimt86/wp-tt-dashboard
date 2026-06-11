@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
+<script>(function(){try{var s=localStorage.getItem('kc-theme');var t=(s==='light'||s==='dark')?s:'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WP AI TT 배차 · 2단계 예측 모형 연구 — 학습 대상과 학습데이터 가공 (2026-06)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kc-shell.css" />
 <style>
   :root{
     --primary:#001b44; --primary-2:#002f6c; --accent:#1e6feb; --accent-2:#0ea5e9;
@@ -17,24 +19,22 @@
   }
   *{margin:0;padding:0;box-sizing:border-box}
   body{font-family:'Inter','Malgun Gothic','Apple SD Gothic Neo',sans-serif;color:var(--ink);background:var(--bg);line-height:1.7;-webkit-font-smoothing:antialiased}
-  .wrap{max-width:1080px;margin:0 auto;padding:0 28px}
-  .layout{display:grid;grid-template-columns:228px 1fr;gap:34px;max-width:1320px;margin:0 auto;padding:0 28px}
-  /* TOC */
-  nav.toc{position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;padding:26px 8px 26px 0;font-size:13px}
-  nav.toc .brand{font-family:'Manrope';font-weight:800;font-size:14px;color:var(--primary);letter-spacing:-.02em;margin-bottom:4px}
-  nav.toc .brandsub{font-size:11px;color:var(--muted);margin-bottom:16px}
-  nav.toc a{display:block;color:var(--ink-2);text-decoration:none;padding:5px 10px;border-radius:7px;border-left:2px solid transparent;margin-bottom:1px}
-  nav.toc a:hover{background:var(--soft-2);color:var(--primary)}
-  nav.toc a.sec{font-weight:700;color:var(--primary);margin-top:12px}
-  nav.toc a small{display:block;font-size:10.5px;color:var(--muted);font-weight:400}
-  main{padding:40px 0 120px;min-width:0}
+  .wrap{max-width:960px;margin:0 auto;padding:0 28px 80px}
+  main{padding:40px 0 0;min-width:0}
   /* hero */
-  .hero{background:linear-gradient(135deg,#001b44,#013a86);color:#fff;border-radius:16px;padding:38px 42px;margin-bottom:30px;box-shadow:0 10px 30px rgba(0,27,68,.18)}
-  .hero .tag{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#9ec5ff;font-weight:600}
-  .hero h1{font-family:'Manrope';font-weight:800;font-size:33px;letter-spacing:-.03em;line-height:1.18;margin:10px 0 12px}
-  .hero p{color:#dbe7fb;font-size:15px;font-weight:300;max-width:760px}
-  .hero .meta{margin-top:18px;font-size:12.5px;color:#a9c4ee}
-  .hero .meta b{color:#fff;font-weight:600}
+  .kc-hero{margin:0 0 18px}
+  .kc-hero .kicker{font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+  .kc-hero h1{font-family:'Manrope';font-weight:800;font-size:30px;letter-spacing:-.02em;line-height:1.25;margin:6px 0 10px;color:var(--ink)}
+  .kc-hero .lede{font-size:15.5px;color:var(--ink-soft);margin:0}
+  .kc-hero .meta{margin-top:12px;font-size:12.5px;color:var(--muted)}
+  .kc-hero .meta b{color:var(--ink);font-weight:600}
+  /* in-page table of contents */
+  .doc-toc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 18px;margin:0 0 18px}
+  .doc-toc summary{cursor:pointer;font-weight:800;font-size:13px;color:var(--ink)}
+  .doc-toc-links{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;font-size:12.5px}
+  .doc-toc-links a{color:var(--accent);text-decoration:none}
+  .doc-toc-links a:hover{text-decoration:underline}
+  .doc-toc-links a small{font-size:10.5px;color:var(--muted);font-weight:400}
   /* sections */
   section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:30px 34px;margin-bottom:22px;scroll-margin-top:18px}
   .kicker{font-size:11.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--accent)}
@@ -45,21 +45,21 @@
   ul,ol{padding-left:20px;margin-bottom:10px}
   li{font-size:14.5px;color:var(--ink-2);margin-bottom:5px}
   strong{color:var(--ink);font-weight:600}
-  code,.mono{font-family:'JetBrains Mono',monospace;font-size:.86em;background:var(--soft-2);padding:1px 6px;border-radius:5px;color:#0b3b8c}
+  code,.mono{font-family:'JetBrains Mono',monospace;font-size:.86em;background:var(--soft-2);padding:1px 6px;border-radius:5px;color:var(--code-ink,#0b3b8c)}
   /* callouts */
   .note{border-left:3px solid var(--accent);background:var(--soft);border-radius:0 10px 10px 0;padding:13px 17px;margin:14px 0}
   .note.good{border-left-color:var(--good);background:var(--good-bg)}
   .note.warn{border-left-color:var(--warn);background:var(--warn-bg)}
-  .note.key{border-left-color:var(--primary-2);background:#eef4ff}
+  .note.key{border-left-color:var(--primary-2);background:var(--key-bg,#eef4ff)}
   .note p{margin:0;font-size:13.5px}
   .note .h{font-weight:700;color:var(--ink);display:block;margin-bottom:3px}
   /* tables */
   table{width:100%;border-collapse:separate;border-spacing:0;margin:14px 0;font-size:13px}
-  th{font-family:'Manrope';font-weight:700;font-size:12px;background:var(--primary);color:#fff;text-align:left;padding:9px 12px;letter-spacing:.01em}
+  th{font-family:'Manrope';font-weight:700;font-size:12px;background:var(--th-bg,#001b44);color:#fff;text-align:left;padding:9px 12px;letter-spacing:.01em}
   th:first-child{border-radius:9px 0 0 0}th:last-child{border-radius:0 9px 0 0}
   td{padding:8px 12px;border-bottom:1px solid var(--line);color:var(--ink-2);vertical-align:top}
   tr:nth-child(even) td{background:var(--soft)}
-  tbody tr:hover td{background:#eef4ff}
+  tbody tr:hover td{background:var(--row-hover,#eef4ff)}
   td .mono{font-size:11.5px}
   .t-compact td,.t-compact th{padding:6px 10px;font-size:12px}
   /* badges */
@@ -83,54 +83,97 @@
   /* code sample */
   pre{background:#0b1727;color:#d7e3f4;border-radius:10px;padding:14px 16px;overflow-x:auto;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.6;margin:12px 0}
   pre .k{color:#7cc4ff}pre .s{color:#9ae6b4}pre .n{color:#fbbf72}pre .c{color:#64748b}
-  .eq{background:#f7f9fc;border:1px solid var(--line);border-radius:10px;padding:14px 20px;text-align:center;font-size:16px;color:var(--ink);margin:12px 0;font-family:'JetBrains Mono',monospace}
+  .eq{background:var(--eq-bg,#f7f9fc);border:1px solid var(--line);border-radius:10px;padding:14px 20px;text-align:center;font-size:16px;color:var(--ink);margin:12px 0;font-family:'JetBrains Mono',monospace}
   .eq b{color:var(--primary)}
   .legend{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;font-size:12px;color:var(--ink-2);margin-top:6px}
   .legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px}
   hr.soft{border:0;border-top:1px solid var(--line);margin:20px 0}
   .pill-row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
   .foot{font-size:12px;color:var(--muted);text-align:center;padding:20px}
-  @media(max-width:900px){.layout{grid-template-columns:1fr}nav.toc{display:none}.g3,.g2{grid-template-columns:1fr}}
-/* ===== dark mode ===== invert the light theme uniformly; hero / code blocks /
-     table headers are double-inverted so they keep their original dark color. This
-     also flips inline light styles automatically (no per-element edits). ===== */
-  html{filter:invert(1) hue-rotate(180deg)}
-  .hero,pre,th{filter:invert(1) hue-rotate(180deg)}
+  /* prev/next chapter nav */
+  .chapter-nav{display:flex;gap:12px;margin:34px auto 8px;max-width:960px}
+  .chapter-nav .sp{flex:0 0 0}
+  .chapter-nav a{flex:1;display:block;padding:14px 18px;background:var(--surface);border:1px solid var(--border);border-radius:12px;color:var(--accent);text-decoration:none;font-weight:700;font-size:13.5px}
+  .chapter-nav a:hover{border-color:var(--accent)}
+  .chapter-nav a.next{text-align:right}
+  @media(max-width:900px){.g3,.g2{grid-template-columns:1fr}}
+/* ===== kc-shell theming =====
+     Shared tokens (--bg --card --soft --ink --line --primary --accent --good --warn
+     --bad …) come from kc-shell.css per data-theme. Below: doc-local variables for
+     both themes (jobtype palette --ds --ld --mi --mo --qc --rtg, secondary inks,
+     surfaces) + element overrides for parts hardcoded for the light design. ===== */
+  :root[data-theme="light"]{
+    --primary-2:#002f6c; --accent-2:#0ea5e9; --ink-2:#3c4654; --line-2:#cdd5e0; --soft-2:#eef2f7;
+    --ds:#2563eb; --ld:#16a34a; --mo:#9333ea; --mi:#0891b2; --rtg:#ea7317; --qc:#db2777;
+    --th-bg:#001b44; --key-bg:#eef4ff; --row-hover:#eef4ff; --eq-bg:#f7f9fc;
+    --code-ink:#0b3b8c; --label-bg:#fef3c7;
+  }
+  :root[data-theme="dark"]{
+    --primary-2:#9ec5ff; --accent-2:#38bdf8; --ink-2:#b4bcd0; --line-2:#2e3650; --soft-2:#222c44;
+    --ds:#60a5fa; --ld:#4ade80; --mo:#c084fc; --mi:#22d3ee; --rtg:#fb923c; --qc:#f472b6;
+    --th-bg:#243154; --key-bg:#1a2540; --row-hover:#1c2742; --eq-bg:#121b2e;
+    --code-ink:#9ec5ff; --label-bg:rgba(251,191,36,.14);
+  }
+  /* badge chips & card accents: dark-readable variants */
+  .b-na{background:#e2e8f0;color:#475569}
+  .b-no{background:#fee2e2;color:#b91c1c}
+  .card-tos{border-top:3px solid #3730a3}
+  .card-ws{border-top:3px solid #86198f}
+  :root[data-theme="dark"] .b-ds{background:rgba(59,130,246,.22);color:#93c5fd}
+  :root[data-theme="dark"] .b-ld{background:rgba(34,197,94,.2);color:#86efac}
+  :root[data-theme="dark"] .b-mo{background:rgba(168,85,247,.22);color:#d8b4fe}
+  :root[data-theme="dark"] .b-mi{background:rgba(6,182,212,.2);color:#67e8f9}
+  :root[data-theme="dark"] .b-pred{background:rgba(245,158,11,.2);color:#fcd34d}
+  :root[data-theme="dark"] .b-fact{background:rgba(34,197,94,.2);color:#86efac}
+  :root[data-theme="dark"] .b-tos{background:rgba(99,102,241,.24);color:#c7d2fe}
+  :root[data-theme="dark"] .b-ws{background:rgba(217,70,239,.2);color:#f0abfc}
+  :root[data-theme="dark"] .b-p1{background:rgba(148,163,184,.22);color:#cbd5e1}
+  :root[data-theme="dark"] .b-p2{background:#2f4a8a;color:#fff}
+  :root[data-theme="dark"] .b-na{background:rgba(148,163,184,.22);color:#cbd5e1}
+  :root[data-theme="dark"] .b-no{background:rgba(248,113,113,.2);color:#fca5a5}
+  :root[data-theme="dark"] .card-tos{border-top-color:#818cf8}
+  :root[data-theme="dark"] .card-ws{border-top-color:#e879f9}
+  /* figures hold SVG charts drawn for a light canvas → keep them on light "paper"
+     in dark mode instead of restyling every hardcoded SVG fill */
+  :root[data-theme="dark"] figure{background:#eef1f5;border-color:#cdd5e0}
+  :root[data-theme="dark"] figcaption{color:#5a6377}
+  :root[data-theme="dark"] figcaption b{color:#3c4654}
   ::selection{background:#1e6feb;color:#fff}
 </style>
 </head>
 <body>
-<div class="layout">
-
-<!-- ════════ TOC ════════ -->
-<nav class="toc">
-  <div class="brand">TT 배차 · 2단계 예측 연구</div>
-  <div class="brandsub">CLT Digital · 2026-06-08</div>
-  <a class="sec" href="#summary">요약</a>
-  <a href="#bg">1 · 배경 — 왜 예측인가<small>1단계 vs 2단계</small></a>
-  <a href="#cost">2 · 비용 함수 분해<small>예측이 들어가는 자리</small></a>
-  <a href="#targets">3 · 무엇을 학습하나<small>예측 대상 3+2</small></a>
-  <a href="#raw">4 · 우리의 raw 데이터<small>TOS DB · websocket</small></a>
-  <a href="#pipeline">5 · 학습데이터 가공 파이프라인<small>raw → 라벨</small></a>
-  <a href="#label">6 · 라벨(정답) 생성 로직<small>도착↔핸드오버 상관</small></a>
-  <a href="#schema">7 · 예측 대상별 학습 테이블<small>피처 + 라벨 + 샘플</small></a>
-  <a href="#soonidle">7b · "곧 유휴" 차량 판별<small>선적 가능·양하 문제 · TOS 합의</small></a>
-  <a href="#features">8 · 피처 카탈로그</a>
-  <a href="#evidence">9 · 실데이터로 본 현황<small>차트</small></a>
-  <a href="#quality">10 · 데이터 품질·함정</a>
-  <a href="#model">11 · 모델링·검증 접근</a>
-  <a href="#volume">12 · 데이터 볼륨·일정 정합</a>
-  <a href="#next">13 · 요약 & 다음 단계</a>
-</nav>
+<div class="wrap">
 
 <main>
 <!-- ════════ HERO ════════ -->
-<div class="hero">
-  <div class="tag">WP AI Service 2 · Phase 2 Prediction Research</div>
-  <h1>TT 배차 2단계 예측 모형<br>— 무엇을 학습하고, 어떤 학습데이터를 가공할 것인가</h1>
-  <p>1단계(거리 기반)는 예측이 필요 없습니다. 2단계는 비용을 <b>시간</b>으로 바꾸므로 "TT가 언제 도착하는가 · 크레인이 언제 준비되는가"를 <b>예측</b>해야 합니다. 본 보고서는 우리가 가진 두 raw 데이터(TOS DB · 실시간 websocket)에서 <b>무엇을 학습 대상으로 삼고</b>, 그 학습을 위해 <b>어떤 학습데이터를 어떻게 가공</b>할지 연구한 결과입니다.</p>
-  <div class="meta">대상 단계 <b>Phase 2 (목표 전환 2026-10-30)</b> &nbsp;·&nbsp; 학습데이터 축적 구간 <b>Phase 1 운영 8/17–10/23</b> &nbsp;·&nbsp; 근거 데이터 <b>실측 18일치 + 실시간 GPS/PLC</b></div>
-</div>
+<header class="kc-hero">
+  <div class="kicker">여정 05 · 다음</div>
+  <h1>TT 배차 2단계 예측 모형 — 무엇을 학습하고, 어떤 학습데이터를 가공할 것인가</h1>
+  <p class="lede">1단계(거리 기반)는 예측이 필요 없습니다. 2단계는 비용을 <b>시간</b>으로 바꾸므로 "TT가 언제 도착하는가 · 크레인이 언제 준비되는가"를 <b>예측</b>해야 합니다. 본 보고서는 우리가 가진 두 raw 데이터(TOS DB · 실시간 websocket)에서 <b>무엇을 학습 대상으로 삼고</b>, 그 학습을 위해 <b>어떤 학습데이터를 어떻게 가공</b>할지 연구한 결과입니다.</p>
+  <div class="meta">WP AI Service 2 · Phase 2 Prediction Research &nbsp;·&nbsp; 대상 단계 <b>Phase 2 (목표 전환 2026-10-30)</b> &nbsp;·&nbsp; 학습데이터 축적 구간 <b>Phase 1 운영 8/17–10/23</b> &nbsp;·&nbsp; 근거 데이터 <b>실측 18일치 + 실시간 GPS/PLC</b></div>
+</header>
+
+<!-- ════════ IN-PAGE TOC ════════ -->
+<details class="doc-toc" open>
+  <summary>이 문서의 목차</summary>
+  <div class="doc-toc-links">
+    <a href="#summary">요약</a>
+    <a href="#bg">1 · 배경 — 왜 예측인가 <small>1단계 vs 2단계</small></a>
+    <a href="#cost">2 · 비용 함수 분해 <small>예측이 들어가는 자리</small></a>
+    <a href="#targets">3 · 무엇을 학습하나 <small>예측 대상 3+2</small></a>
+    <a href="#raw">4 · 우리의 raw 데이터 <small>TOS DB · websocket</small></a>
+    <a href="#pipeline">5 · 학습데이터 가공 파이프라인 <small>raw → 라벨</small></a>
+    <a href="#label">6 · 라벨(정답) 생성 로직 <small>도착↔핸드오버 상관</small></a>
+    <a href="#schema">7 · 예측 대상별 학습 테이블 <small>피처 + 라벨 + 샘플</small></a>
+    <a href="#soonidle">7b · "곧 유휴" 차량 판별 <small>선적 가능·양하 문제 · TOS 합의</small></a>
+    <a href="#features">8 · 피처 카탈로그</a>
+    <a href="#evidence">9 · 실데이터로 본 현황 <small>차트</small></a>
+    <a href="#quality">10 · 데이터 품질·함정</a>
+    <a href="#model">11 · 모델링·검증 접근</a>
+    <a href="#volume">12 · 데이터 볼륨·일정 정합</a>
+    <a href="#next">13 · 요약 & 다음 단계</a>
+  </div>
+</details>
 
 <!-- ════════ SUMMARY ════════ -->
 <section id="summary">
@@ -236,11 +279,11 @@
   <p>학습데이터의 모든 재료는 두 곳에서 나옵니다. 성격이 상호보완적입니다 — TOS DB는 "무슨 작업이 있었나(이벤트·결과)"를, websocket은 "그게 공간·시간에서 어떻게 일어났나(연속 관측)"를 줍니다.</p>
 
   <div class="grid g2">
-    <div class="card" style="border-top:3px solid #3730a3">
+    <div class="card card-tos">
       <h4><span class="b b-tos">TOS DB</span> &nbsp;Oracle (tos-db-research)</h4>
       <p>완료된 작업의 권위적 기록. 컨테이너 단위 이벤트, 거리, 크레인 작업, 선석/항차 계획. 단위 timestamp는 <b>초</b> 단위, 보존 기간 제한(아래).</p>
     </div>
-    <div class="card" style="border-top:3px solid #86198f">
+    <div class="card card-ws">
       <h4><span class="b b-ws">Websocket</span> &nbsp;실시간 스트림(2 zone)</h4>
       <p>장비 약 <b>450대</b> 관측. <code>wpt_gps</code>(GPS+미션, 장비당 <b>~3초 간격·불규칙</b>) · <code>ctab</code>(크레인 PLC, <b>~1초 규칙적</b>). 연속 관측이라 "소요 시간"을 직접 측정 가능.</p>
     </div>
@@ -419,7 +462,7 @@
     <tr><td><span class="mono">active_tt_count</span> (혼잡)</td><td>윈도우 내 이동 TT 수</td><td><span class="mono">231</span></td></tr>
     <tr><td><span class="mono">route_density</span> (경로 혼잡)</td><td>경로 arc상 TT 밀도</td><td><span class="mono">0.34</span></td></tr>
     <tr><td><span class="mono">jobtype, laden</span></td><td>GPS 미션</td><td><span class="mono">LD, 1</span></td></tr>
-    <tr><td style="background:#fef3c7"><span class="mono">▶ label_travel_sec</span></td><td style="background:#fef3c7"><b>dest_arrive − origin_depart</b></td><td style="background:#fef3c7"><span class="mono">312</span></td></tr>
+    <tr><td style="background:var(--label-bg,#fef3c7)"><span class="mono">▶ label_travel_sec</span></td><td style="background:var(--label-bg,#fef3c7)"><b>dest_arrive − origin_depart</b></td><td style="background:var(--label-bg,#fef3c7)"><span class="mono">312</span></td></tr>
   </table>
   <pre><span class="c">// train_travel_time 샘플 1행</span>
 { <span class="k">origin_point</span>:<span class="s">"01U"</span>, <span class="k">dest_point</span>:<span class="s">"03U-21"</span>, <span class="k">straight_dist_m</span>:<span class="n">742</span>, <span class="k">arc_path_dist_m</span>:<span class="n">980</span>,
@@ -439,7 +482,7 @@
     <tr><td><span class="mono">moves_done, planned_remaining</span></td><td>MCH_OPER 누적 / VSS</td><td><span class="mono">512 / 188</span></td></tr>
     <tr><td><span class="mono">vessel_nqcr</span> (항차 평균 rate)</td><td>VSS_STATISTICS</td><td><span class="mono">29.4</span></td></tr>
     <tr><td><span class="mono">hour, queue_tt_count</span></td><td>시각 / GPS</td><td><span class="mono">11, 2</span></td></tr>
-    <tr><td style="background:#fef3c7"><span class="mono">▶ label_sec_to_ready</span></td><td style="background:#fef3c7"><b>다음 PICKUP/DROP.time − 결정시각</b></td><td style="background:#fef3c7"><span class="mono">73</span></td></tr>
+    <tr><td style="background:var(--label-bg,#fef3c7)"><span class="mono">▶ label_sec_to_ready</span></td><td style="background:var(--label-bg,#fef3c7)"><b>다음 PICKUP/DROP.time − 결정시각</b></td><td style="background:var(--label-bg,#fef3c7)"><span class="mono">73</span></td></tr>
   </table>
 
   <!-- T3 -->
@@ -452,7 +495,7 @@
     <tr><td><span class="mono">rtg_busy, block_queue_tt</span></td><td>RTG 상태 / 블록 내 TT 수</td><td><span class="mono">1, 2</span></td></tr>
     <tr><td><span class="mono">container_size, twin</span></td><td>container1/2</td><td><span class="mono">40ft, 0</span></td></tr>
     <tr><td><span class="mono">hour, shift</span></td><td>시각</td><td><span class="mono">14, Day</span></td></tr>
-    <tr><td style="background:#fef3c7"><span class="mono">▶ label_handover_sec</span></td><td style="background:#fef3c7"><b>dest_work_end − dest_arrive</b> (블록)</td><td style="background:#fef3c7"><span class="mono">221</span></td></tr>
+    <tr><td style="background:var(--label-bg,#fef3c7)"><span class="mono">▶ label_handover_sec</span></td><td style="background:var(--label-bg,#fef3c7)"><b>dest_work_end − dest_arrive</b> (블록)</td><td style="background:var(--label-bg,#fef3c7)"><span class="mono">221</span></td></tr>
   </table>
   <div class="note warn"><p><span class="h">③ 핵심 — 대기(③a)가 지배적이고 어렵다</span>블록 체류시간(라벨 = <span class="mono">dest_work_end − dest_arrive</span>)은 <strong>③a RTG를 기다린 시간 + ③b 실제 수령 시간</strong>의 합인데, <strong>③a가 크고 가변적</strong>입니다. RTG는 여러 블록을 공유하며 PLC도 없어, 도착한 차를 <strong>언제 받아줄지가 TT 측 신호만으론 예측되지 않습니다</strong>(§7b의 양하 곧유휴 어려움의 근본 원인). 그래서 ③ 예측·양하 곧유휴는 <strong>RTG 관여(GPS)·블록 큐 길이(<span class="mono">block_queue_tt</span>)·학습된 RTG별 서비스 간격</strong>으로 ③a를 추정하는 데 달려 있고, 정확도 한계도 여기서 옵니다. 1차는 합산값, 2차로 ③a/③b 분해.</p></div>
 </section>
@@ -496,8 +539,8 @@
   <h3>7b.2 신호 가용성 — 무엇으로 판별할 수 있나</h3>
   <table class="t-compact">
     <tr><th style="width:200px">신호</th><th>선적(LD) 유휴=QC</th><th>양하(DS) 유휴=블록 RTG</th></tr>
-    <tr><td><b>QC PLC</b> (~1초, ctab)</td><td><span class="b b-fact">✓ 직접</span> 차에서 픽오프(PICKUP) + 스프레더 하강(hpos↓)으로 임박 예고</td><td><span class="b" style="background:#e2e8f0;color:#475569">해당없음</span> QC는 <b>적재 시작</b>만 — 유휴 전환점 아님</td></tr>
-    <tr><td><b>RTG PLC</b></td><td>—</td><td><span class="b b-pred" style="background:#fee2e2;color:#b91c1c">✗ 없음</span> RTG는 PLC 미수신 → 직접 신호 부재</td></tr>
+    <tr><td><b>QC PLC</b> (~1초, ctab)</td><td><span class="b b-fact">✓ 직접</span> 차에서 픽오프(PICKUP) + 스프레더 하강(hpos↓)으로 임박 예고</td><td><span class="b b-na">해당없음</span> QC는 <b>적재 시작</b>만 — 유휴 전환점 아님</td></tr>
+    <tr><td><b>RTG PLC</b></td><td>—</td><td><span class="b b-no">✗ 없음</span> RTG는 PLC 미수신 → 직접 신호 부재</td></tr>
     <tr><td>TT GPS (~3초·성김)</td><td>△ 안벽 도착·상태(UNLOADING)</td><td>△ 블록 도착·상태 — 성겨서 늦게 감지 가능</td></tr>
     <tr><td>TT 미션 (<span class="mono">jobtype·topos1</span>)</td><td>✓ 어느 QC로 가는지(상대 식별)</td><td>✓ 어느 블록으로 가는지</td></tr>
     <tr><td>RTG GPS (~3초)</td><td>—</td><td>△ <b>인접 RTG 관여 단서</b>(같은 레인 위치) — 약하지만 유일한 블록측 실시간 단서</td></tr>
@@ -541,7 +584,7 @@
     <tr><td>TT984</td><td><span class="b b-ld">LD</span></td><td><span class="mono">M4</span> (안벽)</td><td><span class="b b-fact">QC</span></td><td><b>✓ M4 PICKUP Δ+1.9s</b></td></tr>
     <tr><td>TT1177</td><td><span class="b b-ld">LD</span></td><td><span class="mono">M2</span> (안벽)</td><td><span class="b b-fact">QC</span></td><td><b>✓ M2 PICKUP Δ−2.3s</b></td></tr>
     <tr><td>TT1154 · TT1156 · TT1314</td><td><span class="b b-ld">LD</span></td><td><span class="mono">M2 · Z6 · Z4</span> (안벽)</td><td><span class="b b-fact">QC</span></td><td>해당 크레인 PLC 캡처 구간 밖(원리는 동일)</td></tr>
-    <tr><td>TT921 · TT914 · TT952 · TT1331</td><td><span class="b b-ds">DS</span></td><td><span class="mono">01WW… 01LW… 08W… 08L…</span> (블록)</td><td><span class="b" style="background:#fee2e2;color:#b91c1c">블록</span></td><td>RTG PLC 없음 → GPS만(<span class="mono">arrival=ARRIVED</span>)</td></tr>
+    <tr><td>TT921 · TT914 · TT952 · TT1331</td><td><span class="b b-ds">DS</span></td><td><span class="mono">01WW… 01LW… 08W… 08L…</span> (블록)</td><td><span class="b b-no">블록</span></td><td>RTG PLC 없음 → GPS만(<span class="mono">arrival=ARRIVED</span>)</td></tr>
   </table>
   <div class="note good"><p><span class="h">실증 결론 — 선적은 지금 가능</span>① <span class="mono">container1</span>이 <strong>유휴 여부의 직접 지표</strong>로 성립(205 vs 109). ② 적재 TT가 <strong>안벽 도착(<span class="mono">arrival=ARRIVED</span>) → 유휴</strong>까지 리드타임 <strong>중앙값 ~60초(범위 30~96초)</strong> — 즉 <strong>약 1분 전에 "곧 유휴" 사전 판정 가능</strong>. ③ 그 유휴 순간이 <strong>QC PLC PICKUP과 ±수 초로 일치</strong>(3건 실증) → 선적/하역계는 <strong>크레인 신호로 정확·사전 포착</strong>. <b>이 로직은 우리 API가 이미 파싱하는 필드(container1·jobtype·topos1·arrival + QC PLC)만으로 바로 구현 가능</b>합니다.</p></div>
   <div class="note warn"><p><span class="h">양하는 실증에서도 확인된 약점 — ARRIVED만으론 부족</span>관측된 DS 유휴전환(TT921·914·952·1331)은 모두 <strong>블록에서, RTG PLC 없이</strong> 일어났습니다. 네 건 모두 직전 <span class="mono">arrival=ARRIVED</span>가 떠 있었지만, <strong>도착했다고 곧 유휴인 것은 아닙니다</strong> — RTG가 이 차를 <strong>바로 안 받을 수 있고</strong>, 그 대기는 크고 가변적입니다(§7b.3). 따라서 양하는 "도착 감지"가 아니라 <strong>RTG가 이 차의 레인에 와서 받기 시작했는가(RTG 관여, 안 B)를 확인한 뒤에만</strong> 짧은 호라이즌으로 곧유휴 판정해야 합니다. 도착~RTG관여 사이의 대기시간 예측 정확도는 1단계 record-only로 보정.</p></div>
@@ -575,9 +618,9 @@ dest_is_crane = /^[CMZ][0-9]+$/.test(tt.topos1)  <span class="c">// 안벽 QC/MH
     <tr><th style="width:90px">TT</th><th>목적지 bay(topos1)</th><th>최근접 RTG</th><th>거리</th><th>판정</th></tr>
     <tr><td>TT1084</td><td><span class="mono">02N-09</span></td><td>RTG191</td><td>28 m</td><td>중간(접근 중?)</td></tr>
     <tr><td>TT1298</td><td><span class="mono">07Q-0304</span></td><td>RTG109</td><td>32 m</td><td>중간</td></tr>
-    <tr><td>TT1250</td><td><span class="mono">08E-0809</span></td><td>RTG196</td><td>129 m</td><td><span class="b" style="background:#fee2e2;color:#b91c1c">RTG 멀다 → 대기</span></td></tr>
-    <tr><td>TT1129</td><td><span class="mono">10Y-2324</span></td><td>RTG188</td><td>134 m</td><td><span class="b" style="background:#fee2e2;color:#b91c1c">RTG 멀다 → 대기</span></td></tr>
-    <tr><td>TT1150 · TT1197</td><td><span class="mono">07Q-1920 · 01GW-04</span></td><td>RTG182 · RTG102</td><td>157·172 m</td><td><span class="b" style="background:#fee2e2;color:#b91c1c">RTG 멀다 → 대기</span></td></tr>
+    <tr><td>TT1250</td><td><span class="mono">08E-0809</span></td><td>RTG196</td><td>129 m</td><td><span class="b b-no">RTG 멀다 → 대기</span></td></tr>
+    <tr><td>TT1129</td><td><span class="mono">10Y-2324</span></td><td>RTG188</td><td>134 m</td><td><span class="b b-no">RTG 멀다 → 대기</span></td></tr>
+    <tr><td>TT1150 · TT1197</td><td><span class="mono">07Q-1920 · 01GW-04</span></td><td>RTG182 · RTG102</td><td>157·172 m</td><td><span class="b b-no">RTG 멀다 → 대기</span></td></tr>
   </table>
   <div class="note good"><p><span class="h">실증 결론 — RTG 근접도가 답이다</span>RTG GPS는 정확(중앙값 2m)하고, <strong>RTG–TT 거리가 "관여(≈같은 bay, ~25m 이내)" vs "대기(100m+)"를 또렷이 가릅니다</strong>. 스냅샷에서 도착 양하 TT의 <strong>대부분이 RTG 100m+ 떨어진 "대기" 상태</strong>였습니다 — 이것이 "도착=곧유휴"가 틀리는 이유의 직접 증거이자, 동시에 <strong>해법</strong>입니다: <strong>양하 곧유휴 = 도착 + (인접/배정 RTG가 같은 bay에 근접)</strong>일 때만 판정. <b>정밀화</b>: 거리 대신 RTG GPS를 <b>bay로 매핑</b>해 TT의 <span class="mono">topos1</span> bay와 일치하는지 보면 측방 오프셋까지 정확.</p></div>
   <div class="note warn"><p><span class="h">주의 — 비는 시점(container1)은 정밀 시각이 아님</span>유휴 전환(container1 차→빔) 순간의 RTG 거리는 31~255m로 들쭉날쭉했습니다. 즉 <span class="mono">container1</span>이 비는 시점은 물리적 핸드오버와 정확히 일치하지 않습니다(시스템 상태 갱신 지연 등). 따라서 <strong>라이브 판정</strong>엔 RTG 근접도를 쓰되, <strong>학습용 정밀 라벨</strong>(언제 정확히 비었나)은 TOS <span class="mono">ACTV_DT</span>·RTG 근접 구간으로 보강합니다.</p></div>
@@ -788,6 +831,14 @@ t= 64s  <span class="s">대기 IDLE          빈차              job=(빔) →(�
 <div class="foot">CLT Port Group · Digital Team — TT 배차 2단계 예측 모형 연구 · 2026-06-08 · 근거: 실측 18일치(2026-05-21~06-07) + 실시간 GPS/PLC + 참조 구현(wp-tt-data-center)</div>
 
 </main>
+
+<!-- ════════ CHAPTER NAV ════════ -->
+<nav class="chapter-nav">
+  <a class="prev" href="cycle-detection-ko.html">← 04 운영 — 사이클 감지 로직</a>
+  <span class="sp"></span>
+</nav>
+
 </div>
+<script defer src="kc-shell.js"></script>
 </body>
 </html>

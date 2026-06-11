@@ -1,37 +1,41 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
+<script>(function(){try{var s=localStorage.getItem('kc-theme');var t=(s==='light'||s==='dark')?s:'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TT Dispatch — 차량 풀 · 작업 풀이 어떻게 갱신되는가 (TT AiOps Platform · 2026-06)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kc-shell.css" />
 <style>
   :root{
     --primary:#001b44; --primary-2:#002f6c; --accent:#1e6feb;
     --ink:#16202c; --ink-2:#3c4654; --muted:#6b7787; --line:#e3e8ef; --line-2:#cdd5e0;
     --bg:#eef1f5; --card:#ffffff; --soft:#f4f6f9; --soft-2:#eef2f7;
     --good:#15803d; --good-bg:#dcfce7; --warn:#b45309; --warn-bg:#fef3c7; --bad:#b91c1c; --bad-bg:#fee2e2;
-    --tos:#3730a3; --ws:#86198f; --pg:#0f766e;
+    --tos:#3730a3; --ws:#86198f; --pg:#0f766e; --sup:#047857; --dem:#c2410c;
     --r:10px;
   }
   *{margin:0;padding:0;box-sizing:border-box}
   body{font-family:'Inter','Malgun Gothic','Apple SD Gothic Neo',sans-serif;color:var(--ink);background:var(--bg);line-height:1.7;-webkit-font-smoothing:antialiased}
-  .layout{display:grid;grid-template-columns:240px 1fr;gap:34px;max-width:1340px;margin:0 auto;padding:0 28px}
-  nav.toc{position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;padding:24px 8px 24px 0;font-size:13px}
-  nav.toc .brand{font-family:'Manrope';font-weight:800;font-size:14px;color:var(--primary);letter-spacing:-.02em}
-  nav.toc .brandsub{font-size:11px;color:var(--muted);margin:2px 0 14px}
-  nav.toc a{display:block;color:var(--ink-2);text-decoration:none;padding:5px 10px;border-radius:7px;border-left:2px solid transparent;margin-bottom:1px}
-  nav.toc a:hover{background:var(--soft-2);color:var(--primary)}
-  nav.toc a.sec{font-weight:700;color:var(--primary);margin-top:11px}
-  nav.toc .home{font-size:11px;color:var(--accent);text-decoration:none;display:inline-block;margin-bottom:10px}
-  main{padding:34px 0 120px;min-width:0}
-  .hero{background:linear-gradient(135deg,#001b44,#013a86);color:#fff;border-radius:16px;padding:34px 40px;margin-bottom:26px;box-shadow:0 10px 30px rgba(0,27,68,.18)}
-  .hero .tag{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#9ec5ff;font-weight:600}
-  .hero h1{font-family:'Manrope';font-weight:800;font-size:30px;letter-spacing:-.03em;line-height:1.2;margin:9px 0 10px}
-  .hero p{color:#dbe7fb;font-size:14.5px;font-weight:300;max-width:840px}
-  .hero .meta{margin-top:15px;font-size:12px;color:#a9c4ee}
-  .hero .meta b{color:#fff;font-weight:600}
+  main{max-width:960px;margin:0 auto;padding:34px 28px 100px;min-width:0}
+  .kc-hero{margin:0 0 18px}
+  .kc-hero .kicker{font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+  .kc-hero h1{font-family:'Manrope';font-weight:800;font-size:30px;letter-spacing:-.02em;line-height:1.25;margin:6px 0 10px;color:var(--ink)}
+  .kc-hero .lede{font-size:15.5px;color:var(--ink-soft);margin:0}
+  .kc-hero .meta{margin-top:12px;font-size:12px;color:var(--muted)}
+  .kc-hero .meta b{color:var(--ink);font-weight:600}
+  .doc-toc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 18px;margin:0 0 18px}
+  .doc-toc summary{cursor:pointer;font-weight:800;font-size:13px;color:var(--ink)}
+  .doc-toc-links{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;font-size:12.5px}
+  .doc-toc-links a{color:var(--accent);text-decoration:none}
+  .doc-toc-links a:hover{text-decoration:underline}
+  .chapter-nav{display:flex;gap:12px;margin:34px auto 8px;max-width:960px}
+  .chapter-nav .sp{flex:0 0 0}
+  .chapter-nav a{flex:1;display:block;padding:14px 18px;background:var(--surface);border:1px solid var(--border);border-radius:12px;color:var(--accent);text-decoration:none;font-weight:700;font-size:13.5px}
+  .chapter-nav a:hover{border-color:var(--accent)}
+  .chapter-nav a.next{text-align:right}
   section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:28px 32px;margin-bottom:20px;scroll-margin-top:16px}
   .kicker{font-size:11.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--accent)}
   h2{font-family:'Manrope';font-weight:800;font-size:23px;color:var(--primary);letter-spacing:-.02em;margin:6px 0 14px;padding-bottom:11px;border-bottom:2px solid var(--soft-2)}
@@ -73,7 +77,7 @@
   .vs .col.supply{background:#ecfdf5;border-color:#a7f3d0}
   .vs .col.demand{background:#fff7ed;border-color:#fed7aa}
   .vs .col h4{font-family:'Manrope';font-size:14.5px;margin:0 0 7px}
-  .vs .col.supply h4{color:#047857}.vs .col.demand h4{color:#c2410c}
+  .vs .col.supply h4{color:var(--sup)}.vs .col.demand h4{color:var(--dem)}
   .vs .col p{font-size:12.5px;margin:0 0 6px}
   .vs .col .tagy{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
   .flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;margin:14px 0}
@@ -83,35 +87,52 @@
   .flow .arr{display:flex;align-items:center;justify-content:center;color:var(--accent);font-weight:800;font-size:18px;padding:0 7px}
   hr.soft{border:0;border-top:1px solid var(--line);margin:18px 0}
   .foot{font-size:12px;color:var(--muted);text-align:center;padding:18px}
-  @media(max-width:920px){.layout{grid-template-columns:1fr}nav.toc{display:none}.g3,.g2,.vs{grid-template-columns:1fr}.flow{flex-direction:column}.flow .arr{transform:rotate(90deg);padding:3px 0}}
-  /* ===== dark mode ===== */
-  html{filter:invert(1) hue-rotate(180deg)}
-  .hero,pre,th{filter:invert(1) hue-rotate(180deg)}
+  @media(max-width:920px){.g3,.g2,.vs{grid-template-columns:1fr}.flow{flex-direction:column}.flow .arr{transform:rotate(90deg);padding:3px 0}.chapter-nav{flex-direction:column}}
+  /* ===== dark-theme overrides (kc-shell drives data-theme; the old invert hack is gone) =====
+     This doc's native palette is light-tuned, so the doc-local extra vars and the
+     hardcoded pastel chips/panels get dark-appropriate values here. */
+  :root[data-theme="dark"]{
+    --primary-2:#93c5fd; --ink-2:#b4bcd0; --line-2:#2e3650; --soft-2:#1f2942;
+    --tos:#a5b4fc; --ws:#f0abfc; --pg:#5eead4; --sup:#34d399; --dem:#fb923c;
+  }
+  [data-theme="dark"] code,[data-theme="dark"] .mono{color:#9ec5ff}
+  [data-theme="dark"] th{background:#22335c}
+  [data-theme="dark"] .t-sup th{background:#065f46}
+  [data-theme="dark"] .t-dem th{background:#9a3412}
+  [data-theme="dark"] tbody tr:hover td{background:#1e2a4a}
+  [data-theme="dark"] .note.key{background:rgba(96,165,250,.1)}
+  [data-theme="dark"] .vs .col.supply{background:rgba(16,185,129,.08);border-color:rgba(16,185,129,.3)}
+  [data-theme="dark"] .vs .col.demand{background:rgba(249,115,22,.08);border-color:rgba(249,115,22,.3)}
+  [data-theme="dark"] .b-tos{background:rgba(99,102,241,.2);color:#a5b4fc}
+  [data-theme="dark"] .b-ws{background:rgba(217,70,239,.18);color:#f0abfc}
+  [data-theme="dark"] .b-ld,[data-theme="dark"] .b-idle{background:rgba(34,197,94,.16);color:#86efac}
+  [data-theme="dark"] .b-ds{background:rgba(59,130,246,.18);color:#93c5fd}
+  [data-theme="dark"] .b-key,[data-theme="dark"] .b-soon{background:rgba(251,191,36,.15);color:#fcd34d}
+  [data-theme="dark"] .b-del,[data-theme="dark"] .b-emp{background:rgba(148,163,184,.16);color:#cbd5e1}
+  [data-theme="dark"] .b-wait{background:rgba(248,113,113,.15);color:#fca5a5}
   ::selection{background:#1e6feb;color:#fff}
 </style>
 </head>
 <body>
-<div class="layout">
-
-<nav class="toc">
-  <a class="home" href="./index.html">← 지식센터</a>
-  <div class="brand">차량 풀 · 작업 풀 갱신</div>
-  <div class="brandsub">TT AiOps Platform · 2026-06</div>
-  <a class="sec" href="#tldr">한눈에 — 두 풀</a>
-  <a href="#vehicle">1 · 차량 풀 갱신 (실시간)</a>
-  <a href="#classify">2 · 배차 상태 분류 상세</a>
-  <a href="#work">3 · 작업 풀 갱신 (TOS 90초)</a>
-  <a href="#fuse">4 · 두 풀의 융합</a>
-  <a href="#limit">5 · 한계 · 노트</a>
-</nav>
-
 <main>
-<div class="hero">
-  <div class="tag">TT AiOps Platform · TT Dispatch</div>
+<header class="kc-hero">
+  <div class="kicker">여정 04 · 운영</div>
   <h1>차량 풀 · 작업 풀이 어떻게 갱신되는가</h1>
-  <p>TT 배차의 두 축 — <b>차량 풀</b>(어떤 트럭이 비었는가 · <span style="color:#8fe3b8">공급</span>)과 <b>작업 풀</b>(어떤 크레인 작업이 트럭을 기다리는가 · <span style="color:#fdba74">수요</span>). 둘은 <b>갱신 방식이 완전히 다릅니다</b>: 차량 풀은 websocket으로 초단위 실시간, 작업 풀은 TOS에서 90초 스냅샷. 이 문서는 각 풀이 어떻게 갱신되는지, 그리고 둘이 화면에서 어떻게 합쳐지는지를 설명합니다.</p>
+  <p class="lede">TT 배차의 두 축 — <b>차량 풀</b>(어떤 트럭이 비었는가 · <span style="color:var(--sup)">공급</span>)과 <b>작업 풀</b>(어떤 크레인 작업이 트럭을 기다리는가 · <span style="color:var(--dem)">수요</span>). 둘은 <b>갱신 방식이 완전히 다릅니다</b>: 차량 풀은 websocket으로 초단위 실시간, 작업 풀은 TOS에서 90초 스냅샷. 이 문서는 각 풀이 어떻게 갱신되는지, 그리고 둘이 화면에서 어떻게 합쳐지는지를 설명합니다.</p>
   <div class="meta">기준 <b>2026-06-09</b> · 차량 풀 = <b>websocket GPS/PLC</b>(메모리·실시간) · 작업 풀 = <b>TOS JOB_ORDER_LIST + JOB_QUEUE_SCHEDULE</b>(90초) · 화면 = TT 페이지</div>
-</div>
+</header>
+
+<details class="doc-toc" open>
+  <summary>이 문서의 목차</summary>
+  <div class="doc-toc-links">
+    <a href="#tldr">한눈에 — 두 풀</a>
+    <a href="#vehicle">1 · 차량 풀 갱신 (실시간)</a>
+    <a href="#classify">2 · 배차 상태 분류 상세</a>
+    <a href="#work">3 · 작업 풀 갱신 (TOS 90초)</a>
+    <a href="#fuse">4 · 두 풀의 융합</a>
+    <a href="#limit">5 · 한계 · 노트</a>
+  </div>
+</details>
 
 <!-- TLDR -->
 <section id="tldr">
@@ -119,14 +140,14 @@
   <h2>두 풀 — 갱신 방식이 다르다</h2>
   <div class="vs">
     <div class="col supply">
-      <div class="tagy" style="color:#047857">차량 풀 = 공급</div>
+      <div class="tagy" style="color:var(--sup)">차량 풀 = 공급</div>
       <h4>websocket · 초단위 실시간</h4>
       <p><b>출처</b> websocket GPS/PLC (TOS 아님)</p>
       <p><b>갱신</b> API 메모리 스냅샷 → 화면 ~2.5초 폴링</p>
       <p><b>방식</b> standalone — 각 TT를 5개 상태로 실시간 분류</p>
     </div>
     <div class="col demand">
-      <div class="tagy" style="color:#c2410c">작업 풀 = 수요</div>
+      <div class="tagy" style="color:var(--dem)">작업 풀 = 수요</div>
       <h4>TOS · 90초 스냅샷</h4>
       <p><b>출처</b> TOS 라이브 작업지시 2테이블</p>
       <p><b>갱신</b> 추출기 90초 → Postgres → 화면 ~15초 폴링</p>
@@ -192,7 +213,7 @@
     <div class="card"><h4><span class="mono">JOB_ORDER_LIST</span></h4><p>개별 컨테이너 move — 배정 트럭(YTNO)·ETW(크레인 준비시각)·컨테이너·RTG. <b>JOBSTATUS A(활성)만</b> 가져옴(완료행도 보관되므로 라이브 필터 필수).</p></div>
     <div class="card"><h4><span class="mono">JOB_QUEUE_SCHEDULE</span></h4><p>QC별 작업 큐 계획 — 크레인(C##)·순서(SEQ)·양/적·진행률(완료/총). <b>잔여 = TOTAL−COMP</b>.</p></div>
   </div>
-  <div class="note key"><p><span class="h">JOBSTATUS 코드</span><span class="b b-key">A</span>활성(배차됨·진행중) · <span class="b b-key">Q</span>대기(백로그) · <span class="b b-key">P</span>계획 · <span class="b b-key">B</span>차단 · <span class="b" style="background:#e2e8f0;color:#475569">C</span>완료. 화면 카드 = <b>A</b>(ETW·배정 트럭이 채워진 진행 작업).</p></div>
+  <div class="note key"><p><span class="h">JOBSTATUS 코드</span><span class="b b-key">A</span>활성(배차됨·진행중) · <span class="b b-key">Q</span>대기(백로그) · <span class="b b-key">P</span>계획 · <span class="b b-key">B</span>차단 · <span class="b b-del">C</span>완료. 화면 카드 = <b>A</b>(ETW·배정 트럭이 채워진 진행 작업).</p></div>
   <h4>파이프라인 (90초)</h4>
   <div class="flow">
     <div class="step"><h4>① TOS Oracle</h4><p>라이브 작업지시 2테이블. 추출기만 읽기.</p></div>
@@ -237,9 +258,11 @@
   </table>
 </section>
 
+<nav class="chapter-nav"><a class="prev" href="websocket-kpi-accuracy-ko.html">← 03 지표 — 정확도 보강</a><span class="sp"></span><a class="next" href="cycle-detection-ko.html">04 운영 — 사이클 감지 로직 →</a></nav>
+
 <div class="foot">CLT Port Group · Digital Team — 차량 풀 · 작업 풀 갱신 · 2026-06-09 · 원천: livemap.rs(차량 분류) + workpool.rs(작업 풀) + TtPage(융합) · TT AiOps Platform · 내부 공유용</div>
 
 </main>
-</div>
+<script defer src="kc-shell.js"></script>
 </body>
 </html>

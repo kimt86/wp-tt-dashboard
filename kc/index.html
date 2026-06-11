@@ -1,216 +1,276 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WP-TT 지식센터 · Knowledge Center</title>
+<script>
+  // Apply theme BEFORE stylesheets render to prevent FOUC.
+  (function () {
+    try {
+      var saved = localStorage.getItem('kc-theme');
+      var theme = (saved === 'light' || saved === 'dark') ? saved : 'dark';
+      document.documentElement.setAttribute('data-theme', theme);
+    } catch (e) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  })();
+</script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>WP-TT 지식센터 — 처음 오신 분을 위한 안내</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kc-shell.css" />
 <style>
-  :root{
-    --bg:#0a0f1d; --bg2:#0e1525; --surface:#131b2e; --surface2:#1a2438; --surface3:#222d44;
-    --border:#2a3654; --border2:#3a4768; --text:#e2e8f0; --dim:#94a3b8; --mute:#64748b;
-    --brand:#60a5fa; --brand2:#3b82f6; --g1:#1e3a8a; --g2:#1e40af;
-    --r:12px;
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Inter", "Malgun Gothic", system-ui, sans-serif;
+    font-size: 14.5px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
   }
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:'Inter','Malgun Gothic',sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;min-height:100vh}
-  .wrap{max-width:1080px;margin:0 auto;padding:0 26px}
-  /* hero */
-  header.hero{background:linear-gradient(135deg,#001b44,#0e2a63);border-bottom:1px solid var(--border)}
-  .hero-in{max-width:1080px;margin:0 auto;padding:42px 26px 34px}
-  .hb{display:flex;align-items:center;gap:12px;margin-bottom:18px}
-  .hb .logo{font-family:'Manrope';font-weight:800;font-size:17px;letter-spacing:-.3px;color:#fff}
-  .hb .logo .accent{color:var(--brand)}
-  .hb .div{width:1px;height:20px;background:rgba(255,255,255,.25)}
-  .hb .sub{font-size:12px;color:#9ec5ff;font-weight:600;letter-spacing:.1em;text-transform:uppercase}
-  .hero h1{font-family:'Manrope';font-weight:800;font-size:34px;letter-spacing:-.03em;color:#fff;line-height:1.15}
-  .hero p{color:#cdddf6;font-size:15px;font-weight:300;margin-top:10px;max-width:640px}
-  .hero .meta{margin-top:16px;font-size:12px;color:#9ec5ff}
-  .search{margin-top:22px;position:relative;max-width:480px}
-  .search input{width:100%;padding:11px 14px 11px 38px;border-radius:999px;border:1px solid var(--border2);
-    background:rgba(10,15,29,.6);color:var(--text);font-size:14px;font-family:inherit;outline:none}
-  .search input:focus{border-color:var(--brand)}
-  .search .ic{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--mute)}
-  main{padding:30px 0 80px}
-  .cat{margin-bottom:30px}
-  .cat-h{display:flex;align-items:center;gap:9px;font-family:'Manrope';font-weight:800;font-size:15px;color:var(--text);margin:6px 2px 14px}
-  .cat-h .bar{width:4px;height:16px;border-radius:2px;background:var(--brand)}
-  .cat-h .cnt{font-size:11px;color:var(--mute);font-weight:600;background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:1px 9px}
-  .docs{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
-  @media(max-width:760px){.docs{grid-template-columns:1fr}.hero h1{font-size:27px}}
-  a.doc{display:block;text-decoration:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
-    padding:18px 20px;transition:border-color .15s,transform .12s,background .15s;position:relative;overflow:hidden}
-  a.doc:hover{border-color:var(--brand);background:var(--surface2);transform:translateY(-2px)}
-  a.doc .dt{display:flex;align-items:flex-start;gap:11px}
-  a.doc .ico{flex:none;width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;
-    background:linear-gradient(135deg,var(--g1),var(--g2));color:#fff}
-  a.doc .ico svg{width:20px;height:20px}
-  a.doc h3{font-family:'Manrope';font-weight:700;font-size:15.5px;color:var(--text);line-height:1.3}
-  a.doc .desc{font-size:12.8px;color:var(--dim);margin-top:7px;line-height:1.6}
-  a.doc .foot{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:11px;color:var(--mute);font-family:'JetBrains Mono',monospace}
-  a.doc .tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:10px}
-  a.doc .tag{font-size:10px;font-weight:700;color:var(--brand);background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.3);border-radius:999px;padding:1px 8px}
-  a.doc.flag{border-left:3px solid var(--brand)}
-  a.doc .new{position:absolute;top:12px;right:12px;font-size:9px;font-weight:800;letter-spacing:.05em;color:#001b44;background:var(--brand);border-radius:999px;padding:2px 8px}
-  .empty{display:none;color:var(--mute);text-align:center;padding:40px;font-size:14px}
-  footer{border-top:1px solid var(--border);padding:22px 0;font-size:12px;color:var(--mute);text-align:center}
+  h1, h2, .tl-title, .five-banner .t { font-family: "Manrope", "Malgun Gothic", sans-serif; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 36px 28px 80px; }
+
+  header.hero { margin-bottom: 6px; }
+  .hero .kicker {
+    font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--accent);
+  }
+  .hero h1 { font-size: 30px; letter-spacing: -0.02em; margin: 6px 0 10px; color: var(--ink); }
+  .hero p.lede { font-size: 15.5px; color: var(--ink-soft); margin: 0; }
+
+  section.home-section {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 26px 28px; margin-top: 18px;
+  }
+  section.home-section > h2 { font-size: 19px; margin: 0 0 12px; letter-spacing: -0.01em; color: var(--ink); }
+  section.home-section p { margin: 0 0 12px; color: var(--ink); }
+  section.home-section p.lede { color: var(--ink-soft); }
+  .home-section a { color: var(--accent); }
+
+  /* 5-minute banner */
+  .five-banner {
+    display: flex; align-items: center; gap: 16px; margin-top: 18px;
+    background: linear-gradient(120deg, var(--accent-soft), var(--surface));
+    border: 1px solid var(--border); border-radius: 12px; padding: 18px 22px;
+    text-decoration: none;
+  }
+  .five-banner:hover { border-color: var(--accent); }
+  .five-banner .play {
+    flex: none; width: 44px; height: 44px; border-radius: 50%;
+    background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center;
+    font-size: 17px;
+  }
+  .five-banner .t { font-weight: 800; color: var(--ink); font-size: 15.5px; }
+  .five-banner .s { color: var(--ink-soft); font-size: 13px; margin-top: 2px; }
+
+  /* journey timeline */
+  .tl { position: relative; margin: 18px 0 0 32px; padding-left: 0; }
+  .tl::before {
+    content: ""; position: absolute; left: -21px; top: 12px; bottom: 12px;
+    width: 2px; background: var(--border);
+  }
+  .tl-item { position: relative; margin-bottom: 14px; }
+  .tl-dot {
+    position: absolute; left: -32px; top: 14px; width: 24px; height: 24px; border-radius: 50%;
+    background: var(--surface); border: 3px solid var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9.5px; font-weight: 800; color: var(--accent);
+    font-family: "JetBrains Mono", monospace; z-index: 1;
+  }
+  .tl-item.c4 .tl-dot { border-color: var(--warn); color: var(--warn); }
+  .tl-item.c5 .tl-dot { border-color: #a78bfa; color: #a78bfa; }
+  a.tl-card {
+    display: block; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 20px; text-decoration: none;
+    transition: border-color .12s, transform .12s;
+  }
+  a.tl-card:hover { border-color: var(--accent); transform: translateX(2px); }
+  .tl-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .tl-title { font-size: 15.5px; font-weight: 800; color: var(--ink); }
+  .tl-readtime {
+    margin-left: auto; font-size: 11px; font-weight: 700; color: var(--dim);
+    border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; background: var(--soft);
+    white-space: nowrap;
+  }
+  .tl-summary { color: var(--ink-soft); font-size: 13.5px; margin-top: 6px; }
+  .tl-extra { margin-top: 8px; font-size: 12.5px; color: var(--muted); }
+  .tl-extra a { color: var(--accent); text-decoration: none; }
+  .tl-extra a:hover { text-decoration: underline; }
+
+  /* alternate entries */
+  .entry-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-top: 14px; }
+  a.entry-card {
+    display: block; background: var(--soft); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; text-decoration: none;
+  }
+  a.entry-card:hover { border-color: var(--accent); }
+  .entry-card .q { font-weight: 800; color: var(--ink); font-size: 13.5px; }
+  .entry-card .a { color: var(--ink-soft); font-size: 12.5px; margin-top: 4px; }
+  .entry-card .a strong { color: var(--accent); }
+
+  /* honest status rows */
+  .honest-row { display: flex; gap: 14px; padding: 10px 0; border-bottom: 1px dashed var(--border); }
+  .honest-row:last-child { border-bottom: none; }
+  .h-tag { flex: none; width: 64px; font-size: 11.5px; font-weight: 800; letter-spacing: 0.04em; padding-top: 2px; }
+  .honest-row.good .h-tag { color: var(--good); }
+  .honest-row.warn .h-tag { color: var(--warn); }
+  .h-line { color: var(--ink); font-size: 13.5px; }
+  .h-line .sub { display: block; color: var(--muted); font-size: 12.5px; }
+
+  /* milestones */
+  ul.miles { list-style: none; margin: 8px 0 0; padding: 0; }
+  ul.miles li { display: flex; gap: 14px; padding: 7px 0; border-bottom: 1px dashed var(--border); }
+  ul.miles li:last-child { border-bottom: none; }
+  ul.miles .d { flex: none; width: 86px; font-family: "JetBrains Mono", monospace; font-size: 12px; color: var(--accent); font-weight: 700; padding-top: 1px; }
+  ul.miles .m { color: var(--ink); font-size: 13.5px; }
+  ul.miles .m .sub { color: var(--muted); font-size: 12.5px; }
+
+  footer.foot { margin-top: 28px; color: var(--muted); font-size: 12px; text-align: center; }
 </style>
 </head>
 <body>
+<div class="wrap">
 
-<header class="hero">
-  <div class="hero-in">
-    <div class="hb"><span class="logo">CLT <span class="accent">TT AiOps</span></span><span class="div"></span><span class="sub">Knowledge Center</span></div>
-    <h1>TT AiOps Platform · 지식센터</h1>
-    <p>TT AiOps Platform의 데이터 원천·산출 로직·기능 문서와 연구 자료 모음. 적용 사이트 = Westports Malaysia. 내부 공유용.</p>
-    <div class="meta">CLT Digital · 갱신 2026-06-09 · 내부(Tailscale) 전용</div>
-    <div class="search"><span class="ic">🔍</span><input id="q" type="text" placeholder="문서 검색 (제목·설명·태그)…" oninput="filt()"></div>
-  </div>
-</header>
+  <header class="hero">
+    <div class="kicker">WP-TT Knowledge Center</div>
+    <h1>처음 오신 분을 위한 안내</h1>
+    <p class="lede">Westports(말레이시아) 컨테이너 터미널의 야드 트럭(TT) 운영을 데이터로 풀어가는
+    <strong>TT AiOps Platform</strong>의 지식센터입니다. 이 페이지 하나만 읽으면 어디로 가야 할지 알 수 있습니다.</p>
+  </header>
 
-<main class="wrap" id="list">
+  <a class="five-banner" href="summary.html">
+    <span class="play">▶</span>
+    <span>
+      <div class="t">바쁘신가요? — 5분 요약</div>
+      <div class="s">플랫폼 전체(문제 → 데이터 → 지표 → 운영 → 다음 단계)를 한 페이지로 압축했습니다.</div>
+    </span>
+  </a>
 
-  <!-- 데이터 레퍼런스 -->
-  <div class="cat" data-cat>
-    <div class="cat-h"><span class="bar"></span>데이터 레퍼런스 <span class="cnt">2</span></div>
-    <div class="docs">
-      <a class="doc flag" href="./tos-db-reference-ko.html" data-doc data-s="tos db 종합 레퍼런스 테이블 컬럼 보존 코드 oracle 데이터 reference schema retention job order kpi 작업지시">
-        <div class="dt">
-          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></span>
-          <div><h3>TOS DB 종합 레퍼런스</h3>
-            <div class="desc">TOS Oracle <b>전용</b> — 테이블·컬럼 설명, 보존 기간, 코드 사전, 라이브 작업지시, 7개 KPI 소스까지. (실시간 websocket은 별도 문서로 분리)</div>
-          </div>
-        </div>
-        <div class="tags"><span class="tag">TOS DB</span><span class="tag">스키마</span><span class="tag">보존</span><span class="tag">코드</span><span class="tag">작업지시</span></div>
-        <div class="foot">2026-06-09 · 레퍼런스</div>
+  <section class="home-section">
+    <h2>환영합니다 — 이 프로젝트는 무엇인가요</h2>
+    <p class="lede">컨테이너 터미널에서 안벽 크레인(QC)이 멈추지 않으려면 야드 트럭(TT)이 제때 도착해야 합니다.
+    이 플랫폼은 <strong>TT 운영을 측정하고(KPI), 실시간으로 보고(라이브 맵·배차 풀), 궁극적으로 AI 배차로 개선</strong>하기 위해 만들어졌습니다.</p>
+    <p>구조는 단순합니다: 운영 TOS(Oracle)는 절대 직접 건드리지 않고 <strong>추출기가 주기적으로 PostgreSQL로 복제</strong>하며,
+    터미널 차량의 <strong>실시간 GPS/PLC websocket</strong>을 함께 수신해 Rust API + React 대시보드로 서빙합니다.
+    모든 지표는 "TOS가 말하는 것"과 "차량이 실제로 움직인 것"을 교차 검증하며 만들어집니다.</p>
+  </section>
+
+  <section class="home-section">
+    <h2>여정 따라가기 — 5개 챕터</h2>
+    <p class="lede">순서대로 읽으면 문제 정의부터 향후 연구까지 한 흐름으로 이어집니다.</p>
+    <div class="tl">
+
+      <div class="tl-item">
+        <div class="tl-dot">01</div>
+        <a class="tl-card" href="tt-assignment-session-ko.html">
+          <div class="tl-head"><span class="tl-title">문제 — 스마트 TT 배차란 무엇인가</span><span class="tl-readtime">≈ 20분</span></div>
+          <div class="tl-summary">고객사와의 워킹 세션 기록. 왜 TT 배차가 어려운 문제인지, 현재 운영 방식과
+          개선 기회가 어디에 있는지를 정의합니다. 모든 챕터의 출발점.</div>
+        </a>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-dot">02</div>
+        <a class="tl-card" href="tos-db-reference-ko.html">
+          <div class="tl-head"><span class="tl-title">데이터 — TOS DB 레퍼런스</span><span class="tl-readtime">≈ 14분</span></div>
+          <div class="tl-summary">작업 지시(JOB_ORDER), 작업 큐, 장비 운영 테이블까지 — 우리가 읽는 TOS 테이블의
+          구조와 의미, 그리고 "운영 DB 무접촉" 원칙(추출기 → Postgres)을 다룹니다.</div>
+          <div class="tl-extra">같은 챕터 → <a href="websocket-data-ko.html">실시간 websocket 데이터 (≈ 8분)</a> — GPS·PLC 피드의 구조와 함정</div>
+        </a>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-dot">03</div>
+        <a class="tl-card" href="kpi-computation-ko.html">
+          <div class="tl-head"><span class="tl-title">지표 — KPI 산출 방법</span><span class="tl-readtime">≈ 16분</span></div>
+          <div class="tl-summary">사이클타임·공차거리·가동률·QC 대기 등 핵심 지표를 어떤 소스에서 어떤 수식으로
+          계산하는지. 지표마다 "왜 이 정의를 선택했는가"를 함께 기록했습니다.</div>
+          <div class="tl-extra">같은 챕터 → <a href="websocket-kpi-accuracy-ko.html">websocket로 정확도 보강 (≈ 11분)</a> — 실측 GPS 교차 검증</div>
+        </a>
+      </div>
+
+      <div class="tl-item c4">
+        <div class="tl-dot">04</div>
+        <a class="tl-card" href="dispatch-pools-ko.html">
+          <div class="tl-head"><span class="tl-title">운영 — 배차 풀 (라이브)</span><span class="tl-readtime">≈ 8분</span></div>
+          <div class="tl-summary">대시보드 TT 페이지의 심장: 작업 풀(수요)과 차량 풀(공급)이 90초/실시간으로
+          어떻게 갱신되고 융합되는지. idle→staging 교정, 스왑 가능 공차 판정 로직 포함.</div>
+          <div class="tl-extra">같은 챕터 → <a href="cycle-detection-ko.html">사이클 감지 로직 (≈ 12분)</a> — 이동필터·4단계 분해·tt_cycle_log</div>
+        </a>
+      </div>
+
+      <div class="tl-item c5">
+        <div class="tl-dot">05</div>
+        <a class="tl-card" href="tt-prediction-research-ko.html">
+          <div class="tl-head"><span class="tl-title">다음 — 2단계 예측 모형 연구</span><span class="tl-readtime">≈ 35분</span></div>
+          <div class="tl-summary">AI 배차로 가는 길: 작업 소요시간 예측 + 배차 최적화의 2단계 모형 설계와
+          학습 데이터 전략. 지금 쌓고 있는 사이클 로그(tt_cycle_log)가 이 연구의 연료입니다.</div>
+        </a>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="home-section">
+    <h2>다른 방식으로 들어가기</h2>
+    <div class="entry-grid">
+      <a class="entry-card" href="glossary.html#faq">
+        <div class="q">구체적인 질문이 있다면</div>
+        <div class="a">"ETW가 왜 DB와 다른가요?", "idle이 왜 줄었나요?" — <strong>FAQ</strong>에서 바로 답을 찾으세요.</div>
       </a>
-      <a class="doc flag" href="./websocket-data-ko.html" data-doc data-s="websocket 실시간 데이터 gps plc wpt_gps ctab 라이브맵 차량풀 피드 헬스 활용 tunnel 터널 realtime">
-        <span class="new">NEW</span>
-        <div class="dt">
-          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.5a7 7 0 0 1 14 0"/><path d="M8.5 15a3.5 3.5 0 0 1 7 0"/><circle cx="12" cy="18" r="1"/></svg></span>
-          <div><h3>실시간 websocket 데이터 &amp; 활용</h3>
-            <div class="desc">장비 ~450대의 GPS/PLC 스트림 — TOS와 별개인 실시간 시스템. 필드·주기·터널, 그리고 라이브맵·차량 풀·작업 풀 융합·피드 헬스에 <b>어떻게 활용</b>되는지.</div>
-          </div>
-        </div>
-        <div class="tags"><span class="tag">websocket</span><span class="tag">GPS/PLC</span><span class="tag">실시간</span><span class="tag">활용</span></div>
-        <div class="foot">2026-06-09 · 레퍼런스</div>
+      <a class="entry-card" href="glossary.html">
+        <div class="q">모르는 단어가 있다면</div>
+        <div class="a">ETW, c2c, 양하/적하, work pool, JOBSTATUS… <strong>용어집</strong>이 한 줄씩 정리합니다.</div>
+      </a>
+      <a class="entry-card" href="research-log.html">
+        <div class="q">시간순 원문이 궁금하다면</div>
+        <div class="a">무엇을 시도했고 무엇을 발견했는지 — <strong>연구 일지</strong>가 날짜별로 기록합니다.</div>
+      </a>
+      <a class="entry-card" href="capacity-planning-ko.html">
+        <div class="q">인프라 구축을 계획한다면</div>
+        <div class="a">CPU·메모리 등 <strong>클라우드 용량 산정</strong> 근거 자료.</div>
       </a>
     </div>
-  </div>
+  </section>
 
-  <!-- 구현 · 기능 -->
-  <div class="cat" data-cat>
-    <div class="cat-h"><span class="bar"></span>구현 · 기능 <span class="cnt">3</span></div>
-    <div class="docs">
-      <a class="doc flag" href="./kpi-computation-ko.html" data-doc data-s="kpi 산출 계산 7개 지표 3계층 raw kpi_daily baseline 오늘 재스캔 교대 틱 야간 이력 일 주 월 agg 가동률 mph 공차 사이클">
-        <span class="new">NEW</span>
-        <div class="dt">
-          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5"/><path d="M4 19h16"/><rect x="7" y="11" width="3" height="6"/><rect x="12" y="7" width="3" height="10"/><rect x="17" y="13" width="3" height="4"/></svg></span>
-          <div><h3>KPI 산출 — 7개 지표 계산</h3>
-            <div class="desc">TOS에서 추출 → Postgres 3계층 누적 → 집계. 분자/분모 보존으로 정확한 기간 합산, "오늘"을 Oracle 재스캔 없이, 일/주/월 이력까지. 처음 보는 사람용.</div>
-          </div>
-        </div>
-        <div class="tags"><span class="tag">KPI</span><span class="tag">3계층</span><span class="tag">집계</span><span class="tag">이력</span></div>
-        <div class="foot">2026-06-09 · 기능·아키텍처</div>
-      </a>
-      <a class="doc flag" href="./dispatch-pools-ko.html" data-doc data-s="차량 풀 작업 풀 갱신 tt dispatch 배차 상태 분류 idle soon_idle empty_travel wait_rtg 작업지시 etw qc 시퀀스 plc gps 융합 스왑 centroid 공급 수요">
-        <span class="new">NEW</span>
-        <div class="dt">
-          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
-          <div><h3>차량 풀 · 작업 풀 갱신 (TT Dispatch)</h3>
-            <div class="desc">배차의 두 축 — 차량 풀(공급, websocket 실시간 상태 분류)과 작업 풀(수요, TOS 90초 스냅샷)이 각각 어떻게 갱신되고, 화면에서 어떻게 융합되는지. 분류 결정 트리·ETW·스왑 판정까지.</div>
-          </div>
-        </div>
-        <div class="tags"><span class="tag">차량풀</span><span class="tag">작업풀</span><span class="tag">상태 분류</span><span class="tag">PLC/GPS 융합</span></div>
-        <div class="foot">2026-06-09 · 기능·아키텍처</div>
-      </a>
-      <a class="doc flag" href="./websocket-kpi-accuracy-ko.html" data-doc data-s="websocket kpi 정확도 향상 실시간 k_mph plc 사이클 처리량 크레인 move 교차검증 k_qc_q 대기 accuracy realtime cross-check">
-        <span class="new">NEW</span>
-        <div class="dt">
-          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg></span>
-          <div><h3>websocket로 KPI 정확도 향상</h3>
-            <div class="desc">"실제로 어떻게 정확해지는가" 중심. TT 사이클 재검토(TOS는 40분짜리 처리 span을 잼 → GPS 이동거리로 검증한 실제 트럭 사이클) + K_MPH·K_QC_Q·K_UTIL 실시간 보정. 외부 평가 4회 반영(시간 하한 막다른 길 → GPS 이동 검증으로 정정).</div>
-          </div>
-        </div>
-        <div class="tags"><span class="tag">정확도</span><span class="tag">TT 사이클</span><span class="tag">실시간</span><span class="tag">외부평가</span></div>
-        <div class="foot">2026-06-09 · 기능·아키텍처</div>
-      </a>
+  <section class="home-section">
+    <h2>이 플랫폼의 정직한 현황</h2>
+    <div class="honest-row good">
+      <span class="h-tag">운영 중</span>
+      <span class="h-line">KPI 대시보드(7개 지표·일/주/월 이력) · 라이브 맵 · 배차 풀 · 사이클 이력(CYCLES) 페이지가 실데이터로 가동 중입니다.
+      <span class="sub">TT 사이클 로그는 ML 학습용으로 시간당 수백 건씩 적재되고 있습니다.</span></span>
     </div>
-  </div>
-
-  <!-- 배포 · 운영 -->
-  <div class="cat" data-cat>
-    <div class="cat-h"><span class="bar"></span>배포 · 운영 <span class="cnt">1</span></div>
-    <div class="docs">
-      <a class="doc flag" href="./capacity-planning-ko.html" data-doc data-s="클라우드 용량 산정 cpu 메모리 capacity planning 인스턴스 사이징 배포 deployment 1단계 2단계 배차 추론 ml 학습 training gpu 스토리지 vcpu ram">
-        <span class="new">NEW</span>
-        <div class="dt">
-          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="6" rx="1.5"/><rect x="2" y="13" width="20" height="6" rx="1.5"/><circle cx="6" cy="6" r="0.6" fill="currentColor"/><circle cx="6" cy="16" r="0.6" fill="currentColor"/></svg></span>
-          <div><h3>클라우드 용량 산정 (CPU·메모리)</h3>
-            <div class="desc">플랫폼 + 배차 로직(1·2단계)을 클라우드에 띄울 때 필요한 vCPU·메모리·스토리지 추정. ML 학습은 별도 서버로 분리 산정. 권장 인스턴스·HA·비용 절감까지.</div>
-          </div>
-        </div>
-        <div class="tags"><span class="tag">용량 산정</span><span class="tag">1·2단계</span><span class="tag">학습 별도</span><span class="tag">인스턴스</span></div>
-        <div class="foot">2026-06-09 · 배포·운영</div>
-      </a>
+    <div class="honest-row good">
+      <span class="h-tag">검증됨</span>
+      <span class="h-line">"idle 과다 집계" 원인(배정 무시)과 "container1=배정 필드" 의미론을 실측으로 규명하고 교정했습니다.
+      <span class="sub">관측하지 못한 값은 추정하지 않고 NULL로 남기는 원칙을 따릅니다.</span></span>
     </div>
-  </div>
-
-  <!-- TT 배차 연구 -->
-  <div class="cat" data-cat>
-    <div class="cat-h"><span class="bar"></span>TT 배차 연구 <span class="cnt">1</span></div>
-    <div class="docs">
-      <a class="doc" href="./tt-prediction-research-ko.html" data-doc data-s="tt 배차 2단계 예측 모형 연구 학습 데이터 곧 유휴 스왑 prediction training 이동시간 etw rtg 핸드오버">
-        <div class="dt">
-          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></span>
-          <div><h3>TT 배차 2단계 예측 모형 연구</h3>
-            <div class="desc">무엇을 학습하고 어떤 학습데이터를 가공할지 — 이동시간·QC ETW·블록 핸드오버 예측, "곧 유휴"·스왑 가능 공차 판별, 라벨 생성 파이프라인까지 실증 포함.</div>
-          </div>
-        </div>
-        <div class="tags"><span class="tag">예측</span><span class="tag">학습데이터</span><span class="tag">곧유휴</span><span class="tag">실증</span></div>
-        <div class="foot">2026-06-08 · 연구 보고서</div>
-      </a>
+    <div class="honest-row warn">
+      <span class="h-tag">주의</span>
+      <span class="h-line">정확한 ETW는 Azure 게이트웨이(SSH 터널) 의존 — 터널이 죽으면 DB 폴백으로 정밀도가 떨어집니다.
+      <span class="sub">사이클 4단계 분해는 ARRIVED 신호 의존이라 일부 사이클은 단계가 부분 관측됩니다.</span></span>
     </div>
-  </div>
-
-  <!-- 고객 세션 -->
-  <div class="cat" data-cat>
-    <div class="cat-h"><span class="bar"></span>고객 세션 <span class="cnt">1</span></div>
-    <div class="docs">
-      <a class="doc" href="./tt-assignment-session-ko.html" data-doc data-s="tt 배차 westports 고객 세션 poc kpi 헝가리안 전역 매칭 customer session 방법론 일정">
-        <div class="dt">
-          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg></span>
-          <div><h3>스마트 TT 배차 — Westports 세션</h3>
-            <div class="desc">현행 TOS 로직 vs AI 전역 매칭, PoC 방법론(2단계 도입·UAT), KPI·효과 측정 방법을 담은 고객 발표 자료.</div>
-          </div>
-        </div>
-        <div class="tags"><span class="tag">PoC</span><span class="tag">방법론</span><span class="tag">KPI</span><span class="tag">일정</span></div>
-        <div class="foot">2026-06-08 · 발표 자료</div>
-      </a>
+    <div class="honest-row warn">
+      <span class="h-tag">미완</span>
+      <span class="h-line">AI 배차(예측 모형)는 아직 연구 단계 — 현재는 학습 데이터 축적과 베이스라인 측정에 집중하고 있습니다.</span>
     </div>
-  </div>
+  </section>
 
-  <div class="empty" id="empty">검색 결과가 없습니다.</div>
-</main>
+  <section class="home-section">
+    <h2>지금 어디까지 왔나요 — 최근 마일스톤</h2>
+    <ul class="miles">
+      <li><span class="d">2026-06-08</span><span class="m">고객사 워킹 세션 — 스마트 TT 배차 문제 정의 <span class="sub">(챕터 01의 원본)</span></span></li>
+      <li><span class="d">2026-06-09</span><span class="m">KPI 7종 운영 개시 · TOS DB/websocket 문서화 · 지식센터 개설</span></li>
+      <li><span class="d">2026-06-10</span><span class="m">정확 ETW 게이트웨이 연동 · TT 가동률 재정의 · 사이클 로그(tt_cycle_log) 적재 시작</span></li>
+      <li><span class="d">2026-06-10</span><span class="m">idle→staging 분류 교정 · CYCLES 이력 페이지 · 사이클 4단계(공차이동-받기-부하이동-주기) 분해</span></li>
+      <li><span class="d">2026-06-11</span><span class="m">그림자 사이클 v2 반복 개선 — 크레인 도착 오차 ~200초→1초, 블록 포착 v1 추월 <span class="sub">(<a href="cycle-v2-design-ko.html#results">§9 결과</a>)</span></span></li>
+    </ul>
+    <p style="margin-top:12px"><a href="research-log.html">→ 전체 연구 일지 보기</a> &nbsp;·&nbsp; <a href="news.html">→ 업데이트 소식 (NEWS)</a></p>
+  </section>
 
-<footer>CLT Port Group · Digital Team — TT AiOps Platform Knowledge Center · 적용 사이트 Westports Malaysia · 내부(Tailscale) 공유용</footer>
-
-<script>
-function filt(){
-  var q=document.getElementById('q').value.trim().toLowerCase();
-  var docs=document.querySelectorAll('[data-doc]'); var any=false;
-  docs.forEach(function(d){
-    var hit=!q||(d.getAttribute('data-s')+' '+d.textContent).toLowerCase().indexOf(q)>=0;
-    d.style.display=hit?'':'none'; if(hit)any=true;
-  });
-  // hide empty categories
-  document.querySelectorAll('[data-cat]').forEach(function(c){
-    var vis=c.querySelectorAll('[data-doc]:not([style*="display: none"])').length;
-    c.style.display=vis?'':'none';
-  });
-  document.getElementById('empty').style.display=any?'none':'block';
-}
-</script>
+  <footer class="foot">WP-TT 지식센터 · 내부 기술 문서 · tos-db-research 서버에서 정적 서빙</footer>
+</div>
+<script defer src="kc-shell.js"></script>
 </body>
 </html>

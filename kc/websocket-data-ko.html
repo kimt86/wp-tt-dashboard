@@ -1,8 +1,10 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
+<script>(function(){try{var s=localStorage.getItem('kc-theme');var t=(s==='light'||s==='dark')?s:'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="kc-shell.css" />
 <title>실시간 websocket 데이터 & 활용 — GPS/PLC (TT AiOps Platform · 2026-06)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -17,21 +19,18 @@
   }
   *{margin:0;padding:0;box-sizing:border-box}
   body{font-family:'Inter','Malgun Gothic','Apple SD Gothic Neo',sans-serif;color:var(--ink);background:var(--bg);line-height:1.7;-webkit-font-smoothing:antialiased}
-  .layout{display:grid;grid-template-columns:240px 1fr;gap:34px;max-width:1340px;margin:0 auto;padding:0 28px}
-  nav.toc{position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;padding:24px 8px 24px 0;font-size:13px}
-  nav.toc .brand{font-family:'Manrope';font-weight:800;font-size:14px;color:var(--primary);letter-spacing:-.02em}
-  nav.toc .brandsub{font-size:11px;color:var(--muted);margin:2px 0 14px}
-  nav.toc a{display:block;color:var(--ink-2);text-decoration:none;padding:5px 10px;border-radius:7px;border-left:2px solid transparent;margin-bottom:1px}
-  nav.toc a:hover{background:var(--soft-2);color:var(--primary)}
-  nav.toc a.sec{font-weight:700;color:var(--primary);margin-top:11px}
-  nav.toc .home{font-size:11px;color:var(--accent);text-decoration:none;display:inline-block;margin-bottom:10px}
-  main{padding:34px 0 120px;min-width:0}
-  .hero{background:linear-gradient(135deg,#3b0764,#6b21a8);color:#fff;border-radius:16px;padding:34px 40px;margin-bottom:26px;box-shadow:0 10px 30px rgba(59,7,100,.22)}
-  .hero .tag{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#e9d5ff;font-weight:600}
-  .hero h1{font-family:'Manrope';font-weight:800;font-size:30px;letter-spacing:-.03em;line-height:1.2;margin:9px 0 10px}
-  .hero p{color:#f1e3fb;font-size:14.5px;font-weight:300;max-width:820px}
-  .hero .meta{margin-top:15px;font-size:12px;color:#dcc5f0}
-  .hero .meta b{color:#fff;font-weight:600}
+  .wrap{max-width:940px;margin:0 auto;padding:36px 28px 80px}
+  .kc-hero{margin:0 0 18px}
+  .kc-hero .kicker{font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+  .kc-hero h1{font-family:'Manrope';font-weight:800;font-size:30px;letter-spacing:-.02em;margin:6px 0 10px;color:var(--ink)}
+  .kc-hero .lede{font-size:15.5px;color:var(--ink-soft);margin:0}
+  .kc-hero .meta{margin-top:12px;font-size:12px;color:var(--muted)}
+  .kc-hero .meta b{color:var(--ink);font-weight:600}
+  .doc-toc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 18px;margin:0 0 18px}
+  .doc-toc summary{cursor:pointer;font-weight:800;font-size:13px;color:var(--ink)}
+  .doc-toc-links{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;font-size:12.5px}
+  .doc-toc-links a{color:var(--accent);text-decoration:none}
+  .doc-toc-links a:hover{text-decoration:underline}
   section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:28px 32px;margin-bottom:20px;scroll-margin-top:16px}
   .kicker{font-size:11.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--ws)}
   h2{font-family:'Manrope';font-weight:800;font-size:23px;color:var(--primary);letter-spacing:-.02em;margin:6px 0 14px;padding-bottom:11px;border-bottom:2px solid var(--soft-2)}
@@ -70,41 +69,61 @@
   .use .ico{flex:none;width:34px;height:34px;border-radius:9px;background:#fae8ff;color:#86198f;display:flex;align-items:center;justify-content:center;font-weight:800;font-family:'Manrope'}
   .use .tx h4{margin:0 0 3px;color:var(--primary-2)}.use .tx p{margin:0;font-size:13px}
   hr.soft{border:0;border-top:1px solid var(--line);margin:18px 0}
+  .chapter-nav{display:flex;gap:12px;margin:34px auto 8px;max-width:940px}
+  .chapter-nav .sp{flex:0 0 0}
+  .chapter-nav a{flex:1;display:block;padding:14px 18px;background:var(--surface);border:1px solid var(--border);border-radius:12px;color:var(--accent);text-decoration:none;font-weight:700;font-size:13.5px}
+  .chapter-nav a:hover{border-color:var(--accent)}
+  .chapter-nav a.next{text-align:right}
   .foot{font-size:12px;color:var(--muted);text-align:center;padding:18px}
-  @media(max-width:920px){.layout{grid-template-columns:1fr}nav.toc{display:none}.g3,.g2{grid-template-columns:1fr}}
-  /* ===== dark mode ===== invert the light theme uniformly; hero / code blocks /
-     table headers double-inverted to keep their original color. ===== */
-  html{filter:invert(1) hue-rotate(180deg)}
-  .hero,pre,th{filter:invert(1) hue-rotate(180deg)}
+  @media(max-width:920px){.g3,.g2{grid-template-columns:1fr}}
   ::selection{background:#86198f;color:#fff}
+  /* ===== theme overrides (kc-shell drives the shared tokens; below are the
+     doc-local vars + hardcoded light-tuned colors re-tuned for dark) ===== */
+  :root[data-theme="dark"]{
+    --primary-2:#93c5fd;
+    --ink-2:#b4bcd0;
+    --line-2:#2e3650;
+    --soft-2:#1e2740;
+    --tos:#a5b4fc; --ws:#e879f9; --pg:#5eead4;
+  }
+  [data-theme="dark"] th{background:#86198f;color:#fff}
+  [data-theme="dark"] code,[data-theme="dark"] .mono{color:#9ecbff}
+  [data-theme="dark"] .note.key{background:rgba(232,121,249,.10)}
+  [data-theme="dark"] tbody tr:hover td{background:rgba(232,121,249,.08)}
+  [data-theme="dark"] .use .ico{background:rgba(232,121,249,.16);color:#e879f9}
+  [data-theme="dark"] .b-ws{background:rgba(232,121,249,.16);color:#e879f9}
+  [data-theme="dark"] .b-pg{background:rgba(94,234,212,.15);color:#5eead4}
+  [data-theme="dark"] .b-ld{background:rgba(52,211,153,.15);color:#34d399}
+  [data-theme="dark"] .b-ds{background:rgba(96,165,250,.16);color:#93c5fd}
+  [data-theme="dark"] .b-key{background:rgba(251,191,36,.15);color:#fbbf24}
+  [data-theme="dark"] ::selection{background:#e879f9;color:#1a0a1c}
 </style>
 </head>
 <body>
-<div class="layout">
+<div class="wrap">
 
-<nav class="toc">
-  <a class="home" href="./index.html">← 지식센터</a>
-  <div class="brand">실시간 websocket 데이터</div>
-  <div class="brandsub">TT AiOps Platform · 2026-06</div>
-  <a class="sec" href="#overview">0 · 개요 — TOS가 아니다</a>
-  <a href="#envelope">1 · 두 zone · 메시지 봉투</a>
-  <a href="#gps">2 · wpt_gps (위치+미션)</a>
-  <a href="#plc">3 · ctab (크레인 PLC)</a>
-  <a href="#net">4 · 주기·핸드셰이크·터널</a>
-  <a class="sec" href="#use">5 · 제품에서의 활용</a>
-  <a href="#use-map">5.1 라이브 맵</a>
-  <a href="#use-pool">5.2 차량 풀 상태 분류</a>
-  <a href="#use-fuse">5.3 작업 풀 융합</a>
-  <a href="#use-health">5.4 피드 헬스 모니터링</a>
-</nav>
-
-<main>
-<div class="hero">
-  <div class="tag">TT AiOps Platform · 실시간 데이터</div>
+<header class="kc-hero">
+  <div class="kicker">여정 02 · 데이터</div>
   <h1>실시간 websocket 데이터 &amp; 활용</h1>
-  <p>장비 ~450대가 매초 쏟아내는 <b>GPS 위치</b>와 <b>크레인 PLC</b> 스트림. <b>TOS DB(Oracle)와는 완전히 다른 시스템</b>입니다 — 권위적 이력이 아니라 "지금 어디서 무엇을 하는가"의 연속 관측. 이 문서는 그 데이터의 구조와, 우리 제품(라이브맵·차량 풀·작업 풀·피드 헬스)이 그것을 <b>어떻게 활용</b>하는지를 설명합니다.</p>
+  <p class="lede">장비 ~450대가 매초 쏟아내는 <b>GPS 위치</b>와 <b>크레인 PLC</b> 스트림. <b>TOS DB(Oracle)와는 완전히 다른 시스템</b>입니다 — 권위적 이력이 아니라 "지금 어디서 무엇을 하는가"의 연속 관측. 이 문서는 그 데이터의 구조와, 우리 제품(라이브맵·차량 풀·작업 풀·피드 헬스)이 그것을 <b>어떻게 활용</b>하는지를 설명합니다.</p>
   <div class="meta">기준 <b>2026-06-09</b> · 두 zone <b>wpt_gps</b>(위치+미션) + <b>ctab</b>(크레인 PLC) · 수신 = API 인제스트(SSH 터널) · 저장 = <b>메모리만</b>(DB 미적재)</div>
-</div>
+</header>
+
+<details class="doc-toc" open>
+  <summary>이 문서의 목차</summary>
+  <div class="doc-toc-links">
+    <a href="#overview">0 · 개요 — TOS가 아니다</a>
+    <a href="#envelope">1 · 두 zone · 메시지 봉투</a>
+    <a href="#gps">2 · wpt_gps (위치+미션)</a>
+    <a href="#plc">3 · ctab (크레인 PLC)</a>
+    <a href="#net">4 · 주기·핸드셰이크·터널</a>
+    <a href="#use">5 · 제품에서의 활용</a>
+    <a href="#use-map">5.1 라이브 맵</a>
+    <a href="#use-pool">5.2 차량 풀 상태 분류</a>
+    <a href="#use-fuse">5.3 작업 풀 융합</a>
+    <a href="#use-health">5.4 피드 헬스 모니터링</a>
+  </div>
+</details>
 
 <!-- 0 -->
 <section id="overview">
@@ -232,16 +251,22 @@
   <p>websocket은 메모리에만 살아있어, 터널/소스가 끊기면 화면이 조용히 빕니다. 그래서 전용 헬스 페이지가 피드 상태를 감시합니다.</p>
   <table class="ws">
     <tr><th style="width:150px">신호</th><th>판정</th></tr>
-    <tr><td>연결</td><td>WS 미연결 또는 60초+ 무수신 → <span class="b" style="background:#fee2e2;color:#b91c1c">적색</span>.</td></tr>
+    <tr><td>연결</td><td>WS 미연결 또는 60초+ 무수신 → <span class="b" style="background:var(--bad-bg);color:var(--bad)">적색</span>.</td></tr>
     <tr><td>신선도</td><td>장비별 age — 15s 이내 fresh · 120s 초과 stale · 600s 후 제거.</td></tr>
     <tr><td>수신율</td><td>분당 메시지(스파크라인) · 활성 장비 수 · 종류별 분포 · 평균 GPS 정확도.</td></tr>
     <tr><td>ctab</td><td>PLC zone 연결·메시지 수 별도 표시.</td></tr>
   </table>
 </section>
 
+<nav class="chapter-nav">
+  <a class="prev" href="tos-db-reference-ko.html">← 02 데이터 — TOS DB 레퍼런스</a>
+  <span class="sp"></span>
+  <a class="next" href="websocket-fields-ko.html">02 데이터 — websocket 원본 필드 →</a>
+</nav>
+
 <div class="foot">CLT Port Group · Digital Team — 실시간 websocket 데이터 &amp; 활용 · 2026-06-09 · 원천: 라이브 캡처 + 인제스트 코드(livemap.rs) · TT AiOps Platform · 내부 공유용</div>
 
-</main>
 </div>
+<script defer src="kc-shell.js"></script>
 </body>
 </html>

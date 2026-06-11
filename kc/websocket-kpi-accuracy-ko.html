@@ -1,37 +1,35 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
+<script>(function(){try{var s=localStorage.getItem('kc-theme');var t=(s==='light'||s==='dark')?s:'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="kc-shell.css" />
 <title>websocket로 KPI 정확도 향상 — 어떻게 정확해지는가 (TT AiOps Platform · 2026-06)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
   :root{
-    --primary:#001b44; --primary-2:#002f6c; --accent:#1e6feb;
-    --ink:#16202c; --ink-2:#3c4654; --muted:#6b7787; --line:#e3e8ef; --line-2:#cdd5e0;
-    --bg:#eef1f5; --card:#ffffff; --soft:#f4f6f9; --soft-2:#eef2f7;
-    --good:#15803d; --good-bg:#dcfce7; --warn:#b45309; --warn-bg:#fef3c7; --bad:#b91c1c; --bad-bg:#fee2e2;
+    --primary-2:#002f6c;
+    --ink-2:#3c4654; --line-2:#cdd5e0; --soft-2:#eef2f7;
     --amber:#b45309; --ws:#86198f; --tos:#3730a3;
-    --r:10px;
   }
   *{margin:0;padding:0;box-sizing:border-box}
   body{font-family:'Inter','Malgun Gothic','Apple SD Gothic Neo',sans-serif;color:var(--ink);background:var(--bg);line-height:1.7;-webkit-font-smoothing:antialiased}
-  .layout{display:grid;grid-template-columns:240px 1fr;gap:34px;max-width:1340px;margin:0 auto;padding:0 28px}
-  nav.toc{position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;padding:24px 8px 24px 0;font-size:13px}
-  nav.toc .brand{font-family:'Manrope';font-weight:800;font-size:14px;color:var(--primary);letter-spacing:-.02em}
-  nav.toc .brandsub{font-size:11px;color:var(--muted);margin:2px 0 14px}
-  nav.toc a{display:block;color:var(--ink-2);text-decoration:none;padding:5px 10px;border-radius:7px;border-left:2px solid transparent;margin-bottom:1px}
-  nav.toc a:hover{background:var(--soft-2);color:var(--primary)}
-  nav.toc a.sec{font-weight:700;color:var(--primary);margin-top:11px}
-  nav.toc .home{font-size:11px;color:var(--accent);text-decoration:none;display:inline-block;margin-bottom:10px}
-  main{padding:34px 0 120px;min-width:0}
-  .hero{background:linear-gradient(135deg,#3a1d05,#b45309);color:#fff;border-radius:16px;padding:34px 40px;margin-bottom:26px;box-shadow:0 10px 30px rgba(58,29,5,.22)}
-  .hero .tag{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#fde2b0;font-weight:600}
-  .hero h1{font-family:'Manrope';font-weight:800;font-size:30px;letter-spacing:-.03em;line-height:1.2;margin:9px 0 10px}
-  .hero p{color:#fbe6cf;font-size:14.5px;font-weight:300;max-width:840px}
-  .hero .meta{margin-top:15px;font-size:12px;color:#f3d49b}
-  .hero .meta b{color:#fff;font-weight:600}
+  .wrap{max-width:960px;margin:0 auto;padding:36px 28px 90px}
+  /* hero */
+  .kc-hero{margin:0 0 18px}
+  .kc-hero .kicker{font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+  .kc-hero h1{font-family:'Manrope','Malgun Gothic',sans-serif;font-weight:800;font-size:30px;letter-spacing:-.02em;margin:6px 0 10px;color:var(--ink)}
+  .kc-hero .lede{font-size:15.5px;color:var(--ink-soft);margin:0;max-width:840px}
+  .kc-hero .meta{margin-top:10px;font-size:12px;color:var(--muted)}
+  .kc-hero .meta b{color:var(--ink);font-weight:600}
+  /* in-page toc card */
+  .doc-toc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 18px;margin:0 0 18px}
+  .doc-toc summary{cursor:pointer;font-weight:800;font-size:13px;color:var(--ink)}
+  .doc-toc-links{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;font-size:12.5px}
+  .doc-toc-links a{color:var(--accent);text-decoration:none}
+  .doc-toc-links a:hover{text-decoration:underline}
   section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:28px 32px;margin-bottom:20px;scroll-margin-top:16px}
   .kicker{font-size:11.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--amber)}
   h2{font-family:'Manrope';font-weight:800;font-size:23px;color:var(--primary);letter-spacing:-.02em;margin:6px 0 14px;padding-bottom:11px;border-bottom:2px solid var(--soft-2)}
@@ -77,37 +75,58 @@
   .vs .col .big{font-family:'Manrope';font-weight:800;font-size:22px}
   .vs .col.bad .big{color:#b91c1c}.vs .col.good .big{color:#047857}
   hr.soft{border:0;border-top:1px solid var(--line);margin:18px 0}
+  /* chapter nav */
+  .chapter-nav{display:flex;gap:12px;margin:34px auto 8px;max-width:960px}
+  .chapter-nav .sp{flex:0 0 0}
+  .chapter-nav a{flex:1;display:block;padding:14px 18px;background:var(--surface);border:1px solid var(--border);border-radius:12px;color:var(--accent);text-decoration:none;font-weight:700;font-size:13.5px}
+  .chapter-nav a:hover{border-color:var(--accent)}
+  .chapter-nav a.next{text-align:right}
   .foot{font-size:12px;color:var(--muted);text-align:center;padding:18px}
-  @media(max-width:920px){.layout{grid-template-columns:1fr}nav.toc{display:none}.g3,.g2,.vs{grid-template-columns:1fr}}
-  /* ===== dark mode ===== */
-  html{filter:invert(1) hue-rotate(180deg)}
-  .hero,pre,th{filter:invert(1) hue-rotate(180deg)}
+  @media(max-width:920px){.g3,.g2,.vs{grid-template-columns:1fr}.chapter-nav{flex-direction:column}}
   ::selection{background:#b45309;color:#fff}
+  /* ===== dark theme — doc-local vars + hardcoded light fills (shell provides shared tokens) ===== */
+  :root[data-theme="dark"]{
+    --primary-2:#9ec3ff; --ink-2:#b4bcd0; --line-2:#2e3650; --soft-2:#1e2640;
+    --amber:#fbbf24; --ws:#e879f9; --tos:#a5b4fc;
+  }
+  [data-theme="dark"] code,[data-theme="dark"] .mono{color:#8ab4ff}
+  [data-theme="dark"] th{background:#92400e}
+  [data-theme="dark"] tbody tr:hover td{background:rgba(251,191,36,.08)}
+  [data-theme="dark"] .note.key{background:rgba(251,191,36,.08)}
+  [data-theme="dark"] .b-hi,[data-theme="dark"] .b-done{background:rgba(52,211,153,.15);color:#34d399}
+  [data-theme="dark"] .b-md{background:rgba(251,191,36,.15);color:#fbbf24}
+  [data-theme="dark"] .b-lo{background:#2a3245;color:#94a3b8}
+  [data-theme="dark"] .b-ws{background:rgba(232,121,249,.15);color:#e879f9}
+  [data-theme="dark"] .b-tos{background:rgba(165,180,252,.15);color:#a5b4fc}
+  [data-theme="dark"] .b-plan{background:rgba(96,165,250,.15);color:#60a5fa}
+  [data-theme="dark"] .vs .col.bad{background:rgba(248,113,113,.08);border-color:rgba(248,113,113,.3)}
+  [data-theme="dark"] .vs .col.good{background:rgba(52,211,153,.08);border-color:rgba(52,211,153,.3)}
+  [data-theme="dark"] .vs .col.bad h4,[data-theme="dark"] .vs .col.bad .big{color:#f87171}
+  [data-theme="dark"] .vs .col.good h4,[data-theme="dark"] .vs .col.good .big{color:#34d399}
 </style>
 </head>
 <body>
-<div class="layout">
+<div class="wrap">
 
-<nav class="toc">
-  <a class="home" href="./index.html">← 지식센터</a>
-  <div class="brand">websocket로 KPI 정확도 향상</div>
-  <div class="brandsub">TT AiOps Platform · 2026-06</div>
-  <a class="sec" href="#tldr">한눈에 요약</a>
-  <a href="#how">1 · 정확도는 "어떻게" 올라가나</a>
-  <a href="#cycle">2 · TT 사이클 재검토 (핵심)</a>
-  <a href="#mph">3 · K_MPH 실시간</a>
-  <a href="#qcq">4 · K_QC_Q 실시간</a>
-  <a href="#util">5 · K_UTIL 실시간</a>
-  <a href="#limit">6 · 한계 · 정직한 노트</a>
-</nav>
-
-<main>
-<div class="hero">
-  <div class="tag">TT AiOps Platform · KPI Accuracy</div>
+<header class="kc-hero">
+  <div class="kicker">여정 03 · 지표</div>
   <h1>websocket로 KPI 정확도 향상</h1>
-  <p>KPI의 권위는 <b>TOS</b>지만, TOS는 몇 분마다 당겨오고 시간 단위로 버킷팅되며 — 때로는 <b>아예 다른 양을 잽니다</b>. 초당 GPS/PLC를 활용하면 실시간 구간의 정확도를 끌어올리고, 잘못 측정되던 지표를 바로잡을 수 있습니다. 이 문서는 "<b>실제로 어떻게 정확해지는가</b>"에 초점을 둡니다 — 특히 <b>TT 사이클 타임</b> 재검토를 중심으로.</p>
+  <p class="lede">KPI의 권위는 <b>TOS</b>지만, TOS는 몇 분마다 당겨오고 시간 단위로 버킷팅되며 — 때로는 <b>아예 다른 양을 잽니다</b>. 초당 GPS/PLC를 활용하면 실시간 구간의 정확도를 끌어올리고, 잘못 측정되던 지표를 바로잡을 수 있습니다. 이 문서는 "<b>실제로 어떻게 정확해지는가</b>"에 초점을 둡니다 — 특히 <b>TT 사이클 타임</b> 재검토를 중심으로.</p>
   <div class="meta">기준 <b>2026-06-09</b> · 원칙: websocket은 실시간 보정·교차검증, 야간 TOS 확정값이 최종 권위 · <b>외부 평가 4회 반영</b></div>
-</div>
+</header>
+
+<details class="doc-toc" open>
+  <summary>이 문서의 목차</summary>
+  <div class="doc-toc-links">
+    <a href="#tldr">한눈에 요약</a>
+    <a href="#how">1 · 정확도는 "어떻게" 올라가나</a>
+    <a href="#cycle">2 · TT 사이클 재검토 (핵심)</a>
+    <a href="#mph">3 · K_MPH 실시간</a>
+    <a href="#qcq">4 · K_QC_Q 실시간</a>
+    <a href="#util">5 · K_UTIL 실시간</a>
+    <a href="#limit">6 · 한계 · 정직한 노트</a>
+  </div>
+</details>
 
 <!-- TLDR -->
 <section id="tldr">
@@ -223,9 +242,11 @@ container1 변경(nonempty→다른값)을 셈     →  <span class="n">~574/시
   <p style="font-size:12.5px;color:var(--muted)">구현: <span class="mono">crates/api/src/livemap.rs</span>(container1 배달+GPS이동 검증·아티팩트 카운트·median/spread·기아·가동/작업률) · <span class="mono">crates/core/src/kpi.rs</span>(개명) · <span class="mono">web/src/App.tsx</span>(카드별 출처 배지 TOS/⚡WS·듀얼값). TOS 사이클 근사(MCH_OPERATION)는 검증 완료·파이프라인 차후. 외부 평가 4회(진단·코드리뷰·사이클 필터·최종 go/no-go)의 필수 수정 반영.</p>
 </section>
 
+<nav class="chapter-nav"><a class="prev" href="kpi-computation-ko.html">← 03 지표 — KPI 산출</a><span class="sp"></span><a class="next" href="dispatch-pools-ko.html">04 운영 — 배차 풀 (라이브) →</a></nav>
+
 <div class="foot">CLT Port Group · Digital Team — websocket로 KPI 정확도 향상 · 2026-06-09 · 외부 평가 4회 반영 · TT AiOps Platform · 내부 공유용</div>
 
-</main>
 </div>
+<script defer src="kc-shell.js"></script>
 </body>
 </html>

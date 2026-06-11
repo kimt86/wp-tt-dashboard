@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<script>(function(){try{var s=localStorage.getItem('kc-theme');var t=(s==='light'||s==='dark')?s:'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>사이클 감지 v2 설계 — 레그 기반 상태머신 — WP-TT 지식센터</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kc-shell.css" />
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Inter", "Malgun Gothic", system-ui, sans-serif; font-size: 14.5px; line-height: 1.75; -webkit-font-smoothing: antialiased; }
+  h1, h2, h3 { font-family: "Manrope", "Malgun Gothic", sans-serif; }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 36px 28px 80px; }
+  .kc-hero { margin: 0 0 18px; }
+  .kc-hero .kicker { font-size: 11.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+  .kc-hero h1 { font-size: 30px; letter-spacing: -.02em; margin: 6px 0 10px; color: var(--ink); }
+  .kc-hero .lede { font-size: 15.5px; color: var(--ink-soft); margin: 0; }
+  .doc-toc { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 18px; margin: 18px 0; }
+  .doc-toc summary { cursor: pointer; font-weight: 800; font-size: 13px; color: var(--ink); }
+  .doc-toc-links { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 12.5px; }
+  .doc-toc-links a { color: var(--accent); text-decoration: none; }
+  .doc-toc-links a:hover { text-decoration: underline; }
+  section.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px 28px; margin-top: 18px; }
+  section.card > h2 { font-size: 19px; margin: 0 0 12px; letter-spacing: -.01em; color: var(--ink); }
+  section.card > h2 .no { color: var(--accent); font-family: "JetBrains Mono", monospace; font-size: 15px; margin-right: 8px; }
+  section.card h3 { font-size: 14.5px; margin: 18px 0 8px; color: var(--ink); }
+  section.card p { margin: 0 0 12px; color: var(--ink); }
+  section.card p.lede { color: var(--ink-soft); }
+  .card a { color: var(--accent); }
+  ul, ol { margin: 0 0 12px; padding-left: 22px; color: var(--ink); }
+  li { margin-bottom: 5px; }
+  code { font-family: "JetBrains Mono", monospace; font-size: 12.5px; background: var(--soft); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; color: var(--ink); }
+  pre { background: var(--soft); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font-family: "JetBrains Mono", monospace; font-size: 12px; line-height: 1.7; color: var(--ink); }
+  pre code { background: none; border: 0; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 14px; font-size: 13px; }
+  th { text-align: left; padding: 8px 10px; background: var(--soft); color: var(--ink-soft); font-weight: 700; border-bottom: 2px solid var(--border); vertical-align: top; }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--border); color: var(--ink); vertical-align: top; }
+  td.mono, .mono { font-family: "JetBrains Mono", monospace; font-size: 12px; }
+  .callout { border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 10px 10px 0; padding: 12px 16px; margin: 12px 0; font-size: 13.5px; color: var(--ink); }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-bg); }
+  .callout.good { border-left-color: var(--good); background: var(--good-bg); }
+  .callout b.t { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+  .callout.warn b.t { color: var(--warn); } .callout.good b.t { color: var(--good); } .callout:not(.warn):not(.good) b.t { color: var(--accent); }
+  .sm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 14px 0; }
+  .sm .st { background: var(--soft); border: 1.5px solid var(--border); border-radius: 999px; padding: 7px 14px; font-size: 12.5px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+  .sm .st.hl { border-color: var(--accent); color: var(--accent); }
+  .sm .st.done { border-color: var(--good); color: var(--good); }
+  .sm .ar { color: var(--muted); font-size: 14px; }
+  footer.foot { margin-top: 24px; color: var(--muted); font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="kc-hero">
+  <div class="kicker">참고 · 설계 문서</div>
+  <h1>사이클 감지 v2 설계 — 레그 기반 상태머신</h1>
+  <p class="lede">topos1 전이(=작업 할당)를 1급 신호로 승격한 차세대 단계 감지 설계.
+  실측 검증으로 확정한 신호 의미론 위에 세워졌고, <b>그림자(병렬) 모드로 가동하며 승격 게이트를 통과해야
+  본 로직이 됩니다</b>. 현행 v1 로직은 <a href="cycle-detection-ko.html">사이클 감지 로직</a> 참고.</p>
+</header>
+
+<details class="doc-toc" open>
+  <summary>이 문서의 목차</summary>
+  <div class="doc-toc-links">
+    <a href="#goal">1 · 목표와 비목표</a>
+    <a href="#signals">2 · 신호 모델 (실측 확정)</a>
+    <a href="#leg">3 · 레그 상태머신</a>
+    <a href="#lifecycle">4 · 사이클 수명과 단계 매핑</a>
+    <a href="#handover">5 · 사이클 6-이벤트 모델</a>
+    <a href="#storage">6 · 저장 — tt_cycle_v2</a>
+    <a href="#gates">7 · 검증 계획과 승격 게이트</a>
+    <a href="#limits">8 · 리스크와 한계</a>
+    <a href="#results">9 · 반복 개선과 실측 결과 (v2.2→v2.4)</a>
+  </div>
+</details>
+
+<section class="card" id="goal">
+  <h2><span class="no">1</span>목표와 비목표</h2>
+  <ol>
+    <li>4단계(공차이동·받기·부하이동·주기) <b>포착률·시각 정확도 최대화</b> — 특히 약한 크레인 측 경계 (v1 실측: DS 픽업 29%, LD 드롭 42%).</li>
+    <li><b>무회귀</b>: 사이클 완료 판정(이동필터)·라이브 KPI·dispatch 분류는 불변. v2는 사이클 <i>내부</i> 단계만 재설계.</li>
+    <li><b>그림자 우선</b>: 별도 테이블에 병렬 기록 → 같은 사이클에서 v1과 페어드 비교 → 게이트 통과 시에만 승격. (핫패스 즉흥 수정 실패의 교훈 — 13분 워밍업 구간을 회귀로 오판해 성급히 리버트했던 사례가 <a href="research-log.html">연구 일지</a>에 있다.)</li>
+    <li>관측 못 한 단계는 <b>NULL</b> (추정 금지 원칙 유지).</li>
+  </ol>
+</section>
+
+<section class="card" id="signals">
+  <h2><span class="no">2</span>신호 모델 — 실측으로 확정한 의미론</h2>
+  <table>
+    <tr><th>신호</th><th>실측 사실</th><th>v2 역할</th></tr>
+    <tr><td class="mono">topos1</td><td>할당 이벤트 신호. DS: 크레인(픽업)→블록(드롭), LD: 블록→크레인 전이 실측. <b>플립 = 핸드오버 완료 + 중앙값 19초</b> (PLC land 대비, n=36, IQR 1~26s)</td><td><b>레그 시작</b>(할당) + 핸드오버 완료 마커</td></tr>
+    <tr><td class="mono">arr_dtime</td><td>도착 시각(HH:MM:SS)이 도착 상태 동안 지속 → 늦게 봐도 소급 취득, 재시작 견고</td><td>도착 시각 1순위</td></tr>
+    <tr><td class="mono">arrival</td><td>블록 ~78% / 크레인 ~23% (정차 트럭)</td><td>도착 2순위</td></tr>
+    <tr><td class="mono">cur_loc</td><td><b>매 프레임 상시</b> 위치 라벨 (미션 필드 아님)</td><td>도착 3순위 — 블록 prefix 매치 / 크레인 WHARF_* 진입</td></tr>
+    <tr><td>크레인 GPS</td><td>송출 57% + 학습 centroid 보강; 40m 근접은 시간오차 큼(~133s)</td><td>도착 4순위 (보조)</td></tr>
+    <tr><td>QC PLC</td><td>키 6개 전수(<span class="mono">crane load lock land hpos tpos</span>) — <b>트럭/컨테이너 식별자 없음</b> (전수 열거로 확정). lift/land 엣지 ±초 정밀</td><td>핸드오버 시작·물리 완료 (플립-앵커 페어링)</td></tr>
+    <tr><td>RTG</td><td>GPS만 송출(PLC·미션 필드 없음). 관여 거리: 같은 bay ~25m vs 대기 100m+ (예측연구 실증)</td><td>블록 측 핸드오버 시작 추정</td></tr>
+    <tr><td class="mono">container1/2</td><td>TOS 배정 필드(물리 적재 아님), c2c 사전배정. 트윈 슬롯 스왑 잦음(가드 적용)</td><td>완료 엣지(이동필터)·트윈 식별 — 단계 경계엔 미사용</td></tr>
+  </table>
+  <div class="callout"><b class="t">캘리브레이션</b>측정 방법론 자체를 검증: LD 해방 vs QC PLC lift = 중앙값 <b>−4초</b> (n=39) — 선행 연구의
+  "±수 초 일치"를 재현. TOS 필드 갱신은 물리적 크레인 이벤트를 초 단위로 추종한다.
+  (raw 구독 시 함정: 피드 서버가 ws ping 무응답 → python 클라이언트는 <code>ping_interval=None</code> 필수.)</div>
+</section>
+
+<section class="card" id="leg">
+  <h2><span class="no">3</span>레그(Leg) 상태머신</h2>
+  <p class="lede">트럭의 삶 = 레그의 연속. 레그 = "한 목적지(topos1 타깃)로의 이동 + 체류" 단위.</p>
+  <div class="sm">
+    <span class="st hl">레그 할당</span><span class="ar">→</span>
+    <span class="st">이동</span><span class="ar">→</span>
+    <span class="st">도착</span><span class="ar">→</span>
+    <span class="st done">출발</span><span class="ar">→</span>
+    <span class="st hl">다음 레그</span>
+  </div>
+  <table>
+    <tr><th>경계</th><th>판정</th></tr>
+    <tr><td>레그 시작</td><td>latch된 topos1이 <b>새 비-빈 값으로 전이</b> (= 그 구간 할당)</td></tr>
+    <tr><td>레그 도착</td><td>우선순위 합성, 출처(<code>arr_src</code>) 기록: ① <code>arr_dtime</code>(소급, 단 레그 할당 이후 값만) ② ARRIVED 상승엣지 ③ 정차 + <code>cur_loc</code> 매치(블록=prefix, 크레인=WHARF_*) ④ 정차 + 크레인 GPS ≤60m. <b>크레인측 조기 cur_loc latch는 이후 arr_dtime으로 업그레이드</b>(v2.3), 레그가 못 잡은 블록 도착은 v1 신호로 백필(v2.4).</td></tr>
+    <tr><td>레그 출발</td><td>도착 후 속도 ≥ 3km/h 회복 (또는 다음 레그 할당이 닫음)</td></tr>
+  </table>
+  <div class="callout"><b class="t">핸드오버 시작은 레그 경계 아님</b>크레인 핸드오버 *시작 시각*은 웹소켓으로 신뢰도 있게 관측 불가(QC PLC에 트럭 식별자 없음) → 수집 포기.
+  받기·주기(픽업·드롭에서의 체류)는 <b>도착~출발 간격</b>으로 충분히 표현된다(5장).</div>
+</section>
+
+<section class="card" id="lifecycle">
+  <h2><span class="no">4</span>사이클 수명과 단계 매핑</h2>
+  <pre><code>완료(v1 이동필터, 불변) ──→ 오픈 = 직전 완료 후 첫 할당 신호 (topos1 전이 ∪ container1 세팅)
+                              c2c는 완료와 동시 / 공차 갭이 있으면 공차 중 할당</code></pre>
+  <table>
+    <tr><th>작업</th><th>레그1 = 공차이동·받기</th><th>레그2 = 부하이동·주기</th></tr>
+    <tr><td><b>DS</b> 양하</td><td>타깃=<b>크레인</b>: 오픈→도착(공차이동) · 도착→플립(받기)</td><td>타깃=<b>블록</b>: 플립→도착(부하이동) · 도착→인도(주기)</td></tr>
+    <tr><td><b>LD</b> 적하</td><td>타깃=<b>블록</b> — 트윈이면 블록1→블록2 두 레그(topos2가 예고)</td><td>타깃=<b>크레인</b></td></tr>
+    <tr><td><b>MI/MO/LC</b></td><td colspan="2">블록→블록, 순서 기반 (첫 레그 = 픽업)</td></tr>
+  </table>
+  <p>받기 종료 = topos1 플립(= 핸드오버 완료 +19s 실측). 트윈·슬롯스왑·이동필터·c2c 플래그는 v1과 공유.</p>
+</section>
+
+<section class="card" id="handover">
+  <h2><span class="no">5</span>사이클 6-이벤트 모델 (우선순위 정렬)</h2>
+  <p class="lede">수집 목표를 우선순위로 재정렬: ① 사이클 열림/닫힘 ② 각 trip의 시작·도착 위치+시각.
+  크레인 핸드오버 <b>시작 시각</b>은 웹소켓으로 신뢰도 있게 관측 불가 → <b>수집 포기</b>. 받기·주기는 체류 간격으로 대체.</p>
+  <pre><code>사이클시작 ─[공차이동]─ 공차완료 ─[받기]─ 부하시작 ─[부하이동]─ 부하완료 ─[주기]─ 사이클종료
+           (공차이동시작)</code></pre>
+  <table>
+    <tr><th>이벤트</th><th>컬럼</th><th>무엇으로 관측</th></tr>
+    <tr><td>① 사이클 시작</td><td class="mono">opened_at</td><td>직전 완료 후 첫 배정 신호(topos1/container1)</td></tr>
+    <tr><td>② 공차이동 시작</td><td class="mono">empty_travel_start_at</td><td>오픈 후 첫 실제 출발(speed≥idle, 픽업 도달 전). ①→② = 배차 후 출발 대기. 선배치면 NULL</td></tr>
+    <tr><td>③ 공차이동 완료</td><td class="mono">empty_arrived_at</td><td>픽업 도착 (arr_dtime&gt;ARRIVED&gt;cur_loc&gt;GPS; <b>container1-set이 픽업 레그 보장</b>; v1 백필이 시각 보정)</td></tr>
+    <tr><td>④ 부하이동 시작</td><td class="mono">pickup_left_at</td><td>픽업 출발(적재 후) = topos1 플립</td></tr>
+    <tr><td>⑤ 부하이동 완료</td><td class="mono">laden_arrived_at</td><td>드롭 도착</td></tr>
+    <tr><td>⑥ 사이클 종료</td><td class="mono">dropped_at</td><td>container1 클리어(이동필터, v1과 공유)</td></tr>
+  </table>
+  <div class="callout"><b class="t">받기 / 주기 = 체류 간격</b><b>받기</b> = ④−③ (픽업에서 머문 시간), <b>주기</b> = ⑥−⑤ (드롭에서 머문 시간).
+  핸드오버를 따로 안 쪼개도 두 체류 시간이 도착~출발 간격으로 자동으로 떨어진다 — 핸드오버 시작 시각이 필요 없음.</div>
+  <div class="callout warn"><b class="t">왜 핸드오버 시작을 포기했나</b>QC PLC는 6키뿐이고 <b>트럭·컨테이너 식별자가 없다</b>(전수 확인). 플립-앵커 페어링으로
+  근사했으나 실측 충실도 낮고(픽업 ~26%, 확신 <code>plc_paired</code>는 극소수) 대부분 추정(<code>plc_active</code>)이라,
+  "확신 없으면 빼라" 원칙에 따라 수집 자체를 중단했다.</div>
+</section>
+
+<section class="card" id="storage">
+  <h2><span class="no">6</span>저장 — 그림자 테이블 <code>tt_cycle_v2</code> (마이그레이션 0024, 6이벤트로 0025)</h2>
+  <p>v1 행과 <code>(ytno, dropped_at)</code> 1:1 조인. v1 컬럼은 일절 불변.</p>
+  <table>
+    <tr><th>컬럼</th><th>이벤트</th></tr>
+    <tr><td class="mono">opened_at</td><td>① 사이클 시작</td></tr>
+    <tr><td class="mono">empty_travel_start_at</td><td>② 공차이동 시작</td></tr>
+    <tr><td class="mono">empty_arrived_at</td><td>③ 공차이동 완료 (픽업 도착)</td></tr>
+    <tr><td class="mono">pickup_left_at</td><td>④ 부하이동 시작 (픽업 출발)</td></tr>
+    <tr><td class="mono">laden_arrived_at</td><td>⑤ 부하이동 완료 (드롭 도착)</td></tr>
+    <tr><td class="mono">dropped_at</td><td>⑥ 사이클 종료</td></tr>
+    <tr><td class="mono">arr_src_pickup · arr_src_drop</td><td>도착 신호 출처(arr_dtime/arrived/cur_loc/gps/pre_positioned/container1/v1) — 정밀도 차등을 ML이 가중</td></tr>
+    <tr><td class="mono">legs JSONB</td><td>레그 원자료(타깃·시각·출처) — 검증·디버그용</td></tr>
+  </table>
+  <p>구현: ingest의 병렬 LegTracker(레그 전이·도착·출발) + flusher에서 INSERT(<code>ON CONFLICT DO NOTHING</code> 멱등).
+  <b>0025</b>에서 핸드오버 컬럼(<code>pickup_hand_start_at·pickup_plc_at·drop_hand_start_at·handover_src_*</code>) 제거,
+  <code>empty_travel_start_at</code> 추가.</p>
+</section>
+
+<section class="card" id="gates">
+  <h2><span class="no">7</span>검증 계획과 승격 게이트</h2>
+  <ul>
+    <li><b>페어드 비교</b>: 같은 사이클 행에서 v1 vs v2 — 운영 변동(블록 ARRIVED율이 시간대별 78↔63% 출렁임 실측)이 양쪽에 동일 작용.</li>
+    <li><b>워밍업 필터</b>: <code>opened_at &gt; 배포 + 15분</code> 사이클만 평가. 재시작 직후 측정 금지.</li>
+    <li><b>관찰 24시간 이상</b> 후 게이트 평가.</li>
+  </ul>
+  <table>
+    <tr><th>게이트</th><th>기준</th><th>합격선</th></tr>
+    <tr><td>G1</td><td>약했던 경계 포착률</td><td>DS 픽업도착 ≥ 60% (v1 29%) · LD 드롭도착 ≥ 70% (v1 42%)</td></tr>
+    <tr><td>G2</td><td>강했던 경계 유지</td><td>LD 픽업도착·DS 드롭도착 v1 동등 이상 (−5%p 허용)</td></tr>
+    <tr><td>G3</td><td>일치성</td><td>v1·v2 모두 있는 경계의 |Δ| 중앙값 ≤ 30초</td></tr>
+    <tr><td>G4</td><td>건전성</td><td>순서 위반 0 · 단계합 ≤ cycle_s(+5%) · 단일 신호 의존 없음(arr_src 분포)</td></tr>
+  </table>
+  <p><b>전부 충족 시에만</b> 메인 단계 컬럼 산출을 v2로 교체. 불합격 시 <code>arr_src</code>·<code>legs</code>로 신호별 원인 분해 → 수정 → 재검증 (그림자라 안전).</p>
+</section>
+
+<section class="card" id="limits">
+  <h2><span class="no">8</span>리스크와 한계 (정직)</h2>
+  <ul>
+    <li><b>topos1도 이벤트성</b> — 할당 메시지 유실 시 레그 시작이 늦게 잡힘. arr_dtime 소급이 일부 만회. NULL 허용.</li>
+    <li><b>cur_loc은 지역 해상도</b> — WHARF_12는 "안벽 어딘가". 어느 크레인인지는 topos1(타깃)이 제공.</li>
+    <li><b>PLC 폴백(plc_active)은 추정</b> — 같은 크레인 다중 트럭 시 모호. 출처 태그로 구분, 정밀은 plc_paired만.</li>
+    <li><b>arr_dtime</b> — 날짜 미포함(자정 롤오버 처리), 6시간 초과 체류는 기각.</li>
+    <li><b>재시작 워밍업</b> — v2도 동일(~15분). 검증 필터로 통제.</li>
+  </ul>
+  <p>원문 설계: <code>docs/cycle-detection-v2-design.md</code> · 현행 v1: <a href="cycle-detection-ko.html">사이클 감지 로직</a> ·
+  탐사 과정: <a href="research-log.html">연구 일지</a> · 필드 의미: <a href="websocket-fields-ko.html">websocket 원본 필드</a></p>
+</section>
+
+<section class="card" id="results">
+  <h2><span class="no">9</span>반복 개선과 실측 결과 (v2.2 → v2.4)</h2>
+  <p class="lede">그림자 가동 후 <b>페어드 평가</b>(같은 <code>(ytno, dropped_at)</code> 행에서 v1 vs v2)로 격차를 분해하고,
+  <code>arr_src</code>·<code>legs</code> JSONB로 신호별 원인을 짚어 네 차례 수정했다. 모두 v1 핫패스 무변경 — 그림자라 가역적.</p>
+
+  <h3>9.1 v2.2 진단 (n=6,836 페어드 · 약 10.5시간)</h3>
+  <p>두 곳이 무너져 있었다.</p>
+  <ul>
+    <li><b>크레인측 |Δ| ~200초</b> — 크레인 도착의 <code>gps</code>·<code>arrived</code> 출처가 실측 <b>거의 0</b>
+      (QC GPS가 디바이스맵에 유효 진입하지 않음). 그래서 <code>cur_loc=WHARF</code>가 안벽 진입 첫 프레임에 ~200초
+      <b>조기 latch</b>되어, 트럭이 실제 크레인에 도달했을 때의 정확한 <code>arr_dtime</code>을 잠가버렸다.
+      → 당초 설계의 "크레인 GPS ≤40m로 조이기" 처방은 <b>폐기</b>(GPS 자체가 없음).</li>
+    <li><b>LD 픽업 포착 45% (v1 62%)</b> — 미포착의 55%가 <b>블록 레그 자체 미형성</b>(mode2): v1 이동필터 드롭
+      에지가 블록 c2c에서 조기 발화 → 한 LD 트립이 "픽업 전용 + 드롭 전용" 두 사이클로 <b>분할</b>되어
+      뒤 사이클이 픽업 레그를 잃음(트럭 트레이스로 확정). 나머지 45%는 도착 미감지(mode1).</li>
+  </ul>
+
+  <h3>9.2 네 가지 수정</h3>
+  <table>
+    <tr><th>수정</th><th>겨냥</th><th>로직 (<code>livemap.rs</code> v2 블록)</th><th>출처 태그</th></tr>
+    <tr><td><b>A</b> 업그레이드</td><td>G3 크레인 |Δ|</td><td>조기 <code>cur_loc</code> latch를 이후 도달 시점의 <code>arr_dtime</code>/<code>ARRIVED</code>로 <b>승격</b>(+ 선행 출발·핸드오버 리셋)</td><td class="mono">arr_dtime</td></tr>
+    <tr><td><b>B</b> 선배치</td><td>mode1 픽업 채움</td><td>레그 생성 시 이미 타깃 <b>블록</b>에 정차 중이면 <code>arrived=assigned</code> (크레인 제외 — WHARF 과조)</td><td class="mono">pre_positioned</td></tr>
+    <tr><td><b>C</b> 이월</td><td>mode2 픽업 채움</td><td>드롭 종류 레그에 도달 못한 채 닫히는 사이클의 픽업 레그를 다음 사이클로 <b>이월</b>(조기 c2c 분할 보정)</td><td>—</td></tr>
+    <tr><td><b>D</b> 백필</td><td>블록 포착 −7%p</td><td>레그 모델이 놓친 블록 도착을 같은 행 <b>v1 연속 추적기 도착</b>으로 폴백(<code>pickup≤drop</code> 클램프). 레그 모델 무변경</td><td class="mono">v1</td></tr>
+  </table>
+  <p>A·B·C = <b>v2.3</b> (배포 2026-06-11 12:01 KST) · D = <b>v2.4</b> (배포 13:57 KST).</p>
+
+  <h3>9.3 v2.3 결과 (n=604 페어드 · 약 73분 본가동)</h3>
+  <table>
+    <tr><th>경계</th><th>v2.3 포착</th><th>v1 포착</th><th>|Δ| 중앙값</th></tr>
+    <tr><td>DS 픽업 (크레인)</td><td>57%</td><td>44%</td><td><b>1초</b> ← v2.2 200초</td></tr>
+    <tr><td>LD 드롭 (크레인)</td><td><b>81%</b></td><td>54%</td><td><b>1초</b> ← v2.2 190초</td></tr>
+    <tr><td>DS 드롭 (블록)</td><td>81%</td><td>88%</td><td>1초</td></tr>
+    <tr><td>LD 픽업 (블록)</td><td>58% ← v2.2 45%</td><td>65%</td><td>1초</td></tr>
+  </table>
+  <div class="callout good"><b class="t">G3·G4 통과</b>크레인측 |Δ| 200/190초 → <b>전 경계 중앙값 1초</b>(Fix A). 주순서 위반 0.
+    타이밍이 v1과 사실상 동일해졌고, DS픽업·LD드롭 포착은 v1을 +13/+27%p 추월.</div>
+  <div class="callout warn"><b class="t">남은 약점 = 블록 포착 하나</b><b>블록 도착 포착이 v1보다 ~7%p 낮음</b>(G2 강경계 −2%p 미달).
+    뿌리는 토포스 레그가 안 뜨는 픽업/드롭(잔존 mode2) — v1의 연속 추적기가 포착에 더 robust. → v2.4(D)로 해소.</div>
+
+  <h3>9.4 v2.4 — 블록 도착 백필 (D)</h3>
+  <p>레그 모델은 풍부한 단계 구조를 주지만 토포스 레그가 안 뜨면 도착을 놓친다. v1 연속 추적기는 반대로 포착에 강하다.
+  그래서 v2 도착값을 <b>"레그 신호 우선, 없으면 같은 행 v1 신호"</b>로 정의했다 — 레그 모델은 손대지 않고 플러시에서만
+  폴백, 단조성(<code>pickup ≤ drop ≤ dropped</code>)을 클램프로 보장. v2 포착이 구조적으로 <b>v1 이상</b>이 되어 G2가
+  닫히고, 같은 신호이므로 |Δ|≈0이 유지된다. (선배치 근사값도 v1 실측 도착이 있으면 그것으로 교정.)</p>
+  <p><b>v2.4 평가 (n=359)</b>: 블록 포착이 v1을 추월 — <b>LD픽업 67% &gt; v1 64% · DS드롭 84% &gt; v1 80%</b>(G2 닫힘),
+  |Δ| 전 경계 1초 유지. 단 백필한 정확한 도착이 분할 사이클의 스테일 <code>pickup_left</code>보다 늦어
+  <code>empty_arrived &gt; pickup_left</code> 18건 발생(G4 위반).</p>
+
+  <h3>9.5 v2.4.1 — 단조 클램프 확장</h3>
+  <p>백필 도착이 <code>pickup_left</code>를 추월하면, 신뢰 못 할 그 출발 시각을 <b>NULL</b> 처리(정확한 도착 포착은 유지).
+  단조 체인을 <code>empty_arrived ≤ pickup_left ≤ laden_arrived</code> 전체로 강제.</p>
+  <div class="callout good"><b class="t">v2.4.1 검증 (n=204)</b><code>empty_arrived &gt; pickup_left</code> 18 → <b>0</b>, 주순서 위반 전부 0(G4 ✅).
+    |Δ| 전 경계 1초 유지(G3 ✅). DS드롭 92% ≥ v1 90%, LD픽업 v1−4%p(G2 허용 ±5%p 내), LD드롭 75% ≥ 70%(G1 ✅).</div>
+  <div class="callout"><b class="t">남은 미세 격차(참고)</b>G1 DS픽업 절대 60%는 크레인 신호 한계(QC GPS 부재)로 미달하나 v1을 +5~13%p 추월.
+    LD픽업 포착은 G2 경계에서 표본별 −4~+3%p 출렁(분할 사이클 잔존분).</div>
+
+  <h3>9.6 v2.5 — 6-이벤트 모델로 정리 (우선순위 재정렬)</h3>
+  <p>수집 우선순위를 ① 사이클 열림/닫힘 ② trip별 시작·도착으로 재정렬하고, 관측 불가한 크레인 핸드오버
+  <b>시작 시각 수집을 포기</b>했다(5장). 마이그레이션 <b>0025</b>: 핸드오버 컬럼 제거 + <code>empty_travel_start_at</code>(공차이동시작) 추가.
+  Fix A/B/C/D(업그레이드·선배치·이월·백필)는 ②(trip 도착)에 그대로 기여하므로 유지.</p>
+  <div class="callout good"><b class="t">경계 정확도(P1) — v2가 v1보다 나음</b>v2는 한 트립을 둘로 쪼개는 <b>거짓 분할을 억제</b>: 2분 미만 비정상 사이클
+    v1 7.5% → v2 0.9%, 사이클 수 18% 감소(더 완결), 중앙 길이 14→17.6분(물리적 타당). 닫힘 <code>dropped_at</code> = container1
+    클리어(≈인계 종료+TOS 갱신, 드롭 도착 후 중앙 5.5분) — 물리적 들어올림 순간은 아님(외부 정답지 없음).</div>
+  <p><b>6-이벤트 검증 (n=152)</b>: 공차이동시작 채움 51%(선배치·이월은 정당히 NULL), <b>배차 후 출발 대기 중앙 24초</b>(p90 90초),
+  P2 도착은 v1 동등 이상 유지(DS픽업 47/43·DS드롭 90/80·LD픽업 76/75·LD드롭 84/60). 단조 위반은 <code>공차완료 &lt; 공차이동시작</code>
+  3건(분할·이월 잔존) → <b>v2.5.1</b> 클램프로 정리, <b>전 인접쌍 위반 0 확인</b>(n=105).</p>
+
+  <h3>9.7 v2.6 — 픽업 레그 보장 (P2 trip 커버리지)</h3>
+  <p>"레그 1개" 사이클의 지배적 격차는 <b>픽업 레그 누락</b>(드롭전용 407건). 픽업은 <code>container1</code>이 빈값→박스번호로
+  바뀌는 순간(가장 확실한 픽업 신호)에 일어나는데, topos1이 픽업 타깃으로 전이하지 않으면 픽업 레그가 아예 안 생겼다.
+  → <b>container1-set 시점에 픽업 레그를 보장</b>(없으면 합성, 미도착이면 도착 마킹; 종류는 jobtype으로 DS=크레인/LD=블록,
+  정확한 도착 시각은 v1 백필이 <code>container1</code> 임시값을 덮어씀).</p>
+  <div class="callout good"><b class="t">v2.6 검증 (n=164)</b>픽업 도착 채움 <b>66% → 84%</b>(v1 추월: LD 87/68 · DS 74/23).
+    드롭전용 1-레그 <b>LD 211→6 · DS 196→8</b>로 거의 소멸. 단조 위반 0 유지.</div>
+  <div class="callout warn"><b class="t">남은 잔존 = 대부분 관측 불가</b>잔존 1-레그(~29%)는 주로 <b>LD 픽업전용</b> — 크레인 드롭 도착이
+    v2·v1 <b>모두 미관측</b>(약경계). "관측 못 한 값은 NULL" 원칙대로 드롭 시각은 허위 생성하지 않고 비워 둔다.</div>
+
+  <p class="lede">배포·검증 명령과 로드맵: <a href="ops-runbook-ko.html">운영 런북</a> · 변경 이력: <a href="news.html">NEWS</a>.</p>
+</section>
+
+<footer class="foot">WP-TT 지식센터 · 설계 문서 · 2026-06-11 (v2.6 · 6-이벤트 + 픽업 레그 보장)</footer>
+</div>
+<script defer src="kc-shell.js"></script>
+</body>
+</html>

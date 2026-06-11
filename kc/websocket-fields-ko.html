@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<script>(function(){try{var s=localStorage.getItem('kc-theme');var t=(s==='light'||s==='dark')?s:'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>websocket 원본 필드 레퍼런스 — WP-TT 지식센터</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kc-shell.css" />
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Inter", "Malgun Gothic", system-ui, sans-serif; font-size: 14.5px; line-height: 1.75; -webkit-font-smoothing: antialiased; }
+  h1, h2, h3 { font-family: "Manrope", "Malgun Gothic", sans-serif; }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 36px 28px 80px; }
+
+  .kc-hero { margin: 0 0 18px; }
+  .kc-hero .kicker { font-size: 11.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+  .kc-hero h1 { font-size: 30px; letter-spacing: -.02em; margin: 6px 0 10px; color: var(--ink); }
+  .kc-hero .lede { font-size: 15.5px; color: var(--ink-soft); margin: 0; }
+
+  .doc-toc { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 18px; margin: 18px 0; }
+  .doc-toc summary { cursor: pointer; font-weight: 800; font-size: 13px; color: var(--ink); }
+  .doc-toc-links { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 12.5px; }
+  .doc-toc-links a { color: var(--accent); text-decoration: none; }
+  .doc-toc-links a:hover { text-decoration: underline; }
+
+  section.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px 28px; margin-top: 18px; }
+  section.card > h2 { font-size: 19px; margin: 0 0 12px; letter-spacing: -.01em; color: var(--ink); }
+  section.card > h2 .no { color: var(--accent); font-family: "JetBrains Mono", monospace; font-size: 15px; margin-right: 8px; }
+  section.card h3 { font-size: 14.5px; margin: 18px 0 8px; color: var(--ink); }
+  section.card p { margin: 0 0 12px; color: var(--ink); }
+  section.card p.lede { color: var(--ink-soft); }
+  .card a { color: var(--accent); }
+  ul, ol { margin: 0 0 12px; padding-left: 22px; color: var(--ink); }
+  li { margin-bottom: 5px; }
+  code { font-family: "JetBrains Mono", monospace; font-size: 12.5px; background: var(--soft); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; color: var(--ink); }
+  pre { background: var(--soft); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font-family: "JetBrains Mono", monospace; font-size: 12px; line-height: 1.6; color: var(--ink); }
+  pre code { background: none; border: 0; padding: 0; }
+
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 14px; font-size: 13px; }
+  th { text-align: left; padding: 8px 10px; background: var(--soft); color: var(--ink-soft); font-weight: 700; border-bottom: 2px solid var(--border); vertical-align: top; }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--border); color: var(--ink); vertical-align: top; }
+  td.mono, .mono { font-family: "JetBrains Mono", monospace; font-size: 12px; }
+  td.k { font-family: "JetBrains Mono", monospace; font-size: 12px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+  .tag { display: inline-block; font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: 4px; vertical-align: middle; }
+  .tag.always { background: var(--good-bg); color: var(--good); }
+  .tag.event { background: var(--warn-bg); color: var(--warn); }
+  .tag.unused { background: rgba(120,130,150,.15); color: var(--muted); }
+
+  .callout { border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 10px 10px 0; padding: 12px 16px; margin: 12px 0; font-size: 13.5px; color: var(--ink); }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-bg); }
+  .callout.good { border-left-color: var(--good); background: var(--good-bg); }
+  .callout b.t { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+  .callout.warn b.t { color: var(--warn); } .callout.good b.t { color: var(--good); } .callout:not(.warn):not(.good) b.t { color: var(--accent); }
+
+  .chapter-nav { display: flex; gap: 12px; margin: 34px auto 8px; max-width: 940px; }
+  .chapter-nav a { flex: 1; display: block; padding: 14px 18px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; color: var(--accent); text-decoration: none; font-weight: 700; font-size: 13.5px; }
+  .chapter-nav a:hover { border-color: var(--accent); }
+  .chapter-nav a.next { text-align: right; }
+  footer.foot { margin-top: 24px; color: var(--muted); font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="kc-hero">
+  <div class="kicker">여정 02 · 데이터</div>
+  <h1>websocket 원본 필드 레퍼런스</h1>
+  <p class="lede">WP-TT GPS/PLC 피드가 실제로 보내는 <b>모든 필드</b>를, 원본 프레임을 떠서 구현자 관점으로 정리합니다 —
+  각 필드가 언제 실리고, 무슨 의미이며, 구현하며 무엇을 관찰했는지. 상위 개요는
+  <a href="websocket-data-ko.html">실시간 websocket 데이터</a>를 참고하세요. 이 문서는 그 아래의 "필드 사전"입니다.</p>
+</header>
+
+<details class="doc-toc" open>
+  <summary>이 문서의 목차</summary>
+  <div class="doc-toc-links">
+    <a href="#envelope">1 · 봉투 & 두 개의 존</a>
+    <a href="#allfields">2 · 전체 26개 키 (실제 프레임)</a>
+    <a href="#identity">3 · 정체성·위치·모션 (항상 실림)</a>
+    <a href="#mission">4 · 미션/작업 필드 (할당 이벤트성)</a>
+    <a href="#topos2">5 · topos2 심층 조사</a>
+    <a href="#arrival">6 · 도착·체류 (arrival·arr_dtime·lapse)</a>
+    <a href="#aux">7 · 보조·미해독 필드</a>
+    <a href="#plc">8 · ctab — 크레인 PLC</a>
+    <a href="#behavior">9 · 피드 거동 규칙 & 구현 함의</a>
+  </div>
+</details>
+
+<section class="card" id="envelope">
+  <h2><span class="no">1</span>봉투 & 두 개의 존</h2>
+  <p class="lede">모든 프레임은 같은 봉투에 담겨 오고, <code>zone</code>으로 두 피드가 갈립니다.</p>
+  <pre><code>{"data":{"id":"TT1045","zone":"wpt_gps","datas":"&lt;문자열로 인코딩된 JSON&gt;"}}</code></pre>
+  <ul>
+    <li><code>data.id</code> — 장비 ID (우리 <code>id</code>). <code>data.zone</code> — 피드 종류. <code>data.datas</code>는 <b>문자열</b>이라 한 번 더 JSON 파싱한다.</li>
+    <li><b><code>wpt_gps</code> 존</b> → 안에 <code>gps_update</code> (차량·장비 GPS, 장비당 ~3초). 본 문서 3~7장.</li>
+    <li><b><code>ctab</code> 존</b> → 안에 <code>plc_data</code> (크레인 PLC, ~1초). 8장.</li>
+  </ul>
+  <p>핸드셰이크: <code>{"command":{"identify":"…","zone":"wpt_gps"}}</code> → 2초 → <code>{"checkin":{"username":"…","user":"…"}}</code>.
+  존 구독형 브로드캐스트라, 체크인한 클라이언트는 그 존의 모든 장비 업데이트를 받습니다.</p>
+</section>
+
+<section class="card" id="allfields">
+  <h2><span class="no">2</span>전체 26개 키 — 실제 프레임</h2>
+  <p class="lede">한 프레임에 <b>항상 26개 키가 모두 포함</b>됩니다. 다만 해당 장비/상황에 없는 값은 빈 문자열(또는 0)로 옵니다. 우리가 파싱하는 것과 무시하는 것이 섞여 있습니다.</p>
+  <h3>활성 LD 트럭 (도착 상태)</h3>
+  <pre><code>{ "device":"TT1253", "lat":"2.93590967", "lon":"101.29527217",
+  "speed":"1kmh", "engine_on":"ON", "accuracy":"4", "distance":"0.0",
+  "userid":"P18884&lt;br/&gt;(0147150166)", "batt":"0%", "nett":"TELE", "dtime":"21:08:40",
+  "cur_loc":"WHARF_12", "addr":"WHARF_12", "lapse":20,
+  "arrival":"ARRIVED", "arr_dtime":"20:48:19",
+  "container1":"CMAU8919605", "topos1":"C14", "lapse1":20,
+  "container2":"", "topos2":"", "lapse2":20,
+  "vslname":"CNC URANUS", "jobtype":"LD", "ins":"", "mds":"Y", "fuel_level":"32.00" }</code></pre>
+  <h3>유휴 크레인 장비 (미션 필드 전부 빈값)</h3>
+  <pre><code>{ "device":"C54", … "cur_loc":"WHARF_23_A", "addr":"WHARF_23_A",
+  "arrival":"", "container1":"", "topos1":"", "container2":"", "topos2":"",
+  "vslname":"", "jobtype":"", "lapse":"", "ins":"", "mds":"", "fuel_level":"" }</code></pre>
+  <p class="callout"><b class="t">관찰</b>약 1,660 프레임을 28초간 떠보니 26개 키가 매 프레임 존재. 미션 필드(4장)는 대부분 빈값이고
+  소수에만 값이 실립니다(예: <code>topos2</code> 8.3%). 이게 "할당 이벤트성"의 직접 증거입니다(9장).</p>
+</section>
+
+<section class="card" id="identity">
+  <h2><span class="no">3</span>정체성·위치·모션 — 항상 실림 <span class="tag always">매 픽스</span></h2>
+  <table>
+    <tr><th>필드</th><th>예시</th><th>의미 · 구현하며 관찰한 것</th></tr>
+    <tr><td class="k">device</td><td class="mono">TT1253</td><td>장비 ID(불변). 앞 알파벳이 종류 — TT(트럭)/RTG/C·M·Z(크레인). 우리 <code>id</code>.</td></tr>
+    <tr><td class="k">lat / lon</td><td class="mono">2.9359 / 101.2952</td><td>위치. <b>문자열</b>로 옴. <code>0,0</code>이면 무픽스 → 버림.</td></tr>
+    <tr><td class="k">speed</td><td class="mono">"1kmh"</td><td>속도, 끝의 <code>kmh</code> 떼고 파싱. <b>&lt;3km/h = 정지</b> 판정.</td></tr>
+    <tr><td class="k">engine_on</td><td class="mono">"ON" / ""</td><td>시동. 켜졌는데 공차+정지 = 유휴 후보.</td></tr>
+    <tr><td class="k">accuracy</td><td class="mono">"4"</td><td>GPS 정확도(m). 스파이크 시 위치 점프 → 거리 누적에 600m 점프가드.</td></tr>
+    <tr><td class="k">dtime</td><td class="mono">"21:08:40"</td><td>장비 로컬 시각. 우리는 수신 서버시각을 쓰고 이건 부가표시.</td></tr>
+    <tr><td class="k">distance</td><td class="mono">"0.0"</td><td>⚠️ <b>항상 0.0 — 무용</b>. 우리가 GPS로 직접 경로거리를 누적한다.</td></tr>
+    <tr><td class="k">userid</td><td class="mono">P18884&lt;br/&gt;(…)</td><td>운전자 ID+전화. <b>HTML <code>&lt;br/&gt;</code>이 박혀 옴</b> → <code>clean_driver</code>로 정제.</td></tr>
+    <tr><td class="k">batt</td><td class="mono">"0%" / "100%"</td><td>단말 배터리. 트럭은 0%로 자주 옴(센서 미연결 추정).</td></tr>
+    <tr><td class="k">nett</td><td class="mono">"TELE" / "GLOG"</td><td>통신망 라벨. 피드 헬스 참고.</td></tr>
+    <tr><td class="k">fuel_level</td><td class="mono">"32.00"</td><td>연료 %. 부가표시.</td></tr>
+  </table>
+</section>
+
+<section class="card" id="mission">
+  <h2><span class="no">4</span>미션/작업 필드 <span class="tag event">할당 이벤트성</span> ⚠️ 핵심이자 함정</h2>
+  <p class="lede">이 필드들은 <b>3초 하트비트에 안 실립니다. 작업 할당 *이벤트* 때만 한 번 실리고, 다음 픽스부턴 빈값</b>으로 옵니다.
+  (메모리·문서에 스터디됨: "ride only on assignment events".) 그래서 빠진 값을 latch(직전 비-빈값 유지)해야 합니다.</p>
+  <table>
+    <tr><th>필드</th><th>예시</th><th>의미 · 구현하며 관찰한 것</th></tr>
+    <tr><td class="k">topos1</td><td class="mono">C14 / 03U-21</td><td><b>목적지(다음 핸드오버 지점)</b> — 블록 베이 또는 크레인(C/M/Z+숫자). <b>= 작업 할당 시점 신호.</b> 비었다가 잡히는 순간이 그 작업 배정. DS: 크레인(픽업)→블록(드롭), LD: 블록(픽업)→크레인(드롭). 할당 직후엔 아직 100m+ 떨어져 있기도(타깃이지 도착이 아님).</td></tr>
+    <tr><td class="k">container1</td><td class="mono">CMAU8919605</td><td>1번 박스 번호. ⚠️ <b>물리 적재가 아니라 TOS 배정 필드</b> — 직전 drop 시점에 다음 박스가 미리 배정됨(c2c). 비-빈→다른값 + 이동≥150m = 진짜 인도.</td></tr>
+    <tr><td class="k">container2</td><td class="mono">(트윈일 때)</td><td>2번 슬롯 — <b>트윈/탠덤(20ft 2개)</b>일 때 채워짐. c1↔c2 슬롯 스왑이 잦음(가짜 인도 유발 → {c1,c2} 집합 동일하면 무시). c1==c2면 40ft 1개를 두 슬롯에 표시한 것.</td></tr>
+    <tr><td class="k">topos2</td><td class="mono">M7 / 08Q-21</td><td><b>2번째 핸드오버 지점</b> — 트윈/탠덤의 두 번째 박스 목적지. 상세는 <a href="#topos2">5장</a>.</td></tr>
+    <tr><td class="k">jobtype</td><td class="mono">LD / DS / MI·MO·LC</td><td>적하(LD)/양하(DS)/야드이동(MI·MO·LC). <b>픽업·드롭이 어느 쪽인지 결정</b>: LD=블록픽업·크레인드롭, DS=반대. latch.</td></tr>
+    <tr><td class="k">vslname</td><td class="mono">CNC URANUS</td><td>작업 대상 선박명. latch.</td></tr>
+    <tr><td class="k">cur_loc</td><td class="mono">WHARF_12 / 01U</td><td><b>현재 위치 라벨</b>. topos1(목적지)과 같아지면 도착. (이건 비교적 자주 실림 — 위치성.)</td></tr>
+  </table>
+  <p class="callout warn"><b class="t">함의 — 단계 감지의 방향</b>topos1이 "비었다가 잡히는 전이" = 할당 이벤트이므로, 작업 사이클의 단계 경계를
+  약한 <code>arrival</code> 플래그가 아니라 <b>topos1 전이 + GPS 근접 + PLC</b>로 잡는 것이 더 정확합니다.
+  상세는 <a href="cycle-detection-ko.html">사이클 감지 로직</a>.</p>
+</section>
+
+<section class="card" id="topos2">
+  <h2><span class="no">5</span>topos2 심층 조사</h2>
+  <p class="lede">"topos2에 값이 실제로 실리나? 언제?"를 원본 프레임으로 직접 조사한 결과입니다.</p>
+  <h3>실리는 빈도</h3>
+  <ul>
+    <li>키는 <b>매 프레임 존재</b>하지만, 값이 차는 건 <b>1,660 프레임 중 138개 = 8.3%</b>. topos1처럼 <b>할당 이벤트성</b>(평소 빈값).</li>
+    <li>값의 형태: 크레인 코드(<code>C34</code>·<code>M7</code>·<code>Z7</code>)와 블록 베이(<code>08Q-21</code>·<code>04L-03</code>) 둘 다.</li>
+  </ul>
+  <h3>무슨 의미인가 — 트윈/탠덤의 2번째 목적지</h3>
+  <p>값이 찰 때 <code>container2</code>도 거의 함께 차고, 작업유형/topos1과의 조합이 트윈 다중경유를 그대로 보여줍니다:</p>
+  <table>
+    <tr><th>jobtype</th><th>topos1</th><th>topos2</th><th>해석</th></tr>
+    <tr><td>LD</td><td class="mono">02W-41</td><td class="mono">08Q-21</td><td>서로 <b>다른 두 블록</b>에서 수령 (트윈 컬렉션)</td></tr>
+    <tr><td>LD</td><td class="mono">11X-20</td><td class="mono">M7</td><td>블록 픽업 + 크레인(M7) — 박스1 블록, 그 다음 크레인</td></tr>
+    <tr><td>LD</td><td class="mono">C34</td><td class="mono">C34</td><td>둘 다 같은 크레인 — 두 박스 같은 QC로</td></tr>
+    <tr><td>MO</td><td class="mono">04L-15</td><td class="mono">04L-03</td><td>야드이동, 인접한 두 베이</td></tr>
+  </table>
+  <div class="callout good">
+    <b class="t">결론</b>
+    <code>topos2</code> = <b>두 컨테이너를 다루는 작업(트윈/탠덤)의 두 번째 핸드오버 지점.</b> topos1과 짝을 이뤄
+    트럭의 다중 경유(블록→블록→안벽, 또는 안벽→블록→블록)를 표현한다. 단일 컨테이너 작업에선 빈값.
+    현재 우리는 topos1만 파싱하지만, 트윈의 두 번째 leg를 정확히 잡으려면 topos2를 함께 보면 된다.
+  </div>
+</section>
+
+<section class="card" id="arrival">
+  <h2><span class="no">6</span>도착·체류 — arrival · arr_dtime · lapse</h2>
+  <p class="lede">"arrival(도착) 같은 상태도 데이터로 오나?" → 네. 도착 플래그 + 도착 시각 + 체류 타이머가 한 묶음으로 옵니다.</p>
+  <table>
+    <tr><th>필드</th><th>예시</th><th>의미 · 구현하며 관찰한 것</th></tr>
+    <tr><td class="k">arrival</td><td class="mono">"ARRIVED" / ""</td><td>트럭이 목적지(topos1) 핸드오버 지점에 도달하면 <code>"ARRIVED"</code> 문자열, 아니면 빈값. ⚠️ <b>블록에선 신뢰성 있음(정차 트럭 ~78%), 크레인에선 약함(~23%)</b> — 크레인 레인이 길고 지오펜스가 느슨해 크레인 쪽 단계가 잘 안 잡힘.</td></tr>
+    <tr><td class="k">arr_dtime</td><td class="mono">"20:48:19"</td><td><b>도착(ARRIVED)된 시각.</b> arrival이 켜진 순간의 타임스탬프.</td></tr>
+    <tr><td class="k">lapse</td><td class="mono">20 (숫자)</td><td><b>도착 후 경과 분 = 체류 타이머.</b> <code>dtime − arr_dtime</code>과 일치 검증됨(예: 20:48 도착, 21:08 현재 → lapse 20). <b>핸드오버 대기시간을 서버가 직접 계산해 보내준다</b> — QC 대기/체류 분석에 바로 쓸 수 있는 값.</td></tr>
+    <tr><td class="k">lapse1 / lapse2</td><td class="mono">20 / 20</td><td>topos1/topos2 각각의 체류 분(짝). 관측상 <code>lapse</code>와 같은 값으로 옴.</td></tr>
+  </table>
+  <div class="callout"><b class="t">활용 여지</b><code>lapse</code>는 우리가 따로 계산하던 "도착 후 대기 시간"을 피드가 이미 분 단위로 주는 것입니다.
+  사이클의 핸드오버(받기/주기) 체류를 보강하거나 QC 대기 판정에 교차검증으로 쓸 수 있습니다.</div>
+</section>
+
+<section class="card" id="aux">
+  <h2><span class="no">7</span>보조·미해독 필드 <span class="tag unused">현재 미사용</span></h2>
+  <table>
+    <tr><th>필드</th><th>관측값</th><th>해석</th></tr>
+    <tr><td class="k">addr</td><td class="mono">WHARF_12, 02G…</td><td><b>현재 위치 주소 라벨.</b> 활성 샘플 전부에서 <code>cur_loc</code>과 동일하게 옴 → cur_loc의 다른 표기로 보임. 272종 관측.</td></tr>
+    <tr><td class="k">mds</td><td class="mono">"Y"</td><td>활성 트럭에서 항상 <code>"Y"</code>. 의미 미상(모드/유효 플래그 추정). 변별력 없어 미사용.</td></tr>
+    <tr><td class="k">ins</td><td class="mono">"" (항상 빈값)</td><td>관측 구간 내내 빈값. 의미 미상, 미사용.</td></tr>
+  </table>
+  <p class="callout warn"><b class="t">정직한 한계</b><code>ins</code>·<code>mds</code>는 이번 조사 구간(야간)에서 변별값이 없어 의미를 확정하지 못했습니다.
+  다른 시간대/작업에서 값이 다르게 실릴 수 있으니, 추정으로 단정하지 않고 "미해독"으로 남깁니다.</p>
+</section>
+
+<section class="card" id="plc">
+  <h2><span class="no">8</span>ctab — 크레인 PLC (<code>plc_data</code>, ~1초)</h2>
+  <p class="lede">두 번째 존. 크레인의 스프레더 상태를 1초 해상도로 보냅니다.</p>
+  <table>
+    <tr><th>필드</th><th>예시</th><th>의미 · 구현하며 관찰한 것</th></tr>
+    <tr><td class="k">crane</td><td class="mono">C46</td><td>크레인 ID — GPS device id·TOS QC번호와 일치 → 위치/계획 연결고리.</td></tr>
+    <tr><td class="k">load</td><td class="mono">(톤, 숫자)</td><td>훅 하중. 빈후크 ~0, 적재 ≥1t. <b>empty→laden 상승엣지 = PICKUP(무브 1건).</b> "크레인이 지금 작업 중"의 직접 신호 → 라이브 move/hr·QC대기에 사용.</td></tr>
+    <tr><td class="k">lock / land</td><td class="mono">"True"/"False"</td><td>트위스트락 / 안착(문자열 불리언).</td></tr>
+    <tr><td class="k">hpos / tpos</td><td class="mono">(m)</td><td>호이스트(들어올림) / 트롤리(횡행) 위치.</td></tr>
+  </table>
+</section>
+
+<section class="card" id="behavior">
+  <h2><span class="no">9</span>피드 거동 규칙 & 구현 함의</h2>
+  <ol>
+    <li><b>두 속도</b>: GPS ~3초/장비, PLC ~1초/크레인. 과거 없음(현재 순간만, DB 미적재) — 그래서 사이클은 우리가 직접 누적·영속화한다.</li>
+    <li><b>미션 필드는 할당 이벤트성</b>(4장): 할당 때만 실리고 평소엔 빔. ⚠️ GPS 스냅샷으로 "배정 수"를 세면 안 됨(한때 160 배정인데 18로 폭락한 사고) → 배정은 작업풀(TOS)로 센다.</li>
+    <li><b>수신부가 매 메시지 상태를 새로 만듦</b> → 빠진 필드는 None. 그래서 carry-forward/<b>latch</b>가 필수.</li>
+    <li><b>잡 신호로 쓸 만한 것</b>: 위치/모션(항상), <code>arrival</code>+<code>arr_dtime</code>+<code>lapse</code>(도착·체류), PLC <code>load</code>(크레인 작업). 미션 필드는 전이(이벤트)로 해석.</li>
+    <li><b>age 밴드</b>: ≤15s fresh · ≤120s active(맵 서빙) · &gt;600s 제거.</li>
+  </ol>
+  <p>이 레퍼런스는 <a href="cycle-detection-ko.html">사이클 감지 로직</a>의 토대입니다 — 어떤 필드가 신뢰할 만하고(위치·PLC·블록 ARRIVED),
+  어떤 게 함정인지(container1=배정, 크레인 ARRIVED 약함)를 알아야 단계 경계를 옳게 설계할 수 있습니다.</p>
+</section>
+
+<nav class="chapter-nav">
+  <a class="prev" href="websocket-data-ko.html">← 02 데이터 — 실시간 websocket</a>
+  <a class="next" href="kpi-computation-ko.html">03 지표 — KPI 산출 →</a>
+</nav>
+
+<footer class="foot">WP-TT 지식센터 · 내부 기술 문서 · 원본 프레임 조사 2026-06-10</footer>
+</div>
+<script defer src="kc-shell.js"></script>
+</body>
+</html>
