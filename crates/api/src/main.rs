@@ -3,6 +3,7 @@
 //! has NO Oracle/SSH access — it cannot reach production Oracle.
 
 mod agg;
+mod cycles;
 mod db;
 mod live;
 mod livemap;
@@ -49,14 +50,24 @@ fn app(state: AppState) -> Router {
         .route("/api/livemap/positions", get(livemap::positions))
         .route("/api/livemap/health", get(livemap::health))
         .route("/api/workpool", get(workpool::workpool))
+        .route("/api/tt-cycles/summary", get(cycles::summary))
+        .route("/api/tt-cycles/detail", get(cycles::detail))
         .route("/api/health", get(routes::health))
         .layer(CorsLayer::permissive()) // dev; tighten to the dashboard origin in prod
         .with_state(state);
 
     // Knowledge center — self-contained static HTML docs at /kc/ (NOT linked from the
     // dashboard UI; shared internally by direct link, reachable over Tailscale).
+    // no-cache = always revalidate (cheap 304s): without it browsers heuristically cache
+    // the doc HTML for hours, so doc updates (e.g. the shared sidebar shell) don't show.
     let kc_dir = std::env::var("KC_DIR").unwrap_or_else(|_| "kc".to_string());
-    let api = api.nest_service("/kc", ServeDir::new(&kc_dir));
+    let kc = tower::ServiceBuilder::new()
+        .layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
+            axum::http::header::CACHE_CONTROL,
+            axum::http::HeaderValue::from_static("no-cache"),
+        ))
+        .service(ServeDir::new(&kc_dir));
+    let api = api.nest_service("/kc", kc);
 
     // Serve the built SPA (if present) and fall back to index.html for client routing.
     let web_dist = std::env::var("WEB_DIST").unwrap_or_else(|_| "web/dist".to_string());
@@ -79,6 +90,8 @@ async fn main() -> anyhow::Result<()> {
     let livemap = livemap::LiveMap::new();
     livemap::spawn(livemap.clone()); // background GPS ingest (via local SSH tunnel)
     livemap::spawn_util_sampler(livemap.clone(), pool.clone()); // 60s TT-utilization samples
+    livemap::spawn_assignment_refresh(livemap.clone(), pool.clone()); // 30s work-pool assignment cache
+    livemap::spawn_cycle_flusher(livemap.clone(), pool.clone()); // 30s persist completed TT cycles
     let state = AppState { pool, livemap };
 
     let addr = std::env::var("API_ADDR").unwrap_or_else(|_| "127.0.0.1:8080".to_string());

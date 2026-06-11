@@ -64,6 +64,131 @@ struct Pos {
     carry_since_ms: i64, // when the current non-empty container1 began (0 if empty)
     last_drop_ms: i64,   // last counted delivery
     carry_trip_m: f64,   // path length the truck has driven since the current carry began
+    // ── per-truck cycle state machine (for the persisted tt_cycle_log + idle→staging) ──
+    // Latched job fields: kept across heartbeats that OMIT the field (the raw container1/
+    // jobtype/etc. above are cleared per-message). A latch updates only on a present,
+    // non-empty value, so an intermittent feed doesn't drop the truck's job. Cleared on a
+    // validated cycle completion (container) or when the work pool drops the truck (A4).
+    latched_container: Option<String>,
+    latched_jobtype: Option<String>,
+    latched_vessel: Option<String>,
+    latched_topos: Option<String>,
+    assigned: bool,        // authoritative: in live_assigned_tt (refreshed by spawn_assignment_refresh)
+    empty_since_ms: i64,   // when the current empty leg began (0 if loaded)
+    empty_trip_m: f64,     // path length driven while empty (assignment→pickup leg)
+    empty_arrived_ms: i64, // when an empty assigned truck first reached ARRIVED at its pickup (0 if none)
+    cycle_open: Option<OpenCycle>, // accumulating metadata for the in-progress cycle
+    // ── v2 SHADOW (leg-based phases, design: docs/cycle-detection-v2-design.md) ──
+    // Parsed-but-not-yet-used-by-v1 feed fields + the parallel leg tracker. None of the
+    // v1 logic reads these.
+    arr_dtime_ms: i64,     // parsed `arr_dtime` (HH:MM:SS @ terminal tz) as epoch ms, 0 if absent
+    latched_topos2: Option<String>,
+    v2: V2State,
+}
+
+/// In-progress cycle for one truck — opened at pickup (container1 empty→non-empty), enriched
+/// from the latched job fields + work-pool cache, finalized into a `CompletedCycle` on the
+/// validated drop edge (the existing `fleet_drop`). Phase timestamps are 0 when not observed.
+#[derive(Clone, Default)]
+struct OpenCycle {
+    assigned_at_ms: i64,
+    pickup_arrived_at_ms: i64,
+    pickup_left_at_ms: i64,
+    pickup_at_ms: i64,
+    arrived_at_ms: i64,
+    // SHADOW (observational): crane-side arrival from GPS proximity / PLC. Does not feed the
+    // live phase timestamps — written to separate columns for validation.
+    pickup_arrived_crane_ms: i64,
+    arrived_crane_ms: i64,
+    crane_arr_method: Option<&'static str>,
+    idle_before_ms: i64,
+    empty_leg_ms: i64,
+    empty_leg_m: f64,
+    jobtype: Option<String>,
+    vessel: Option<String>,
+    voyage: Option<String>,
+    container: Option<String>,
+    qc: Option<String>,
+    twintandem: Option<String>,
+}
+
+/// A finalized cycle queued for the flusher to persist into `tt_cycle_log`.
+#[derive(Clone)]
+struct CompletedCycle {
+    ytno: String,
+    assigned_at_ms: i64,
+    pickup_arrived_at_ms: i64,
+    pickup_left_at_ms: i64,
+    pickup_at_ms: i64,
+    arrived_at_ms: i64,
+    pickup_arrived_crane_ms: i64,
+    arrived_crane_ms: i64,
+    crane_arr_method: Option<&'static str>,
+    dropped_at_ms: i64,
+    idle_before_ms: i64,
+    empty_leg_ms: i64,
+    empty_leg_m: f64,
+    laden_leg_ms: i64,
+    laden_leg_m: f64,
+    jobtype: Option<String>,
+    vessel: Option<String>,
+    voyage: Option<String>,
+    container: Option<String>,
+    qc: Option<String>,
+    twintandem: Option<String>,
+    container_to_container: bool,
+}
+
+/// v2 SHADOW leg tracker. A leg = one topos1 target: assignment → arrival → handover →
+/// departure. The cycle = the legs between two validated drops. Runs in parallel with the
+/// v1 machine and writes only to tt_cycle_v2 (see the design doc).
+#[derive(Clone, Default)]
+struct V2State {
+    opened_ms: i64,       // first assignment signal after the previous validated drop (사이클시작)
+    empty_travel_start_ms: i64, // 공차이동시작: first movement after open, before reaching pickup
+    jobtype: Option<String>, // snapshotted at OPEN (close-time latched would be the NEXT job's on c2c)
+    legs: Vec<V2Leg>,     // closed legs of the open cycle (capped)
+    cur: Option<V2Leg>,   // the in-progress leg
+}
+#[derive(Clone)]
+struct V2Leg {
+    target: String,
+    crane: bool,
+    assigned_ms: i64,
+    arrived_ms: i64,
+    arr_src: &'static str, // arr_dtime|arrived|cur_loc|gps|pre_positioned
+    left_ms: i64,
+}
+const V2_LEGS_MAX: usize = 6;
+
+/// A finalized v2 cycle queued for the flusher.
+#[derive(Clone)]
+struct CompletedV2 {
+    ytno: String,
+    dropped_ms: i64,
+    opened_ms: i64,
+    empty_travel_start_ms: i64, // 공차이동시작
+    jobtype: Option<String>,
+    legs: Vec<V2Leg>,
+    // v2.4: v1's robust continuous-tracker arrivals for the SAME (ytno, dropped_at), used at
+    // flush to backfill a block arrival the leg model missed (leg-formation gap). Keeps v2
+    // capture ≥ v1 without touching the leg model. 0 = v1 had none either.
+    v1_pickup_arrived_ms: i64,
+    v1_drop_arrived_ms: i64,
+}
+
+/// Authoritative assignment snapshot for one truck, cached from the work pool
+/// (live_assigned_tt ⨝ live_workpool) and refreshed every ~30s. The boolean assignment
+/// (any active job, all job types) comes from live_assigned_tt; the metadata is the
+/// best-available DS/LD work-pool row (NULL for yard moves not in live_workpool).
+#[derive(Clone, Default)]
+struct AssignedJob {
+    jobtype: Option<String>,
+    vessel: Option<String>,
+    voyage: Option<String>,
+    contno: Option<String>,
+    qc: Option<String>,
+    twintandem: Option<String>,
 }
 
 // TT cycle bounds. A loose physical sanity band only — the *real* artifact filter is GPS
@@ -209,7 +334,18 @@ pub struct LiveMap {
     // subset of the above whose carried path was in the near-miss band [100,150)m — possibly
     // genuine ultra-short hauls the cut discards. Exposed so the upward-bias is measurable.
     tt_artifacts_near: Mutex<VecDeque<i64>>,
+    // authoritative per-truck assignment (ytno → job), refreshed ~30s from the work pool by
+    // `spawn_assignment_refresh`. Drives idle→staging classification and cycle metadata.
+    assigned_pool: RwLock<HashMap<String, AssignedJob>>,
+    // completed cycles awaiting persistence; drained into tt_cycle_log by `spawn_cycle_flusher`.
+    cycle_log: Mutex<VecDeque<CompletedCycle>>,
+    // v2 SHADOW: completed leg-based cycles → tt_cycle_v2 (same flusher).
+    cycle_v2: Mutex<VecDeque<CompletedV2>>,
 }
+
+/// Cap on the in-memory completed-cycle buffer. If the flusher stalls we drop the oldest
+/// (with a warn) rather than grow unbounded — same spirit as the device pruner.
+const CYCLE_BUF_MAX: usize = 5000;
 
 impl LiveMap {
     pub fn new() -> Arc<Self> {
@@ -222,6 +358,9 @@ impl LiveMap {
             tt_cycles: Mutex::new(VecDeque::new()),
             tt_artifacts: Mutex::new(VecDeque::new()),
             tt_artifacts_near: Mutex::new(VecDeque::new()),
+            assigned_pool: RwLock::new(HashMap::new()),
+            cycle_log: Mutex::new(VecDeque::new()),
+            cycle_v2: Mutex::new(VecDeque::new()),
             connected: AtomicBool::new(false),
             messages: AtomicU64::new(0),
             reconnects: AtomicU64::new(0),
@@ -362,6 +501,11 @@ pub struct PositionsOut {
 
 const RTG_BAY_M: f64 = 30.0; // RTG within this of a TT ≈ same bay (engaged)
 const IDLE_SPEED_KMH: f64 = 3.0;
+// A TT within this of its ASSIGNED quay crane's GPS ≈ arrived at the crane. Used ONLY to
+// populate the SHADOW crane-arrival columns (observational); the live phase logic is untouched.
+const CRANE_ARRIVE_M: f64 = 40.0;
+// the crane is "actively handling" if its PLC logged a pickup within this window.
+const CRANE_PLC_ACTIVE_MS: i64 = 120_000;
 const SWAP_MIN_M: f64 = 500.0; // default swap threshold (frontend slider overrides for display)
 
 /// A topos1 like "C46"/"M4"/"Z6" = a quay/dynamic crane (vs a block code like "03U-21").
@@ -375,12 +519,89 @@ fn block_prefix(s: &str) -> &str {
     s.split('-').next().unwrap_or(s)
 }
 
+/// v2.3 (B): pre-positioned arrival. A block-pickup leg whose truck is already stopped at
+/// the target block at assignment time was waiting there before being assigned (its arr_dtime
+/// predates the assignment and is rejected by the `>= assigned` guard, and it may leave before
+/// a stopped-at-block frame is processed). Anchor arrival to the assignment instant. Crane
+/// legs are excluded — WHARF is too coarse and would reintroduce the early-arrival bias.
+fn prepositioned_arrival(crane: bool, target: &str, stopped: bool, cur_loc: &str) -> bool {
+    !crane && stopped && !cur_loc.is_empty() && block_prefix(cur_loc) == block_prefix(target)
+}
+
 /// Approximate ground distance (m) between two lat/lon points (equirectangular).
 fn dist_m(a: (f64, f64), b: (f64, f64)) -> f64 {
     let lat = (a.0 + b.0) / 2.0 * std::f64::consts::PI / 180.0;
     let dx = (a.1 - b.1) * 111_320.0 * lat.cos();
     let dy = (a.0 - b.0) * 111_320.0;
     (dx * dx + dy * dy).sqrt()
+}
+
+/// Open a cycle at pickup (container1 empty→non-empty). The empty leg = previous-drop→pickup
+/// (time + path accumulated while empty). Job metadata = the truck's latched GPS fields,
+/// enriched from the work-pool cache (`aj`) for fields the GPS doesn't carry (voyage/twin).
+fn open_cycle(now: i64, p: &Pos, aj: Option<&AssignedJob>) -> OpenCycle {
+    let empty_leg_ms = if p.empty_since_ms > 0 { (now - p.empty_since_ms).max(0) } else { 0 };
+    let or_pool = |gps: &Option<String>, pool: Option<&String>| gps.clone().or_else(|| pool.cloned());
+    OpenCycle {
+        // assignment≈start of the empty drive to this pickup (proxy: previous drop time)
+        assigned_at_ms: if p.empty_since_ms > 0 { p.empty_since_ms } else { now },
+        // pickup-side ARRIVED (split 공차이동 vs 받기) — seeded ONLY when the empty leg's start
+        // was actually observed (empty_since > 0). After a restart / GPS gap the leg start is
+        // unknown (0): an earlier latched ARRIVED could belong to the PREVIOUS job's
+        // destination, and assigned_at falls back to the pickup instant, which produced
+        // pickup_arrived < assigned inversions (verified: all 55 inverted rows had
+        // assigned==pickup, 83% were the truck's first post-restart cycle). Unknown → NULL.
+        pickup_arrived_at_ms: if p.empty_since_ms > 0 && p.empty_arrived_ms > p.empty_since_ms { p.empty_arrived_ms } else { 0 },
+        pickup_left_at_ms: 0,
+        pickup_at_ms: now,
+        arrived_at_ms: 0,
+        pickup_arrived_crane_ms: 0,
+        arrived_crane_ms: 0,
+        crane_arr_method: None,
+        idle_before_ms: 0, // derived offline from consecutive rows (pickup_at − prev dropped_at)
+        empty_leg_ms,
+        empty_leg_m: p.empty_trip_m,
+        jobtype: or_pool(&p.latched_jobtype, aj.and_then(|a| a.jobtype.as_ref())),
+        vessel: or_pool(&p.latched_vessel, aj.and_then(|a| a.vessel.as_ref())),
+        voyage: aj.and_then(|a| a.voyage.clone()),
+        container: p.container1.clone().or_else(|| p.latched_container.clone()).or_else(|| aj.and_then(|a| a.contno.clone())),
+        qc: aj.and_then(|a| a.qc.clone()).or_else(|| p.latched_topos.clone().filter(|t| is_crane_code(t))),
+        twintandem: aj.and_then(|a| a.twintandem.clone()),
+    }
+}
+
+/// Finalize the open cycle into a `CompletedCycle` on the validated drop. `c2c` = the truck
+/// went straight into another container (no empty gap). Reads `carry_trip_m` as the laden
+/// path length — call BEFORE it is reset for the next box.
+fn finalize_cycle(id: &str, p: &Pos, now: i64, c2c: bool) -> CompletedCycle {
+    let oc = p.cycle_open.clone().unwrap_or_default();
+    let pickup = if oc.pickup_at_ms > 0 { oc.pickup_at_ms } else { p.carry_since_ms };
+    let laden_leg_ms = if pickup > 0 { (now - pickup).max(0) } else { 0 };
+    let assigned_at = if oc.assigned_at_ms > 0 { oc.assigned_at_ms } else { pickup };
+    CompletedCycle {
+        ytno: id.to_string(),
+        assigned_at_ms: assigned_at,
+        pickup_arrived_at_ms: oc.pickup_arrived_at_ms,
+        pickup_left_at_ms: oc.pickup_left_at_ms,
+        pickup_at_ms: pickup,
+        arrived_at_ms: oc.arrived_at_ms,
+        pickup_arrived_crane_ms: oc.pickup_arrived_crane_ms,
+        arrived_crane_ms: oc.arrived_crane_ms,
+        crane_arr_method: oc.crane_arr_method,
+        dropped_at_ms: now,
+        idle_before_ms: oc.idle_before_ms,
+        empty_leg_ms: oc.empty_leg_ms,
+        empty_leg_m: oc.empty_leg_m,
+        laden_leg_ms,
+        laden_leg_m: p.carry_trip_m,
+        jobtype: oc.jobtype.or_else(|| p.latched_jobtype.clone()),
+        vessel: oc.vessel.or_else(|| p.latched_vessel.clone()),
+        voyage: oc.voyage,
+        container: oc.container.or_else(|| p.latched_container.clone()),
+        qc: oc.qc,
+        twintandem: oc.twintandem,
+        container_to_container: c2c,
+    }
 }
 
 #[derive(Default)]
@@ -402,6 +623,7 @@ struct Classed {
 ///  - wait_rtg: loaded + ARRIVED at block but no RTG near yet (arrived ≠ soon-idle)
 fn classify_tt(
     p: &Pos,
+    assigned: bool,
     rtgs: &[(f64, f64)],
     plc: &HashMap<String, Plc>,
     cranes: &HashMap<String, (f64, f64)>,
@@ -412,6 +634,12 @@ fn classify_tt(
     let loaded = p.container1.as_deref().is_some_and(|s| !s.is_empty());
     if !loaded {
         if p.speed < IDLE_SPEED_KMH {
+            // empty + stationary: only truly UNASSIGNED trucks are idle. A truck the work pool
+            // says is assigned is queued/staging for its pickup, not available — the GPS feed
+            // clears the job fields between updates, which used to over-count these as idle.
+            if assigned {
+                return st("staging", Some("배차됨 · 픽업 대기/정차".into()));
+            }
             return st("idle", None);
         }
         // empty + moving = empty_travel. Swap-worthiness = remaining distance to its pickup.
@@ -484,6 +712,7 @@ pub async fn positions(State(lm): State<Arc<LiveMap>>, State(pool): State<PgPool
     let map = lm.devices.read().await;
     let plc = lm.plc.read().await;
     let centroids = lm.centroids.read().await;
+    let assigned_pool = lm.assigned_pool.read().await;
     // fresh RTG positions for the discharge same-bay proximity check
     let rtgs: Vec<(f64, f64)> = map
         .values()
@@ -503,7 +732,7 @@ pub async fn positions(State(lm): State<Arc<LiveMap>>, State(pool): State<PgPool
             if age > STALE_AFTER_S {
                 return None;
             }
-            let c = (p.cls == "TT").then(|| classify_tt(p, &rtgs, &plc, &cranes, &centroids, now));
+            let c = (p.cls == "TT").then(|| classify_tt(p, assigned_pool.contains_key(id), &rtgs, &plc, &cranes, &centroids, now));
             let dispatch = c.as_ref().map(|c| c.state);
             let dispatch_reason = c.as_ref().and_then(|c| c.reason.clone());
             let nearest_rtg_m = c.as_ref().and_then(|c| c.nearest_rtg_m);
@@ -897,6 +1126,217 @@ pub fn spawn_util_sampler(_lm: Arc<LiveMap>, pool: PgPool) {
     });
 }
 
+/// Every ~30s, refresh the authoritative per-truck assignment cache from the work pool
+/// (`live_assigned_tt` = any active job, all types; enriched with the latest `live_workpool`
+/// row per truck for DS/LD job metadata). A truck present here is "assigned" even when its
+/// GPS shows it empty+stationary — that's the signal the live idle classifier uses to mark it
+/// `staging` instead of `idle`, and that the cycle machine uses for job metadata.
+pub fn spawn_assignment_refresh(lm: Arc<LiveMap>, pool: PgPool) {
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(Duration::from_secs(30));
+        loop {
+            ticker.tick().await;
+            let rows = sqlx::query_as::<_, (String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>)>(
+                "SELECT DISTINCT ON (a.ytno) a.ytno, w.jobtype, w.vessel, w.voyage, w.contno, w.qc, w.twintandem
+                   FROM live_assigned_tt a
+                   LEFT JOIN LATERAL (
+                       SELECT jobtype, vessel, voyage, contno, qc, twintandem
+                         FROM live_workpool w
+                        WHERE w.ytno = a.ytno
+                        ORDER BY w.as_of_ts DESC, w.id DESC
+                        LIMIT 1
+                   ) w ON true
+                  WHERE a.as_of_ts > now() - interval '5 minutes'
+                  ORDER BY a.ytno, a.as_of_ts DESC",
+            )
+            .fetch_all(&pool)
+            .await;
+            match rows {
+                Ok(rows) => {
+                    let mut next: HashMap<String, AssignedJob> = HashMap::with_capacity(rows.len());
+                    for (ytno, jobtype, vessel, voyage, contno, qc, twintandem) in rows {
+                        next.insert(ytno, AssignedJob { jobtype, vessel, voyage, contno, qc, twintandem });
+                    }
+                    *lm.assigned_pool.write().await = next;
+                }
+                Err(e) => tracing::warn!(error = %e, "assignment refresh query failed"),
+            }
+        }
+    });
+}
+
+/// Every ~30s, drain completed cycles from the in-memory buffer into `tt_cycle_log`. Idempotent
+/// (`ON CONFLICT (ytno, dropped_at) DO NOTHING`) so a restart can't double-write. Mirrors
+/// `spawn_util_sampler`.
+pub fn spawn_cycle_flusher(lm: Arc<LiveMap>, pool: PgPool) {
+    let to_ts = |ms: i64| (ms > 0).then(|| DateTime::from_timestamp_millis(ms)).flatten();
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(Duration::from_secs(30));
+        loop {
+            ticker.tick().await;
+            let batch: Vec<CompletedCycle> = {
+                let mut buf = lm.cycle_log.lock().await;
+                buf.drain(..).collect()
+            };
+            if batch.is_empty() {
+                continue;
+            }
+            let (bd, sh) = wp_core::shift::current(wp_core::shift::terminal_now().naive_local());
+            let mut written = 0u32;
+            for c in &batch {
+                let dropped = match to_ts(c.dropped_at_ms) { Some(t) => t, None => continue };
+                let dur_s = |from: i64| (from > 0).then(|| ((c.dropped_at_ms - from) / 1000) as i32);
+                let r = sqlx::query(
+                    "INSERT INTO tt_cycle_log
+                       (ytno, business_date, shift, jobtype, vessel, voyage, container, qc, twintandem,
+                        assigned_at, pickup_arrived_at, pickup_left_at, pickup_at, arrived_at, dropped_at,
+                        idle_before_s, empty_leg_s, empty_leg_m, laden_leg_s, laden_leg_m, cycle_s,
+                        movement_ok, container_to_container,
+                        pickup_arrived_crane_at, arrived_crane_at, crane_arr_method)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,true,$22,$23,$24,$25)
+                     ON CONFLICT (ytno, dropped_at) DO NOTHING",
+                )
+                .bind(&c.ytno)
+                .bind(bd)
+                .bind(sh.label())
+                .bind(&c.jobtype)
+                .bind(&c.vessel)
+                .bind(&c.voyage)
+                .bind(&c.container)
+                .bind(&c.qc)
+                .bind(&c.twintandem)
+                .bind(to_ts(c.assigned_at_ms))
+                .bind(to_ts(c.pickup_arrived_at_ms))
+                .bind(to_ts(c.pickup_left_at_ms))
+                .bind(to_ts(c.pickup_at_ms))
+                .bind(to_ts(c.arrived_at_ms))
+                .bind(dropped)
+                .bind((c.idle_before_ms / 1000) as i32)
+                .bind((c.empty_leg_ms / 1000) as i32)
+                .bind(c.empty_leg_m)
+                .bind((c.laden_leg_ms / 1000) as i32)
+                .bind(c.laden_leg_m)
+                .bind(dur_s(c.assigned_at_ms).unwrap_or((c.laden_leg_ms / 1000) as i32))
+                .bind(c.container_to_container)
+                .bind(to_ts(c.pickup_arrived_crane_ms))
+                .bind(to_ts(c.arrived_crane_ms))
+                .bind(c.crane_arr_method)
+                .execute(&pool)
+                .await;
+                match r {
+                    Ok(_) => written += 1,
+                    Err(e) => tracing::warn!(error = %e, ytno = %c.ytno, "tt_cycle_log insert failed"),
+                }
+            }
+            tracing::debug!(written, batch = batch.len(), "flushed TT cycles");
+
+            // ── v2 SHADOW rows → tt_cycle_v2 (crane-side PLC pairing happens here, where
+            // the full edge history is available without touching the ingest hot path) ──
+            let batch2: Vec<CompletedV2> = {
+                let mut b = lm.cycle_v2.lock().await;
+                b.drain(..).collect()
+            };
+            if batch2.is_empty() {
+                continue;
+            }
+            for c in &batch2 {
+                let dropped = match to_ts(c.dropped_ms) { Some(t) => t, None => continue };
+                // pickup side = the leading run of legs of the jobtype's pickup kind
+                // (DS picks at the crane, LD/MI/MO at a block); drop = the first leg after it.
+                let pickup_is_crane = matches!(c.jobtype.as_deref(), Some("DS"));
+                let mut split = c.legs.iter().position(|l| l.crane != pickup_is_crane);
+                if split.is_none() && c.legs.len() >= 2 {
+                    split = Some(c.legs.len() - 1); // block→block jobs: last leg is the drop
+                }
+                let split = split.unwrap_or(c.legs.len());
+                let (pickup_legs, rest) = c.legs.split_at(split);
+                let drop_leg = rest.first();
+
+                let p_arr = pickup_legs.iter().find(|l| l.arrived_ms > 0);
+                let mut p_left = pickup_legs.last().map(|l| l.left_ms).unwrap_or(0);
+                if p_left == 0 {
+                    p_left = drop_leg.map(|d| d.assigned_ms).unwrap_or(0); // the flip bounds the pickup
+                }
+                let legs_json = serde_json::json!(c.legs.iter().map(|l| serde_json::json!({
+                    "target": l.target, "crane": l.crane, "assigned": l.assigned_ms,
+                    "arrived": l.arrived_ms, "arr_src": l.arr_src, "left": l.left_ms,
+                })).collect::<Vec<_>>());
+                let opt = |s: &str| (!s.is_empty()).then(|| s.to_string());
+                // v2.4: backfill a block arrival the leg model missed (or correct a coarse
+                // pre_positioned approximation) from v1's continuous-tracker arrival for this
+                // same (ytno, dropped_at). Keeps v2 capture ≥ v1 without touching the leg model.
+                // Bounded by the drop instant; a final clamp preserves pickup ≤ drop (G4).
+                let mut p_arr_ms = p_arr.map(|l| l.arrived_ms).unwrap_or(0);
+                let mut p_arr_src = p_arr.map(|l| l.arr_src).unwrap_or("");
+                let mut d_arr_ms = drop_leg.map(|d| d.arrived_ms).unwrap_or(0);
+                let mut d_arr_src = drop_leg.map(|d| d.arr_src).unwrap_or("");
+                if c.v1_drop_arrived_ms > 0 && c.v1_drop_arrived_ms <= c.dropped_ms
+                    && (d_arr_ms == 0 || d_arr_src == "pre_positioned")
+                {
+                    d_arr_ms = c.v1_drop_arrived_ms;
+                    d_arr_src = "v1";
+                }
+                if c.v1_pickup_arrived_ms > 0 && c.v1_pickup_arrived_ms <= c.dropped_ms
+                    && (p_arr_ms == 0 || p_arr_src == "pre_positioned" || p_arr_src == "container1")
+                {
+                    p_arr_ms = c.v1_pickup_arrived_ms;
+                    p_arr_src = "v1";
+                }
+                // enforce the monotonic chain empty_arrived ≤ pickup_left ≤ laden_arrived,
+                // dropping the stale value the backfill exposed. Arrival-vs-arrival first
+                // (keep the leg-derived one), then the leg-derived departure against both —
+                // a split (mode2) cycle's pickup_left can predate the accurate v1 arrival, so
+                // NULL the unreliable departure rather than the arrival (preserves capture).
+                if p_arr_ms > 0 && d_arr_ms > 0 && p_arr_ms > d_arr_ms {
+                    if p_arr_src == "v1" {
+                        p_arr_ms = 0;
+                        p_arr_src = "";
+                    } else if d_arr_src == "v1" {
+                        d_arr_ms = 0;
+                        d_arr_src = "";
+                    }
+                }
+                if p_left > 0 && p_arr_ms > 0 && p_arr_ms > p_left {
+                    p_left = 0;
+                }
+                if p_left > 0 && d_arr_ms > 0 && p_left > d_arr_ms {
+                    p_left = 0;
+                }
+                // 공차이동시작은 픽업 도착보다 앞서야 한다. 백필/소급(arr_dtime·v1) 도착이 더 이른
+                // 분할·이월 사이클에선 첫 움직임이 이 트립 것이 아니므로 NULL 처리.
+                let mut ets_ms = c.empty_travel_start_ms;
+                if ets_ms > 0 && p_arr_ms > 0 && ets_ms > p_arr_ms {
+                    ets_ms = 0;
+                }
+                let r = sqlx::query(
+                    "INSERT INTO tt_cycle_v2
+                       (ytno, dropped_at, opened_at, jobtype,
+                        empty_travel_start_at, empty_arrived_at, pickup_left_at,
+                        laden_arrived_at, arr_src_pickup, arr_src_drop, legs)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+                     ON CONFLICT (ytno, dropped_at) DO NOTHING",
+                )
+                .bind(&c.ytno)
+                .bind(dropped)
+                .bind(to_ts(c.opened_ms))
+                .bind(&c.jobtype)
+                .bind(to_ts(ets_ms))
+                .bind(to_ts(p_arr_ms))
+                .bind(to_ts(p_left))
+                .bind(to_ts(d_arr_ms))
+                .bind(opt(p_arr_src))
+                .bind(opt(d_arr_src))
+                .bind(legs_json)
+                .execute(&pool)
+                .await;
+                if let Err(e) = r {
+                    tracing::warn!(error = %e, ytno = %c.ytno, "tt_cycle_v2 insert failed");
+                }
+            }
+        }
+    });
+}
+
 pub fn spawn(lm: Arc<LiveMap>) {
     // pruner: drop fixes older than LOST_AFTER_S so the maps can't grow unbounded.
     {
@@ -1145,6 +1585,11 @@ async fn ingest_text(lm: &Arc<LiveMap>, text: &str) {
         distance: g.get("distance").and_then(num),
         ..Default::default()
     };
+    // v2 SHADOW: the feed's own arrival timestamp ("HH:MM:SS", persists while arrived) —
+    // gives the exact arrival time even when the ARRIVED rising edge was missed.
+    if let Some(ad) = opt_str(g, "arr_dtime") {
+        pos.arr_dtime_ms = parse_arr_dtime(&ad, now).unwrap_or(0);
+    }
 
     // learn block/bay AND crane positions from TTs observed ARRIVED at a topos — feeds the
     // empty-TT "remaining distance to pickup" used for swap-worthiness (crane fallback when a
@@ -1170,9 +1615,23 @@ async fn ingest_text(lm: &Arc<LiveMap>, text: &str) {
     let mut cycle_sample_s: Option<i64> = None;
     let mut artifact = false;
     let mut artifact_near = false;
+    // authoritative assignment (any job type) + its work-pool metadata for this truck
+    let aj = lm.assigned_pool.read().await.get(id).cloned();
+    let assigned_now = aj.is_some();
+    // SHADOW crane-arrival: this message's destination crane PLC (last pickup / freshness),
+    // read BEFORE the devices write lock so we never hold two locks. Keyed by topos1.
+    let crane_plc: Option<(i64, i64)> = match pos.topos1.as_deref().filter(|t| is_crane_code(t)) {
+        Some(t) => lm.plc.read().await.get(t).map(|c| (c.last_move_ms, c.last_seen_ms)),
+        None => None,
+    };
+    let mut completed: Option<CompletedCycle> = None;
+    let mut completed_v2: Option<CompletedV2> = None;
     {
         let mut devmap = lm.devices.write().await;
         let prev_c1 = devmap.get(id).and_then(|p| p.container1.clone());
+        let prev_c2 = devmap.get(id).and_then(|p| p.container2.clone());
+        let prev_arrived = devmap.get(id).is_some_and(|p| p.arrival.as_deref() == Some("ARRIVED"));
+        let prev_topos = devmap.get(id).and_then(|p| p.latched_topos.clone());
         if let Some(prev) = devmap.get(id) {
             pos.carry_since_ms = prev.carry_since_ms;
             pos.last_drop_ms = prev.last_drop_ms;
@@ -1180,18 +1639,136 @@ async fn ingest_text(lm: &Arc<LiveMap>, text: &str) {
             // the evidence used to tell a real delivery (truck drove the box) from a TOS
             // re-assignment artifact (container1 rewritten while the truck sits still).
             pos.carry_trip_m = prev.carry_trip_m;
+            // carry the cycle-machine state forward
+            pos.empty_since_ms = prev.empty_since_ms;
+            pos.empty_trip_m = prev.empty_trip_m;
+            pos.empty_arrived_ms = prev.empty_arrived_ms;
+            pos.cycle_open = prev.cycle_open.clone();
+            // latch job fields: keep the previous latched value when this fix omits the field,
+            // so an intermittent feed doesn't drop the truck's job/container mid-cycle.
+            pos.latched_container = pos.container1.clone().or_else(|| prev.latched_container.clone());
+            pos.latched_jobtype = pos.jobtype.clone().or_else(|| prev.latched_jobtype.clone());
+            pos.latched_vessel = pos.vslname.clone().or_else(|| prev.latched_vessel.clone());
+            pos.latched_topos = pos.topos1.clone().or_else(|| prev.latched_topos.clone());
+            // v2 SHADOW carries
+            pos.latched_topos2 = opt_str(g, "topos2").or_else(|| prev.latched_topos2.clone());
+            if pos.arr_dtime_ms == 0 { pos.arr_dtime_ms = prev.arr_dtime_ms; }
+            pos.v2 = prev.v2.clone();
             if pos.cls == "TT" && prev.lat != 0.0 && pos.lat != 0.0 {
                 let step = dist_m((prev.lat, prev.lon), (pos.lat, pos.lon));
                 if step.is_finite() && step <= MAX_FIX_STEP_M {
                     pos.carry_trip_m += step;
+                    // accumulate the empty-leg path while not carrying (assignment→pickup drive)
+                    if pos.container1.as_deref().unwrap_or("").is_empty() {
+                        pos.empty_trip_m += step;
+                    }
                 }
             }
+        } else {
+            // first sight of this device: seed the latches from this fix
+            pos.latched_container = pos.container1.clone();
+            pos.latched_jobtype = pos.jobtype.clone();
+            pos.latched_vessel = pos.vslname.clone();
+            pos.latched_topos = pos.topos1.clone();
+            pos.latched_topos2 = opt_str(g, "topos2");
         }
+        pos.assigned = assigned_now;
         if pos.cls == "TT" {
-            let new_c1 = pos.container1.as_deref().unwrap_or("");
-            let old_c1 = prev_c1.as_deref().unwrap_or("");
-            if new_c1 != old_c1 {
-                if !old_c1.is_empty() {
+            // owned copies so the cycle helpers can take `&pos` without borrow conflicts
+            let new_c1 = pos.container1.clone().unwrap_or_default();
+            let old_c1 = prev_c1.clone().unwrap_or_default();
+            // SLOT SWAP guard (twin/tandem carry): the feed sometimes just reorders the two
+            // box numbers between container1/container2 without any physical drop or pickup
+            // (verified live: ~2 swaps / 25s among ~52 twin carriers). A bare container1 edge
+            // would then look like a delivery. Detect it as "the non-empty {c1,c2} set is
+            // unchanged" and treat it as a no-op: no drop, and crucially no carry-state reset
+            // (otherwise every swap restarts a twin's laden trip-distance/-time measurement).
+            let slot_swap = new_c1 != old_c1 && !new_c1.is_empty() && {
+                let new_c2 = pos.container2.clone().unwrap_or_default();
+                let old_c2 = prev_c2.clone().unwrap_or_default();
+                let mut a = [old_c1.as_str(), old_c2.as_str()]; a.sort_unstable();
+                let mut b = [new_c1.as_str(), new_c2.as_str()]; b.sort_unstable();
+                a == b
+            };
+            // ARRIVED handling for the open cycle. container1 is ASSIGNMENT-driven (the next
+            // box is pre-assigned at the previous drop — verified live: LD trucks sit ARRIVED
+            // at their pickup block with container1 already set), so the physical pickup is
+            // NOT a container1 edge. Recover it by classifying each ARRIVED rising edge by
+            // WHICH side it hit: LD loads at a block & unloads at the crane, DS the reverse,
+            // MI/MO are block→block (first arrival = pickup, a later one = drop). The truck
+            // speeding up again after the pickup arrival = pickup departure (laden start).
+            let arrived_now = pos.arrival.as_deref() == Some("ARRIVED");
+            let topos_now = pos.topos1.clone().or_else(|| pos.latched_topos.clone()).unwrap_or_default();
+            if let Some(oc) = pos.cycle_open.as_mut() {
+                if arrived_now && !prev_arrived {
+                    let at_crane = is_crane_code(&topos_now);
+                    let drop_side = match pos.latched_jobtype.as_deref().unwrap_or("") {
+                        "LD" => at_crane,
+                        "DS" => !at_crane,
+                        "MI" | "MO" | "LC" => oc.pickup_arrived_at_ms != 0,
+                        _ => at_crane,
+                    };
+                    if drop_side {
+                        if oc.arrived_at_ms == 0 { oc.arrived_at_ms = now; }
+                    } else if oc.pickup_arrived_at_ms == 0 && oc.arrived_at_ms == 0 {
+                        oc.pickup_arrived_at_ms = now;
+                    }
+                } else if !arrived_now
+                    && oc.pickup_arrived_at_ms != 0
+                    && oc.pickup_left_at_ms == 0
+                    && pos.speed >= IDLE_SPEED_KMH
+                {
+                    oc.pickup_left_at_ms = now; // under way again → laden travel begins
+                }
+            }
+            // pickup-side ARRIVED on a true empty leg (before the next cycle opens)
+            if arrived_now && !prev_arrived && new_c1.is_empty() && pos.empty_arrived_ms == 0 {
+                pos.empty_arrived_ms = now;
+            }
+            // ── SHADOW crane-arrival (observational; does NOT touch the live phases above) ──
+            // When the truck's assigned destination is a quay crane, the ARRIVED flag is
+            // unreliable, so estimate the crane arrival from GPS proximity to that crane OR the
+            // crane PLC actively handling while the truck is stopped. Record the FIRST such
+            // detection per open cycle into the shadow fields, routed by job side (LD crane =
+            // drop, DS crane = pickup). For validation against the live columns only.
+            if is_crane_code(&topos_now) {
+                let near_crane = devmap.get(&topos_now).is_some_and(|cr| {
+                    cr.lat != 0.0
+                        && (now - cr.last_seen_ms) / 1000 <= STALE_AFTER_S
+                        && dist_m((pos.lat, pos.lon), (cr.lat, cr.lon)) <= CRANE_ARRIVE_M
+                });
+                let plc_active = crane_plc.is_some_and(|(last_move, last_seen)| {
+                    (now - last_seen) / 1000 <= STALE_AFTER_S && last_move != 0 && now - last_move <= CRANE_PLC_ACTIVE_MS
+                });
+                let method = if arrived_now {
+                    Some("arrived")
+                } else if near_crane {
+                    Some("gps")
+                } else if plc_active && pos.speed < IDLE_SPEED_KMH {
+                    Some("plc")
+                } else {
+                    None
+                };
+                if let (Some(m), Some(oc)) = (method, pos.cycle_open.as_mut()) {
+                    let drop_side = match pos.latched_jobtype.as_deref().unwrap_or("") {
+                        "LD" => true,
+                        "DS" => false,
+                        _ => oc.pickup_arrived_crane_ms != 0, // block→block jobs: 2nd crane hit = drop
+                    };
+                    if drop_side {
+                        if oc.arrived_crane_ms == 0 {
+                            oc.arrived_crane_ms = now;
+                            oc.crane_arr_method = Some(m);
+                        }
+                    } else if oc.pickup_arrived_crane_ms == 0 {
+                        oc.pickup_arrived_crane_ms = now;
+                        oc.crane_arr_method = Some(m);
+                    }
+                }
+            }
+            if new_c1 != old_c1 && !slot_swap {
+                let was_loaded = !old_c1.is_empty();
+                if was_loaded {
                     // a delivery requires the box was carried ≥30s AND the truck actually
                     // drove it ≥150m. Carried-but-stationary = TOS re-assignment, not a
                     // delivery: rejected here on the movement signature (not on duration).
@@ -1206,6 +1783,10 @@ async fn ingest_text(lm: &Arc<LiveMap>, text: &str) {
                                 }
                             }
                             pos.last_drop_ms = now;
+                            // finalize the cycle this drop completes (→ tt_cycle_log)
+                            completed = Some(finalize_cycle(id, &pos, now, !new_c1.is_empty()));
+                            pos.cycle_open = None;
+                            pos.latched_container = None;
                         } else {
                             artifact = true; // changed container1 without moving it
                             artifact_near = pos.carry_trip_m >= NEAR_TRIP_M; // possible short haul
@@ -1215,9 +1796,254 @@ async fn ingest_text(lm: &Arc<LiveMap>, text: &str) {
                 // new carry (or empty): reset the trip accumulator for the next box
                 pos.carry_since_ms = if new_c1.is_empty() { 0 } else { now };
                 pos.carry_trip_m = 0.0;
+                if new_c1.is_empty() {
+                    // entering an empty leg: start measuring the next assignment→pickup drive
+                    pos.empty_since_ms = now;
+                    pos.empty_trip_m = 0.0;
+                    pos.empty_arrived_ms = 0;
+                } else {
+                    // pickup: open a fresh cycle. A container→container pickup (was_loaded) has
+                    // no empty gap, so zero the empty leg first.
+                    if was_loaded { pos.empty_since_ms = now; pos.empty_trip_m = 0.0; }
+                    pos.latched_container = pos.container1.clone();
+                    pos.cycle_open = Some(open_cycle(now, &pos, aj.as_ref()));
+                    pos.empty_arrived_ms = 0; // consumed into the cycle; ready for the next leg
+                }
+            }
+            // ── v2 SHADOW leg tracker (design doc) — writes only tt_cycle_v2; the v1
+            // machine above is untouched. A leg = one topos1 target. Order matters:
+            // (i) progress the in-flight leg, (ii) a validated drop (v1 `completed`)
+            // closes the v2 cycle, (iii) a topos1 transition assigns the next leg.
+            {
+                let stopped = pos.speed < IDLE_SPEED_KMH;
+                // 공차이동시작: first movement after the cycle opens while still on the first
+                // (empty→pickup) leg and before reaching the pickup. opened→here gap = the
+                // post-assignment wait. NULL for pre-positioned trucks (no empty drive observed).
+                if pos.v2.opened_ms > 0
+                    && pos.v2.empty_travel_start_ms == 0
+                    && pos.speed >= IDLE_SPEED_KMH
+                    && pos.v2.legs.is_empty()
+                    && pos.v2.cur.as_ref().map_or(true, |l| l.arrived_ms == 0)
+                {
+                    pos.v2.empty_travel_start_ms = now;
+                }
+                // (i) arrival (arr_dtime > ARRIVED edge > cur_loc match > crane GPS), departure
+                if let Some(leg) = pos.v2.cur.as_mut() {
+                    // v2.3 (A): cur_loc=WHARF latches ~200s early in the wharf queue and
+                    // would lock out the accurate arr_dtime/ARRIVED edge that fires when the
+                    // truck actually reaches the crane. So keep re-evaluating while the only
+                    // latch we have is the coarse cur_loc, and UPGRADE it to the precise source.
+                    let coarse = leg.arr_src == "cur_loc";
+                    if leg.arrived_ms == 0 || coarse {
+                        let mut upgraded = false;
+                        if pos.arr_dtime_ms > 0 && pos.arr_dtime_ms >= leg.assigned_ms {
+                            leg.arrived_ms = pos.arr_dtime_ms;
+                            leg.arr_src = "arr_dtime";
+                            upgraded = coarse;
+                        } else if arrived_now && !prev_arrived {
+                            leg.arrived_ms = now;
+                            leg.arr_src = "arrived";
+                            upgraded = coarse;
+                        } else if leg.arrived_ms == 0 && stopped {
+                            let cl = pos.cur_loc.as_deref().unwrap_or("");
+                            let at = if leg.crane {
+                                cl.starts_with("WHARF")
+                            } else {
+                                !cl.is_empty() && block_prefix(cl) == block_prefix(&leg.target)
+                            };
+                            if at {
+                                leg.arrived_ms = now;
+                                leg.arr_src = "cur_loc";
+                            } else if leg.crane {
+                                let near = devmap.get(&leg.target).is_some_and(|cr| {
+                                    cr.lat != 0.0
+                                        && (now - cr.last_seen_ms) / 1000 <= STALE_AFTER_S
+                                        && dist_m((pos.lat, pos.lon), (cr.lat, cr.lon)) <= 60.0
+                                });
+                                if near {
+                                    leg.arrived_ms = now;
+                                    leg.arr_src = "gps";
+                                }
+                            }
+                        }
+                        if upgraded {
+                            // departure derived from the early coarse arrival now predates the
+                            // corrected time — drop it so it re-derives.
+                            if leg.left_ms != 0 && leg.left_ms <= leg.arrived_ms {
+                                leg.left_ms = 0;
+                            }
+                        }
+                    }
+                    if leg.arrived_ms > 0
+                        && leg.left_ms == 0
+                        && pos.speed >= IDLE_SPEED_KMH
+                        && now - leg.arrived_ms > 5_000
+                    {
+                        leg.left_ms = now;
+                    }
+                }
+                // (i-b) 픽업 보장: container1 empty→non-empty 는 가장 신뢰도 높은 픽업 신호다.
+                // topos1이 픽업 타깃으로 전이하지 않아 픽업 레그가 아예 안 생기던 "드롭전용 1-레그"
+                // 사이클을 메운다 — 없으면 합성, 미도착이면 도착 마킹. 픽업 종류는 jobtype으로
+                // 결정(DS=크레인, 그 외=블록), 정확한 도착 시각은 flush의 v1 백필이 보정한다.
+                if old_c1.is_empty() && !new_c1.is_empty() {
+                    if pos.v2.opened_ms == 0 {
+                        pos.v2.opened_ms = now;
+                        pos.v2.jobtype = pos.latched_jobtype.clone();
+                    }
+                    if let Some(leg) = pos.v2.cur.as_mut() {
+                        if leg.arrived_ms == 0 {
+                            leg.arrived_ms = now;
+                            leg.arr_src = "container1";
+                        }
+                    } else {
+                        let crane = pos.v2.jobtype.as_deref()
+                            .or(pos.latched_jobtype.as_deref()) == Some("DS");
+                        let tgt = pos.latched_topos.clone().filter(|t| !t.is_empty())
+                            .or_else(|| pos.cur_loc.clone()).unwrap_or_default();
+                        if !tgt.is_empty() {
+                            pos.v2.cur = Some(V2Leg {
+                                crane,
+                                target: tgt,
+                                assigned_ms: pos.v2.opened_ms,
+                                arrived_ms: now,
+                                arr_src: "container1",
+                                left_ms: 0,
+                            });
+                        }
+                    }
+                }
+                // (ii) the validated drop edge closes the v2 cycle. TOS often PRE-assigns
+                // the next job's target mid-cycle (verified: most cycles were missing their
+                // pickup leg because it had attached to the closing cycle, or no transition
+                // fired at reopen since the latch already held the next target). So: an
+                // un-arrived trailing leg is the NEXT cycle's pickup → carry it over with
+                // its true assignment time; otherwise seed the new cycle's first leg from
+                // the currently latched target.
+                if completed.is_some() {
+                    // jobtype of the cycle being closed (snapshot at open; latch is the next job)
+                    let close_jobtype = pos.v2.jobtype.clone().or_else(|| pos.latched_jobtype.clone());
+                    let pickup_is_crane = close_jobtype.as_deref() == Some("DS");
+                    let known_jt = matches!(close_jobtype.as_deref(), Some("DS") | Some("LD"));
+                    let mut legs = std::mem::take(&mut pos.v2.legs);
+                    let mut carry: Option<V2Leg> = None;
+                    if let Some(mut cur) = pos.v2.cur.take() {
+                        // v2.3 (C): the v1 drop edge can fire early on a block c2c, splitting one
+                        // physical trip into a pickup-only cycle + a drop-only cycle. If this cycle
+                        // never reached a drop-kind leg, the current (arrived) pickup leg belongs to
+                        // the continuing trip → carry it forward instead of burying it here.
+                        let reached_drop = legs.iter().chain(std::iter::once(&cur))
+                            .any(|l| l.crane != pickup_is_crane);
+                        if cur.arrived_ms == 0 && !legs.is_empty() {
+                            carry = Some(cur); // pre-assigned next-pickup leg → next cycle
+                        } else if known_jt && !reached_drop && cur.crane == pickup_is_crane {
+                            carry = Some(cur); // premature close: pickup leg → next cycle
+                        } else {
+                            if cur.arrived_ms > 0 && cur.left_ms == 0 {
+                                cur.left_ms = now;
+                            }
+                            legs.push(cur);
+                        }
+                    }
+                    if pos.v2.opened_ms > 0 && !legs.is_empty() {
+                        completed_v2 = Some(CompletedV2 {
+                            ytno: id.to_string(),
+                            dropped_ms: now,
+                            opened_ms: pos.v2.opened_ms,
+                            empty_travel_start_ms: pos.v2.empty_travel_start_ms,
+                            jobtype: pos.v2.jobtype.clone().or_else(|| pos.latched_jobtype.clone()),
+                            legs,
+                            v1_pickup_arrived_ms: completed.as_ref().map(|c| c.pickup_arrived_at_ms).unwrap_or(0),
+                            v1_drop_arrived_ms: completed.as_ref().map(|c| c.arrived_at_ms).unwrap_or(0),
+                        });
+                    }
+                    pos.v2 = V2State::default();
+                    if !new_c1.is_empty() {
+                        pos.v2.opened_ms = now; // c2c: the next box is pre-assigned right now
+                        pos.v2.jobtype = pos.latched_jobtype.clone(); // by now = the NEXT job's type
+                    }
+                    if let Some(c) = carry {
+                        if pos.v2.opened_ms == 0 {
+                            pos.v2.opened_ms = c.assigned_ms.min(now);
+                            pos.v2.jobtype = pos.latched_jobtype.clone();
+                        }
+                        pos.v2.cur = Some(c);
+                    } else if pos.v2.opened_ms > 0 {
+                        // latch already points at the next target (assignment event consumed
+                        // earlier) — no transition will fire, so seed the leg here. Guard:
+                        // never seed with the leg we JUST finished at (a drop frame without
+                        // the new raw topos still latches the old target).
+                        if let Some(t) = pos.latched_topos.clone() {
+                            if prev_topos.as_deref() != Some(t.as_str()) {
+                                let t_crane = is_crane_code(&t);
+                                let prepos = prepositioned_arrival(
+                                    t_crane, &t, stopped, pos.cur_loc.as_deref().unwrap_or(""));
+                                pos.v2.cur = Some(V2Leg {
+                                    crane: t_crane,
+                                    target: t,
+                                    assigned_ms: now,
+                                    arrived_ms: if prepos { now } else { 0 },
+                                    arr_src: if prepos { "pre_positioned" } else { "" },
+                                    left_ms: 0,
+                                });
+                            }
+                        }
+                    }
+                }
+                // (iii) topos1 transition = the next leg's assignment (opens a cycle if none)
+                let raw_tp = pos.topos1.as_deref().unwrap_or("");
+                if !raw_tp.is_empty()
+                    && prev_topos.as_deref() != Some(raw_tp)
+                    // not a transition if the in-progress leg already targets it (e.g. the
+                    // reopen-seed above on this same frame)
+                    && pos.v2.cur.as_ref().map(|c| c.target.as_str()) != Some(raw_tp)
+                {
+                    if pos.v2.opened_ms == 0 {
+                        pos.v2.opened_ms = now;
+                        pos.v2.jobtype = pos.latched_jobtype.clone();
+                    }
+                    if let Some(mut cur) = pos.v2.cur.take() {
+                        if cur.arrived_ms > 0 && cur.left_ms == 0 {
+                            cur.left_ms = now;
+                        }
+                        if pos.v2.legs.len() >= V2_LEGS_MAX {
+                            pos.v2.legs.remove(1); // keep the first (pickup) + recent legs
+                        }
+                        pos.v2.legs.push(cur);
+                    }
+                    let tp_crane = is_crane_code(raw_tp);
+                    let prepos = prepositioned_arrival(
+                        tp_crane, raw_tp, stopped, pos.cur_loc.as_deref().unwrap_or(""));
+                    pos.v2.cur = Some(V2Leg {
+                        target: raw_tp.to_string(),
+                        crane: tp_crane,
+                        assigned_ms: now,
+                        arrived_ms: if prepos { now } else { 0 },
+                        arr_src: if prepos { "pre_positioned" } else { "" },
+                        left_ms: 0,
+                    });
+                } else if pos.v2.opened_ms == 0 && !new_c1.is_empty() && old_c1.is_empty() {
+                    pos.v2.opened_ms = now; // assignment observed via container1 only
+                    pos.v2.jobtype = pos.latched_jobtype.clone();
+                }
             }
         }
         devmap.insert(id.to_string(), pos);
+    }
+    if let Some(c) = completed_v2 {
+        let mut buf = lm.cycle_v2.lock().await;
+        buf.push_back(c);
+        while buf.len() > CYCLE_BUF_MAX {
+            buf.pop_front();
+        }
+    }
+    if let Some(c) = completed {
+        let mut buf = lm.cycle_log.lock().await;
+        buf.push_back(c);
+        while buf.len() > CYCLE_BUF_MAX {
+            buf.pop_front();
+            tracing::warn!("tt_cycle_log buffer over capacity; dropped oldest cycle");
+        }
     }
     if fleet_drop {
         let mut drops = lm.tt_drops.lock().await;
@@ -1247,6 +2073,31 @@ async fn ingest_text(lm: &Arc<LiveMap>, text: &str) {
 /// Numbers arrive as JSON strings ("2.9207...") or bare numbers; accept either.
 fn num(v: &serde_json::Value) -> Option<f64> {
     v.as_f64().or_else(|| v.as_str().and_then(|s| s.trim().parse::<f64>().ok()))
+}
+
+/// Parse the feed's `arr_dtime` ("HH:MM:SS", terminal local time MYT=UTC+8) into epoch ms.
+/// The field carries no date: attach the terminal date, and if the result lands in the
+/// future (just past midnight reading a pre-midnight arrival) roll back one day. Reject
+/// anything older than 6h as stale/garbled (a dwell that long is outside cycle scope).
+fn parse_arr_dtime(s: &str, now_ms: i64) -> Option<i64> {
+    let mut it = s.trim().split(':');
+    let (h, m, sec) = (
+        it.next()?.parse::<i64>().ok()?,
+        it.next()?.parse::<i64>().ok()?,
+        it.next().unwrap_or("0").parse::<i64>().ok()?,
+    );
+    if !(0..24).contains(&h) || !(0..60).contains(&m) || !(0..60).contains(&sec) {
+        return None;
+    }
+    let tod_ms = (h * 3600 + m * 60 + sec) * 1000;
+    const DAY: i64 = 86_400_000;
+    const TZ: i64 = 8 * 3_600_000; // terminal MYT
+    let terminal_midnight = ((now_ms + TZ) / DAY) * DAY - TZ;
+    let mut t = terminal_midnight + tod_ms;
+    if t > now_ms + 300_000 {
+        t -= DAY; // clock just rolled past terminal midnight
+    }
+    (now_ms - t <= 6 * 3_600_000).then_some(t)
 }
 
 /// Trim a string field, returning None for empty.

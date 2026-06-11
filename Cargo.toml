@@ -28,7 +28,7 @@ clap = { version = "4", features = ["derive", "env"] }
 # api
 axum = "0.7"
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "fs", "set-header"] }
 utoipa = { version = "5", features = ["axum_extras", "chrono"] }
 # stats
 statrs = "0.18"
