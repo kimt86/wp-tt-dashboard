@@ -26,7 +26,7 @@ type Device = { id: string; cls: string; pts: Pt[] };
 type Replay = { meta: { window_s: number; center: [number, number]; n_devices: number }; devices: Device[] };
 
 // live feed from /api/livemap/positions (GPS via the SSH tunnel)
-type Dispatch = "idle" | "empty_travel" | "delivering" | "soon_idle" | "wait_rtg";
+type Dispatch = "idle" | "staging" | "empty_travel" | "delivering" | "soon_idle" | "wait_rtg";
 type LiveDev = { id: string; cls: string; lat: number; lon: number; speed: number; engine: number; age_s: number; dispatch?: Dispatch; jobtype?: string; topos1?: string };
 type LiveSnap = { source: string; connected: boolean; count: number; as_of: string | null; dispatch_counts?: Record<string, number>; devices: LiveDev[] };
 
@@ -34,6 +34,7 @@ type LiveSnap = { source: string; connected: boolean; count: number; as_of: stri
 // dispatch pools — filter the map by vehicle-pool type (TT only)
 const DISPATCH_POOLS: { key: Dispatch; ko: string; en: string; color: string }[] = [
   { key: "idle", ko: "유휴", en: "Idle", color: "#22c55e" },
+  { key: "staging", ko: "배차·대기", en: "Staging", color: "#0ea5e9" },
   { key: "soon_idle", ko: "곧 유휴", en: "Soon", color: "#f59e0b" },
   { key: "delivering", ko: "적재이동", en: "Deliver", color: "#38bdf8" },
   { key: "wait_rtg", ko: "RTG대기", en: "Wait RTG", color: "#ef4444" },

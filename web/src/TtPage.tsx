@@ -58,12 +58,13 @@ function useWorkpool(ms = 15000) {
 // dispatch-state colors (shared with the live map / vehicle pool)
 const DSP_META: Record<string, { ko: string; en: string; color: string }> = {
   idle: { ko: "유휴 (배차 가능)", en: "Idle (available)", color: "#22c55e" },
+  staging: { ko: "배차·대기", en: "Assigned·staging", color: "#0ea5e9" },
   soon_idle: { ko: "곧 유휴", en: "Soon idle", color: "#f59e0b" },
   delivering: { ko: "적재 이동", en: "Delivering", color: "#64748b" },
   wait_rtg: { ko: "도착·RTG 대기", en: "Arrived·wait RTG", color: "#ef4444" },
   empty_travel: { ko: "공차 주행 중", en: "Empty traveling", color: "#94a3b8" },
 };
-const DSP_ORDER = ["idle", "soon_idle", "delivering", "wait_rtg", "empty_travel"];
+const DSP_ORDER = ["idle", "staging", "soon_idle", "delivering", "wait_rtg", "empty_travel"];
 
 // ETW countdown from the accurate TOS ETW RPC (qc_etw_utc via the tos_etw_gateway). The
 // snapshot has a TTL (expires); past it, the value is stale and shown dimmed.

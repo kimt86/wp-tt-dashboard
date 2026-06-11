@@ -19,7 +19,7 @@ export type SelVeh = {
   cur_loc?: string;
   topos1?: string;
   arrival?: string;
-  dispatch?: "idle" | "empty_travel" | "delivering" | "soon_idle" | "wait_rtg";
+  dispatch?: "idle" | "staging" | "empty_travel" | "delivering" | "soon_idle" | "wait_rtg";
   dispatch_reason?: string;
   nearest_rtg_m?: number;
   fuel?: number;
@@ -43,6 +43,7 @@ export type SelVeh = {
 // dispatch state → label + colors (matches the live-map rings)
 const DSP: Record<string, { ko: string; en: string; color: string; bg: string }> = {
   idle: { ko: "유휴 (배차 가능)", en: "Idle (available)", color: "#16a34a", bg: "rgba(34,197,94,0.12)" },
+  staging: { ko: "배차됨 · 대기", en: "Assigned · staging", color: "#0284c7", bg: "rgba(14,165,233,0.12)" },
   soon_idle: { ko: "곧 유휴", en: "Soon idle", color: "#d97706", bg: "rgba(245,158,11,0.14)" },
   wait_rtg: { ko: "도착 · RTG 대기", en: "Arrived · waiting RTG", color: "#dc2626", bg: "rgba(239,68,68,0.12)" },
   delivering: { ko: "적재 이동 중", en: "Delivering", color: "#475569", bg: "rgba(100,116,139,0.12)" },

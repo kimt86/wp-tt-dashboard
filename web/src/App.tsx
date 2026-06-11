@@ -4,6 +4,7 @@ import { LineChart } from "./charts";
 import { deltaLabel, fmtValue, isImprovement } from "./format";
 import { t, type Lang } from "./i18n";
 import TtPage from "./TtPage";
+import CyclesPage from "./CyclesPage";
 import LiveMapPage from "./LiveMapPage";
 import HealthPage from "./HealthPage";
 import FeedHealthPage from "./FeedHealthPage";
@@ -564,6 +565,11 @@ const IconMap = () => (
     <path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11z" /><circle cx="12" cy="10" r="2.5" />
   </svg>
 );
+const IconCycles = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 12a9 9 0 1 1-2.64-6.36" /><polyline points="21 3 21 9 15 9" />
+  </svg>
+);
 const IconHealth = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M3 12h4l2 5 4-12 2 7h6" />
@@ -575,10 +581,11 @@ const IconFeed = () => (
   </svg>
 );
 
-type PageKey = "kpi" | "tt" | "map" | "health" | "feed";
+type PageKey = "kpi" | "tt" | "cycles" | "map" | "health" | "feed";
 const PAGES: { key: PageKey; label: string; Icon: () => ReactElement; ko: string; en: string }[] = [
   { key: "kpi", label: "KPI", Icon: IconKpi, ko: "KPI 운영 지표", en: "KPI Metrics" },
   { key: "tt", label: "TT", Icon: IconTt, ko: "TT 배차 현황", en: "TT Dispatch" },
+  { key: "cycles", label: "CYCLES", Icon: IconCycles, ko: "사이클 이력", en: "Cycle History" },
   { key: "map", label: "MAP", Icon: IconMap, ko: "라이브 맵", en: "Live Map" },
   { key: "health", label: "HEALTH", Icon: IconHealth, ko: "AI 배차 헬스", en: "Dispatch Health" },
   { key: "feed", label: "FEED", Icon: IconFeed, ko: "WS 데이터 헬스", en: "WS Data Health" },
@@ -630,7 +637,7 @@ export default function App() {
               </button>
             ))}
           </div>
-          {page === "kpi" ? <KpiPage lang={lang} /> : page === "tt" ? <TtPage lang={lang} /> : page === "map" ? <LiveMapPage lang={lang} /> : page === "health" ? <HealthPage lang={lang} /> : <FeedHealthPage lang={lang} />}
+          {page === "kpi" ? <KpiPage lang={lang} /> : page === "tt" ? <TtPage lang={lang} /> : page === "cycles" ? <CyclesPage lang={lang} /> : page === "map" ? <LiveMapPage lang={lang} /> : page === "health" ? <HealthPage lang={lang} /> : <FeedHealthPage lang={lang} />}
         </div>
       </div>
     </>

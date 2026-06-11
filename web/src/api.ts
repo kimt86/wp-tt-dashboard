@@ -102,6 +102,26 @@ export interface WorkpoolResponse {
   candidates: WpCandidate[]; candidate_total: number;
 }
 
+// TT work-cycle history (from the accumulated tt_cycle_log).
+export interface CycleTruckAgg {
+  ytno: string; cycles: number; median_s: number | null; avg_s: number | null;
+  laden_km: number | null; p25_s: number | null; p75_s: number | null;
+  ds: number; ld: number; other: number; last_drop: string; first_drop: string;
+}
+export interface CycleBucket { t: string; n: number; }
+export interface CycleSummary {
+  hours: number; total_cycles: number; trucks: number;
+  fleet_median_s: number | null; fleet_laden_km: number; cycles_per_hr: number;
+  bucket_min: number; buckets: CycleBucket[]; trucks_list: CycleTruckAgg[];
+}
+export interface CycleRow {
+  dropped_at: string; pickup_at: string | null; pickup_arrived_at: string | null; pickup_left_at: string | null; assigned_at: string | null; arrived_at: string | null;
+  jobtype: string | null; vessel: string | null; voyage: string | null; container: string | null; qc: string | null;
+  cycle_s: number | null; laden_leg_s: number | null; laden_leg_m: number | null;
+  empty_leg_s: number | null; empty_leg_m: number | null; container_to_container: boolean;
+}
+export interface CycleDetail { ytno: string; hours: number; cycles: CycleRow[]; }
+
 async function get<T>(path: string): Promise<T> {
   const r = await fetch(path);
   if (!r.ok) throw new Error(`${path}: ${r.status}`);
@@ -120,4 +140,7 @@ export const api = {
   live: () => get<LiveResponse>("/api/live"),
   liveVessels: () => get<VesselsResponse>("/api/live/vessels"),
   workpool: () => get<WorkpoolResponse>("/api/workpool"),
+  cycleSummary: (hours: number) => get<CycleSummary>(`/api/tt-cycles/summary?hours=${hours}`),
+  cycleDetail: (ytno: string, hours: number, limit = 200) =>
+    get<CycleDetail>(`/api/tt-cycles/detail?ytno=${encodeURIComponent(ytno)}&hours=${hours}&limit=${limit}`),
 };
