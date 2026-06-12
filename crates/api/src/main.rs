@@ -56,11 +56,11 @@ fn app(state: AppState) -> Router {
         .layer(CorsLayer::permissive()) // dev; tighten to the dashboard origin in prod
         .with_state(state);
 
-    // Knowledge center — self-contained static HTML docs at /kc/ (NOT linked from the
-    // dashboard UI; shared internally by direct link, reachable over Tailscale).
-    // no-cache = always revalidate (cheap 304s): without it browsers heuristically cache
-    // the doc HTML for hours, so doc updates (e.g. the shared sidebar shell) don't show.
-    let kc_dir = std::env::var("KC_DIR").unwrap_or_else(|_| "kc".to_string());
+    // Knowledge center — Astro Starlight static build at /kc/ (base '/kc'; dist is flat, so
+    // nest_service strips '/kc' and ServeDir resolves dist/<path>/index.html). Built with
+    // `cd docs-site && npm run build`. Reachable internally over Tailscale.
+    // no-cache = always revalidate (cheap 304s): hashed _astro assets are immutable anyway.
+    let kc_dir = std::env::var("KC_DIR").unwrap_or_else(|_| "docs-site/dist".to_string());
     let kc = tower::ServiceBuilder::new()
         .layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
             axum::http::header::CACHE_CONTROL,
