@@ -55,6 +55,7 @@ fn app(state: AppState) -> Router {
         .route("/api/tt-cycles/detail", get(cycles::detail))
         .route("/api/learn/topos", get(learn::topos))
         .route("/api/learn/lanes", get(learn::lanes))
+        .route("/api/learn/travel", get(learn::travel))
         .route("/api/health", get(routes::health))
         .layer(CorsLayer::permissive()) // dev; tighten to the dashboard origin in prod
         .with_state(state);
@@ -97,7 +98,8 @@ async fn main() -> anyhow::Result<()> {
     livemap::spawn_util_sampler(livemap.clone(), pool.clone()); // 60s TT-utilization samples
     livemap::spawn_assignment_refresh(livemap.clone(), pool.clone()); // 30s work-pool assignment cache
     livemap::spawn_cycle_flusher(livemap.clone(), pool.clone()); // 30s persist completed TT cycles
-    livemap::spawn_learn_persist(livemap.clone(), pool.clone()); // 5min persist learned topos coords + hourly quality
+    livemap::spawn_learn_persist(livemap.clone(), pool.clone()); // 5min persist learned topos coords + lanes + quality
+    livemap::spawn_travel_aggregator(pool.clone()); // 5min harvest TT travel-time labels from cycles
     let state = AppState { pool, livemap };
 
     let addr = std::env::var("API_ADDR").unwrap_or_else(|_| "127.0.0.1:8080".to_string());

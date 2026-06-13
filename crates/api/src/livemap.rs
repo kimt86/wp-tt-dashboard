@@ -1352,6 +1352,65 @@ pub fn spawn_learn_persist(lm: Arc<LiveMap>, pool: PgPool) {
     });
 }
 
+/// Every 5 min, harvest TT travel-time labels (①) from validated cycles: for each pair of
+/// consecutive legs, (origin→dest) travel = depart(left) → arrive(arrived). Distance from
+/// learned topos coords (②). Idempotent (PK ytno,dropped_at,leg_ord). DB→DB; no LiveMap.
+pub fn spawn_travel_aggregator(pool: PgPool) {
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(Duration::from_secs(300));
+        loop {
+            ticker.tick().await;
+            let _ = sqlx::query(
+                "WITH legs AS (
+                   SELECT v2.ytno, v2.dropped_at, e.ord,
+                          e.val->>'target' AS target,
+                          (e.val->>'left')::bigint AS left_ms,
+                          (e.val->>'arrived')::bigint AS arr_ms
+                     FROM tt_cycle_v2 v2,
+                          jsonb_array_elements(v2.legs) WITH ORDINALITY e(val, ord)
+                    WHERE v2.dropped_at > now() - interval '15 minutes'
+                 )
+                 INSERT INTO learn_travel_sample (ytno, dropped_at, leg_ord, origin, dest, travel_s, dist_m, hour)
+                 SELECT a.ytno, a.dropped_at, a.ord, a.target, b.target,
+                        ((b.arr_ms - a.left_ms) / 1000)::int,
+                        CASE WHEN po.topos IS NOT NULL AND pd.topos IS NOT NULL THEN
+                          sqrt( power((pd.lat - po.lat) * 111320.0, 2)
+                              + power((pd.lon - po.lon) * 111320.0 * cos(radians((po.lat + pd.lat) / 2)), 2) )
+                        END,
+                        extract(hour FROM to_timestamp(b.arr_ms / 1000.0))::int
+                   FROM legs a
+                   JOIN legs b ON a.ytno = b.ytno AND a.dropped_at = b.dropped_at AND b.ord = a.ord + 1
+                   LEFT JOIN learn_topos_point po ON po.topos = a.target
+                   LEFT JOIN learn_topos_point pd ON pd.topos = b.target
+                  WHERE a.left_ms > 0 AND b.arr_ms > 0 AND a.target <> b.target
+                    AND (b.arr_ms - a.left_ms) BETWEEN 10000 AND 7200000
+                 ON CONFLICT (ytno, dropped_at, leg_ord) DO NOTHING",
+            )
+            .execute(&pool)
+            .await;
+            let _ = sqlx::query("DELETE FROM learn_travel_sample WHERE captured_at < now() - interval '30 days'")
+                .execute(&pool)
+                .await;
+            let _ = sqlx::query(
+                "INSERT INTO learn_travel_metric (captured_at, samples, od_pairs, confident_pairs, median_speed_kmh)
+                 SELECT now(), count(*), count(DISTINCT (origin, dest)),
+                        (SELECT count(*) FROM (SELECT 1 FROM learn_travel_sample GROUP BY origin, dest HAVING count(*) >= 10) q),
+                        percentile_cont(0.5) WITHIN GROUP (
+                          ORDER BY (dist_m / 1000.0) / nullif(travel_s / 3600.0, 0)
+                        ) FILTER (WHERE dist_m IS NOT NULL AND travel_s > 0)
+                   FROM learn_travel_sample
+                  HAVING count(*) > 0
+                 ON CONFLICT (captured_at) DO NOTHING",
+            )
+            .execute(&pool)
+            .await;
+            let _ = sqlx::query("DELETE FROM learn_travel_metric WHERE captured_at < now() - interval '30 days'")
+                .execute(&pool)
+                .await;
+        }
+    });
+}
+
 /// Every ~30s, refresh the authoritative per-truck assignment cache from the work pool
 /// (`live_assigned_tt` = any active job, all types; enriched with the latest `live_workpool`
 /// row per truck for DS/LD job metadata). A truck present here is "assigned" even when its
