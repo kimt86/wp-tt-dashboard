@@ -8,6 +8,7 @@ import CyclesPage from "./CyclesPage";
 import LiveMapPage from "./LiveMapPage";
 import HealthPage from "./HealthPage";
 import FeedHealthPage from "./FeedHealthPage";
+import LearnPage from "./LearnPage";
 import HistoryMatrix from "./HistoryMatrix";
 
 function useClock(): string {
@@ -580,12 +581,18 @@ const IconFeed = () => (
     <path d="M4 11a9 9 0 0 1 9 9" /><path d="M4 4a16 16 0 0 1 16 16" /><circle cx="5" cy="19" r="1.5" fill="currentColor" stroke="none" />
   </svg>
 );
+const IconLearn = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 3v18h18" /><path d="M7 14l4-4 3 3 5-6" />
+  </svg>
+);
 
-type PageKey = "kpi" | "tt" | "cycles" | "map" | "health" | "feed";
+type PageKey = "kpi" | "tt" | "cycles" | "learn" | "map" | "health" | "feed";
 const PAGES: { key: PageKey; label: string; Icon: () => ReactElement; ko: string; en: string }[] = [
   { key: "kpi", label: "KPI", Icon: IconKpi, ko: "KPI 운영 지표", en: "KPI Metrics" },
   { key: "tt", label: "TT", Icon: IconTt, ko: "TT 배차 현황", en: "TT Dispatch" },
   { key: "cycles", label: "CYCLES", Icon: IconCycles, ko: "사이클 이력", en: "Cycle History" },
+  { key: "learn", label: "LEARN", Icon: IconLearn, ko: "학습 센터", en: "Learning Center" },
   { key: "map", label: "MAP", Icon: IconMap, ko: "라이브 맵", en: "Live Map" },
   { key: "health", label: "HEALTH", Icon: IconHealth, ko: "AI 배차 헬스", en: "Dispatch Health" },
   { key: "feed", label: "FEED", Icon: IconFeed, ko: "WS 데이터 헬스", en: "WS Data Health" },
@@ -637,7 +644,7 @@ export default function App() {
               </button>
             ))}
           </div>
-          {page === "kpi" ? <KpiPage lang={lang} /> : page === "tt" ? <TtPage lang={lang} /> : page === "cycles" ? <CyclesPage lang={lang} /> : page === "map" ? <LiveMapPage lang={lang} /> : page === "health" ? <HealthPage lang={lang} /> : <FeedHealthPage lang={lang} />}
+          {page === "kpi" ? <KpiPage lang={lang} /> : page === "tt" ? <TtPage lang={lang} /> : page === "cycles" ? <CyclesPage lang={lang} /> : page === "learn" ? <LearnPage lang={lang} /> : page === "map" ? <LiveMapPage lang={lang} /> : page === "health" ? <HealthPage lang={lang} /> : <FeedHealthPage lang={lang} />}
         </div>
       </div>
     </>

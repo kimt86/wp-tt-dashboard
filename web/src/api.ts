@@ -125,6 +125,21 @@ export interface CycleRow {
 }
 export interface CycleDetail { ytno: string; hours: number; cycles: CycleRow[]; }
 
+// 학습 센터 — 블록 작업지점 좌표 모델(②)
+export interface LearnToposPoint {
+  topos: string; is_crane: boolean; lat: number; lon: number;
+  n: number; obs: number; spread_m: number | null; updated_at: string;
+}
+export interface LearnMetricPoint {
+  captured_at: string; distinct_topos: number; confident_topos: number;
+  total_obs: number; median_spread_m: number | null;
+}
+export interface LearnTopos {
+  distinct_topos: number; confident_topos: number; block_points: number;
+  total_obs: number; median_spread_m: number | null;
+  points: LearnToposPoint[]; metric_series: LearnMetricPoint[];
+}
+
 async function get<T>(path: string): Promise<T> {
   const r = await fetch(path);
   if (!r.ok) throw new Error(`${path}: ${r.status}`);
@@ -146,4 +161,5 @@ export const api = {
   cycleSummary: (hours: number) => get<CycleSummary>(`/api/tt-cycles/summary?hours=${hours}`),
   cycleDetail: (ytno: string, hours: number, limit = 200) =>
     get<CycleDetail>(`/api/tt-cycles/detail?ytno=${encodeURIComponent(ytno)}&hours=${hours}&limit=${limit}`),
+  learnTopos: () => get<LearnTopos>("/api/learn/topos"),
 };

@@ -818,6 +818,14 @@ td.mono { font-family: "JetBrains Mono", monospace; color: var(--text); }
 .cyc-model-tog { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; margin-right: 10px; }
 .cyc-model-tog button { font: inherit; font-size: 11px; padding: 2px 8px; background: transparent; color: var(--text-dim); border: 0; cursor: pointer; }
 .cyc-model-tog button.active { background: #2563eb; color: #fff; }
+/* learning center */
+.learn-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.learn-cols, .learn-row { display: grid; grid-template-columns: 1.5fr 0.7fr 0.5fr 0.8fr 0.7fr 1.7fr 1.2fr; gap: 8px; align-items: center; }
+.learn-cols { font-size: 11px; color: var(--text-dim); padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.learn-list { max-height: 420px; overflow-y: auto; }
+.learn-row { font-size: 12px; padding: 5px 8px; border-bottom: 1px solid var(--border); }
+.learn-row.conf { background: rgba(52, 211, 153, 0.08); }
+@media (max-width: 900px) { .learn-charts { grid-template-columns: 1fr; } }
 .cyc-phase-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .cyc-phase-h .cyc-sec-h { margin-bottom: 4px; }
 .cyc-phase-legend { display: flex; flex-wrap: wrap; gap: 11px; font-size: 10px; color: var(--text-dim); margin-bottom: 4px; }
