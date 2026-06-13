@@ -261,14 +261,31 @@ const MOVE_WINDOW_MS: i64 = 3_600_000; // 1 hour → move count == move/hr
 pub struct Centroid {
     lat: f64,
     lon: f64,
-    n: u32,
+    n: u32,       // capped sample weight (≤500) — mild adaptivity of the mean
+    obs: u64,     // total observations ever (uncapped) — accumulation count
+    var_lat: f64, // EWMA variance (matches the capped mean) → spread/precision
+    var_lon: f64,
 }
 impl Centroid {
     fn push(&mut self, lat: f64, lon: f64) {
+        self.obs += 1;
         self.n = (self.n + 1).min(500); // cap so it stays mildly adaptive
         let k = 1.0 / self.n as f64;
-        self.lat += (lat - self.lat) * k;
-        self.lon += (lon - self.lon) * k;
+        let d_lat = lat - self.lat; // delta to the OLD mean (for EWMA variance)
+        let d_lon = lon - self.lon;
+        self.lat += d_lat * k;
+        self.lon += d_lon * k;
+        self.var_lat = (1.0 - k) * (self.var_lat + k * d_lat * d_lat);
+        self.var_lon = (1.0 - k) * (self.var_lon + k * d_lon * d_lon);
+    }
+    /// spatial spread (m) ≈ √(var_lat + var_lon), the model's precision at this point.
+    fn spread_m(&self) -> f64 {
+        if self.n < 2 {
+            return 0.0;
+        }
+        let m_lat = self.var_lat.sqrt() * 111_320.0;
+        let m_lon = self.var_lon.sqrt() * 111_320.0 * self.lat.to_radians().cos();
+        (m_lat * m_lat + m_lon * m_lon).sqrt()
     }
 }
 
@@ -1121,6 +1138,81 @@ pub fn spawn_util_sampler(_lm: Arc<LiveMap>, pool: PgPool) {
             .await
             {
                 tracing::warn!(error = %e, "util_tt_sample insert failed");
+            }
+        }
+    });
+}
+
+/// Load persisted learned topos centroids (block work-point coords) back into memory on
+/// startup so accumulation survives restarts. var resets to 0 (spread re-accumulates).
+pub async fn load_centroids(lm: &Arc<LiveMap>, pool: &PgPool) {
+    let rows: Vec<(String, f64, f64, i32, i64)> = sqlx::query_as(
+        "SELECT topos, lat, lon, n, obs FROM learn_topos_point",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+    let mut c = lm.centroids.write().await;
+    for (topos, lat, lon, n, obs) in rows {
+        c.insert(
+            topos,
+            Centroid { lat, lon, n: n.max(0) as u32, obs: obs.max(0) as u64, var_lat: 0.0, var_lon: 0.0 },
+        );
+    }
+    tracing::info!(count = c.len(), "loaded learned topos centroids");
+}
+
+/// Every 5 min, persist in-memory learned topos centroids → `learn_topos_point` (the block
+/// work-point coordinate model). Hourly, snapshot model quality → `learn_topos_metric`
+/// (coverage·precision over time = the "model improving" curve).
+pub fn spawn_learn_persist(lm: Arc<LiveMap>, pool: PgPool) {
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(Duration::from_secs(300));
+        let mut ticks: u64 = 0;
+        loop {
+            ticker.tick().await;
+            ticks += 1;
+            let snap: Vec<(String, Centroid)> = {
+                let c = lm.centroids.read().await;
+                c.iter().map(|(k, v)| (k.clone(), *v)).collect()
+            };
+            for (topos, c) in &snap {
+                if c.obs == 0 {
+                    continue;
+                }
+                if let Err(e) = sqlx::query(
+                    "INSERT INTO learn_topos_point (topos, is_crane, lat, lon, n, obs, spread_m, updated_at)
+                       VALUES ($1,$2,$3,$4,$5,$6,$7, now())
+                     ON CONFLICT (topos) DO UPDATE SET
+                       is_crane=$2, lat=$3, lon=$4, n=$5, obs=$6, spread_m=$7, updated_at=now()",
+                )
+                .bind(topos)
+                .bind(is_crane_code(topos))
+                .bind(c.lat)
+                .bind(c.lon)
+                .bind(c.n as i32)
+                .bind(c.obs as i64)
+                .bind(c.spread_m())
+                .execute(&pool)
+                .await
+                {
+                    tracing::warn!(error = %e, topos = %topos, "learn_topos_point upsert failed");
+                    break; // DB hiccup — retry next tick
+                }
+            }
+            // hourly model-quality snapshot (every 12th 5-min tick)
+            if ticks % 12 == 1 {
+                let _ = sqlx::query(
+                    "INSERT INTO learn_topos_metric
+                       (captured_at, distinct_topos, confident_topos, total_obs, median_spread_m)
+                     SELECT now(), count(*), count(*) FILTER (WHERE n >= 30),
+                            coalesce(sum(obs), 0),
+                            percentile_cont(0.5) WITHIN GROUP (ORDER BY spread_m) FILTER (WHERE n >= 30)
+                       FROM learn_topos_point
+                     ON CONFLICT (captured_at) DO NOTHING",
+                )
+                .execute(&pool)
+                .await;
             }
         }
     });
