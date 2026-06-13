@@ -54,6 +54,7 @@ fn app(state: AppState) -> Router {
         .route("/api/tt-cycles/summary", get(cycles::summary))
         .route("/api/tt-cycles/detail", get(cycles::detail))
         .route("/api/learn/topos", get(learn::topos))
+        .route("/api/learn/lanes", get(learn::lanes))
         .route("/api/health", get(routes::health))
         .layer(CorsLayer::permissive()) // dev; tighten to the dashboard origin in prod
         .with_state(state);
@@ -91,6 +92,7 @@ async fn main() -> anyhow::Result<()> {
     let pool = db::pool().await?;
     let livemap = livemap::LiveMap::new();
     livemap::load_centroids(&livemap, &pool).await; // restore learned topos coords before ingest
+    livemap::load_lanes(&livemap, &pool).await; // restore learned driving-lane grid before ingest
     livemap::spawn(livemap.clone()); // background GPS ingest (via local SSH tunnel)
     livemap::spawn_util_sampler(livemap.clone(), pool.clone()); // 60s TT-utilization samples
     livemap::spawn_assignment_refresh(livemap.clone(), pool.clone()); // 30s work-pool assignment cache

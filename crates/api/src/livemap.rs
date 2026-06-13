@@ -289,6 +289,57 @@ impl Centroid {
     }
 }
 
+// ── lane learning (③): moving-TT GPS traces → grid cells with traffic + direction ──
+const LANE_CELL_DEG: f64 = 0.0002; // ~22m grid
+const LANE_MIN_SPEED_KMH: f64 = 5.0;
+const LANE_MIN_M: f64 = 5.0; // min step to take a heading sample
+const LANE_MAX_M: f64 = 200.0; // reject GPS jumps
+
+/// One grid cell of the learned driving-lane network: traffic + circular-mean heading
+/// (→ direction & one-way/two-way) + mean speed. Accumulated from moving-TT GPS traces.
+#[derive(Clone, Copy, Default)]
+pub struct LaneCell {
+    passes: u64,
+    sum_sin: f64, // Σ sin(bearing) — circular accumulation (handles 0/360 wrap)
+    sum_cos: f64, // Σ cos(bearing)
+    sum_speed: f64,
+}
+impl LaneCell {
+    fn push(&mut self, bearing: f64, speed_kmh: f64) {
+        self.passes += 1;
+        let r = bearing.to_radians();
+        self.sum_sin += r.sin();
+        self.sum_cos += r.cos();
+        self.sum_speed += speed_kmh;
+    }
+    fn heading_deg(&self) -> f64 {
+        (self.sum_sin.atan2(self.sum_cos).to_degrees() + 360.0) % 360.0
+    }
+    /// 0..1: resultant length / passes. ~1 = consistent one-way, ~0 = two-way/mixed.
+    fn directionality(&self) -> f64 {
+        if self.passes == 0 {
+            return 0.0;
+        }
+        (self.sum_sin * self.sum_sin + self.sum_cos * self.sum_cos).sqrt() / self.passes as f64
+    }
+    fn mean_speed(&self) -> f64 {
+        if self.passes == 0 {
+            0.0
+        } else {
+            self.sum_speed / self.passes as f64
+        }
+    }
+}
+
+/// Initial bearing (deg, 0..360) from a→b.
+fn bearing_deg(a: (f64, f64), b: (f64, f64)) -> f64 {
+    let (lat1, lat2) = (a.0.to_radians(), b.0.to_radians());
+    let dlon = (b.1 - a.1).to_radians();
+    let y = dlon.sin() * lat2.cos();
+    let x = lat1.cos() * lat2.sin() - lat1.sin() * lat2.cos() * dlon.cos();
+    (y.atan2(x).to_degrees() + 360.0) % 360.0
+}
+
 /// Per-minute throughput ring for the health sparkline.
 struct Ring {
     minute: i64,
@@ -330,6 +381,7 @@ pub struct LiveMap {
     devices: RwLock<HashMap<String, Pos>>,
     plc: RwLock<HashMap<String, Plc>>, // crane PLC state from the ctab zone
     centroids: RwLock<HashMap<String, Centroid>>, // learned block/bay positions (topos1 → centroid)
+    lanes: RwLock<HashMap<(i32, i32), LaneCell>>, // learned driving-lane grid (③): cell → traffic+direction
     ring: Mutex<Ring>,
     connected: AtomicBool,
     messages: AtomicU64,
@@ -370,6 +422,7 @@ impl LiveMap {
             devices: RwLock::new(HashMap::new()),
             plc: RwLock::new(HashMap::new()),
             centroids: RwLock::new(HashMap::new()),
+            lanes: RwLock::new(HashMap::new()),
             ring: Mutex::new(Ring::new()),
             tt_drops: Mutex::new(VecDeque::new()),
             tt_cycles: Mutex::new(VecDeque::new()),
@@ -1168,6 +1221,33 @@ pub async fn load_centroids(lm: &Arc<LiveMap>, pool: &PgPool) {
     tracing::info!(count = c.len(), "loaded learned topos centroids");
 }
 
+/// Load persisted learned lane cells (③) back into memory on startup. Reconstruction is
+/// exact: (heading, directionality, mean_speed, passes) → (sum_cos, sum_sin, sum_speed).
+pub async fn load_lanes(lm: &Arc<LiveMap>, pool: &PgPool) {
+    let rows: Vec<(i32, i32, i64, Option<f64>, Option<f64>, Option<f64>)> = sqlx::query_as(
+        "SELECT lat_idx, lon_idx, passes, heading_deg, directionality, mean_speed FROM learn_lane_cell",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+    let mut l = lm.lanes.write().await;
+    for (li, lj, passes, heading, dir, spd) in rows {
+        let passes = passes.max(0) as u64;
+        let res = dir.unwrap_or(0.0) * passes as f64; // resultant length = R · n
+        let h = heading.unwrap_or(0.0).to_radians();
+        l.insert(
+            (li, lj),
+            LaneCell {
+                passes,
+                sum_cos: res * h.cos(),
+                sum_sin: res * h.sin(),
+                sum_speed: spd.unwrap_or(0.0) * passes as f64,
+            },
+        );
+    }
+    tracing::info!(count = l.len(), "loaded learned lane cells");
+}
+
 /// Every 5 min, persist in-memory learned topos centroids → `learn_topos_point` (the block
 /// work-point coordinate model). Hourly, snapshot model quality → `learn_topos_metric`
 /// (coverage·precision over time = the "model improving" curve).
@@ -1219,6 +1299,53 @@ pub fn spawn_learn_persist(lm: Arc<LiveMap>, pool: PgPool) {
             .execute(&pool)
             .await;
             let _ = sqlx::query("DELETE FROM learn_topos_metric WHERE captured_at < now() - interval '30 days'")
+                .execute(&pool)
+                .await;
+
+            // ── lanes (③): persist grid cells (skip the 1-2 pass noise tail) + quality ──
+            let lsnap: Vec<((i32, i32), LaneCell)> = {
+                let l = lm.lanes.read().await;
+                l.iter().map(|(k, v)| (*k, *v)).collect()
+            };
+            for ((li, lj), c) in &lsnap {
+                if c.passes < 3 {
+                    continue;
+                }
+                if let Err(e) = sqlx::query(
+                    "INSERT INTO learn_lane_cell
+                       (lat_idx, lon_idx, lat, lon, passes, heading_deg, directionality, mean_speed, updated_at)
+                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8, now())
+                     ON CONFLICT (lat_idx, lon_idx) DO UPDATE SET
+                       lat=$3, lon=$4, passes=$5, heading_deg=$6, directionality=$7, mean_speed=$8, updated_at=now()",
+                )
+                .bind(li)
+                .bind(lj)
+                .bind(*li as f64 * LANE_CELL_DEG)
+                .bind(*lj as f64 * LANE_CELL_DEG)
+                .bind(c.passes as i64)
+                .bind(c.heading_deg())
+                .bind(c.directionality())
+                .bind(c.mean_speed())
+                .execute(&pool)
+                .await
+                {
+                    tracing::warn!(error = %e, "learn_lane_cell upsert failed");
+                    break;
+                }
+            }
+            let _ = sqlx::query(
+                "INSERT INTO learn_lane_metric (captured_at, cells, road_cells, total_passes, oneway_frac)
+                 SELECT now(), count(*), count(*) FILTER (WHERE passes >= 20),
+                        coalesce(sum(passes), 0)::bigint,
+                        (count(*) FILTER (WHERE passes >= 20 AND directionality >= 0.8))::float8
+                          / nullif(count(*) FILTER (WHERE passes >= 20), 0)
+                   FROM learn_lane_cell
+                  HAVING count(*) > 0
+                 ON CONFLICT (captured_at) DO NOTHING",
+            )
+            .execute(&pool)
+            .await;
+            let _ = sqlx::query("DELETE FROM learn_lane_metric WHERE captured_at < now() - interval '30 days'")
                 .execute(&pool)
                 .await;
         }
@@ -1702,6 +1829,19 @@ async fn ingest_text(lm: &Arc<LiveMap>, text: &str) {
                 if pre != t {
                     c.entry(pre).or_default().push(lat, lon);
                 }
+            }
+        }
+    }
+    // learn driving lanes (③): a moving TT's grid cell + bearing(prev→cur) + speed. The
+    // prev read-lock is released before the devices write lock below (no two locks held).
+    if pos.cls == "TT" && speed >= LANE_MIN_SPEED_KMH {
+        let prev_ll = lm.devices.read().await.get(id).map(|p| (p.lat, p.lon));
+        if let Some(prev) = prev_ll {
+            let d = dist_m(prev, (lat, lon));
+            if d >= LANE_MIN_M && d <= LANE_MAX_M {
+                let cell = ((lat / LANE_CELL_DEG).round() as i32, (lon / LANE_CELL_DEG).round() as i32);
+                let br = bearing_deg(prev, (lat, lon));
+                lm.lanes.write().await.entry(cell).or_default().push(br, speed);
             }
         }
     }
