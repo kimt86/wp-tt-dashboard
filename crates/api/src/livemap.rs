@@ -1146,17 +1146,23 @@ pub fn spawn_util_sampler(_lm: Arc<LiveMap>, pool: PgPool) {
 /// Load persisted learned topos centroids (block work-point coords) back into memory on
 /// startup so accumulation survives restarts. var resets to 0 (spread re-accumulates).
 pub async fn load_centroids(lm: &Arc<LiveMap>, pool: &PgPool) {
-    let rows: Vec<(String, f64, f64, i32, i64)> = sqlx::query_as(
-        "SELECT topos, lat, lon, n, obs FROM learn_topos_point",
+    let rows: Vec<(String, f64, f64, i32, i64, Option<f64>)> = sqlx::query_as(
+        "SELECT topos, lat, lon, n, obs, spread_m FROM learn_topos_point",
     )
     .fetch_all(pool)
     .await
     .unwrap_or_default();
     let mut c = lm.centroids.write().await;
-    for (topos, lat, lon, n, obs) in rows {
+    for (topos, lat, lon, n, obs, spread_m) in rows {
+        // reconstruct EWMA variance from persisted spread_m (isotropic approx) so precision
+        // survives restart — without it spread resets to 0 and the precision curve craters.
+        let half = spread_m.unwrap_or(0.0) / std::f64::consts::SQRT_2; // per-axis meters
+        let cos = lat.to_radians().cos().abs().max(1e-6);
+        let var_lat = (half / 111_320.0).powi(2);
+        let var_lon = (half / (111_320.0 * cos)).powi(2);
         c.insert(
             topos,
-            Centroid { lat, lon, n: n.max(0) as u32, obs: obs.max(0) as u64, var_lat: 0.0, var_lon: 0.0 },
+            Centroid { lat, lon, n: n.max(0) as u32, obs: obs.max(0) as u64, var_lat, var_lon },
         );
     }
     tracing::info!(count = c.len(), "loaded learned topos centroids");
@@ -1168,10 +1174,8 @@ pub async fn load_centroids(lm: &Arc<LiveMap>, pool: &PgPool) {
 pub fn spawn_learn_persist(lm: Arc<LiveMap>, pool: PgPool) {
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(Duration::from_secs(300));
-        let mut ticks: u64 = 0;
         loop {
             ticker.tick().await;
-            ticks += 1;
             let snap: Vec<(String, Centroid)> = {
                 let c = lm.centroids.read().await;
                 c.iter().map(|(k, v)| (k.clone(), *v)).collect()
@@ -1200,20 +1204,23 @@ pub fn spawn_learn_persist(lm: Arc<LiveMap>, pool: PgPool) {
                     break; // DB hiccup — retry next tick
                 }
             }
-            // hourly model-quality snapshot (every 12th 5-min tick)
-            if ticks % 12 == 1 {
-                let _ = sqlx::query(
-                    "INSERT INTO learn_topos_metric
-                       (captured_at, distinct_topos, confident_topos, total_obs, median_spread_m)
-                     SELECT now(), count(*), count(*) FILTER (WHERE n >= 30),
-                            coalesce(sum(obs), 0),
-                            percentile_cont(0.5) WITHIN GROUP (ORDER BY spread_m) FILTER (WHERE n >= 30)
-                       FROM learn_topos_point
-                     ON CONFLICT (captured_at) DO NOTHING",
-                )
+            // model-quality snapshot every tick (5 min), only when there are points
+            // (HAVING skips empty restart snapshots); powers the "model improving" curve.
+            let _ = sqlx::query(
+                "INSERT INTO learn_topos_metric
+                   (captured_at, distinct_topos, confident_topos, total_obs, median_spread_m)
+                 SELECT now(), count(*), count(*) FILTER (WHERE n >= 30),
+                        coalesce(sum(obs), 0)::bigint,
+                        percentile_cont(0.5) WITHIN GROUP (ORDER BY spread_m) FILTER (WHERE n >= 30)
+                   FROM learn_topos_point
+                  HAVING count(*) > 0
+                 ON CONFLICT (captured_at) DO NOTHING",
+            )
+            .execute(&pool)
+            .await;
+            let _ = sqlx::query("DELETE FROM learn_topos_metric WHERE captured_at < now() - interval '30 days'")
                 .execute(&pool)
                 .await;
-            }
         }
     });
 }
