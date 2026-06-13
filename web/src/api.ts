@@ -139,6 +139,18 @@ export interface LearnTopos {
   total_obs: number; median_spread_m: number | null;
   points: LearnToposPoint[]; metric_series: LearnMetricPoint[];
 }
+// 학습 센터 ③ — 차량 주행 차선
+export interface LaneCellOut {
+  lat: number; lon: number; passes: number;
+  heading_deg: number | null; directionality: number | null; mean_speed: number | null;
+}
+export interface LaneMetricPoint {
+  captured_at: string; cells: number; road_cells: number; total_passes: number; oneway_frac: number | null;
+}
+export interface LanesData {
+  cells: number; road_cells: number; total_passes: number; oneway_frac: number | null;
+  grid: LaneCellOut[]; metric_series: LaneMetricPoint[];
+}
 
 async function get<T>(path: string): Promise<T> {
   const r = await fetch(path);
@@ -162,4 +174,5 @@ export const api = {
   cycleDetail: (ytno: string, hours: number, limit = 200) =>
     get<CycleDetail>(`/api/tt-cycles/detail?ytno=${encodeURIComponent(ytno)}&hours=${hours}&limit=${limit}`),
   learnTopos: () => get<LearnTopos>("/api/learn/topos"),
+  learnLanes: () => get<LanesData>("/api/learn/lanes"),
 };

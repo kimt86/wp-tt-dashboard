@@ -1,14 +1,15 @@
 // 학습 센터 — 축적되는 학습데이터와 모델 성능·개선 추이.
-// v1 모델 = 블록 작업지점 좌표(②): TT가 topos 타깃에 ARRIVED한 GPS를 누적해 좌표를 학습.
-// API /api/learn/topos: 학습된 점(point) + 요약 + 시간순 품질(metric_series).
+// ② 블록 작업지점 좌표: TT가 topos 타깃에 ARRIVED한 GPS를 누적 → 좌표.
+// ③ 차량 주행 차선: 이동 TT의 GPS 트레이스를 격자에 집계 → 도로·방향.
 import { useEffect, useMemo, useState } from "react";
 import { type Lang } from "./i18n";
-import { api, type LearnTopos, type LearnToposPoint } from "./api";
+import { api, type LearnTopos, type LearnToposPoint, type LanesData, type LaneCellOut } from "./api";
 import { LineChart } from "./charts";
 
 const ko = (lang: Lang) => lang === "ko";
 const fmtN = (n: number) => n.toLocaleString();
 const mPrec = (m: number | null | undefined) => (m == null ? "—" : `${m.toFixed(1)}m`);
+const pct = (f: number | null | undefined) => (f == null ? "—" : `${Math.round(f * 100)}%`);
 const stamp = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleString([], { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }) : "—";
 
@@ -38,15 +39,42 @@ function PointRow({ p, lang }: { p: LearnToposPoint; lang: Lang }) {
   );
 }
 
+// 학습된 차선망: 각 격자 셀을 진행방향으로 향한 짧은 선분으로, 방향성으로 색칠.
+function LaneMap({ grid, lang }: { grid: LaneCellOut[]; lang: Lang }) {
+  if (grid.length < 5) return <div className="cyc-empty">{ko(lang) ? "차선 데이터 수집 중" : "collecting lane data"}</div>;
+  const lats = grid.map((c) => c.lat), lons = grid.map((c) => c.lon);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats), minLon = Math.min(...lons), maxLon = Math.max(...lons);
+  const W = 640, H = 420, pad = 12;
+  const sx = (lon: number) => pad + (maxLon === minLon ? 0.5 : (lon - minLon) / (maxLon - minLon)) * (W - 2 * pad);
+  const sy = (lat: number) => pad + (maxLat === minLat ? 0.5 : 1 - (lat - minLat) / (maxLat - minLat)) * (H - 2 * pad);
+  const col = (d: number | null) => (d == null ? "#64748b" : d >= 0.8 ? "#34d399" : d >= 0.5 ? "#f59e0b" : "#64748b");
+  const top = grid.slice(0, 1500);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", background: "var(--bg-soft)", borderRadius: 8 }}>
+      {top.map((c, i) => {
+        const x = sx(c.lon), y = sy(c.lat);
+        const th = ((c.heading_deg ?? 0) * Math.PI) / 180;
+        const dx = Math.sin(th), dy = -Math.cos(th);
+        const L = 3 + Math.min(5, Math.log2((c.passes || 1) + 1));
+        return <line key={i} x1={x - L * dx} y1={y - L * dy} x2={x + L * dx} y2={y + L * dy} stroke={col(c.directionality)} strokeWidth={1.3} strokeLinecap="round" opacity={0.82} />;
+      })}
+    </svg>
+  );
+}
+
 export default function LearnPage({ lang }: { lang: Lang }) {
   const [d, setD] = useState<LearnTopos | null>(null);
+  const [ln, setLn] = useState<LanesData | null>(null);
   const [err, setErr] = useState(false);
   const [onlyBlock, setOnlyBlock] = useState(true);
   const [q, setQ] = useState("");
 
   useEffect(() => {
     let alive = true;
-    const load = () => api.learnTopos().then((r) => { if (alive) { setD(r); setErr(false); } }).catch(() => alive && setErr(true));
+    const load = () => {
+      api.learnTopos().then((r) => { if (alive) { setD(r); setErr(false); } }).catch(() => alive && setErr(true));
+      api.learnLanes().then((r) => { if (alive) setLn(r); }).catch(() => {});
+    };
     load();
     const id = setInterval(load, 30000);
     return () => { alive = false; clearInterval(id); };
@@ -56,6 +84,9 @@ export default function LearnPage({ lang }: { lang: Lang }) {
   const covVals = ms.map((p) => p.confident_topos);
   const spreadVals = ms.map((p) => p.median_spread_m ?? 0).filter((v) => v > 0);
   const obsVals = ms.map((p) => Number(p.total_obs));
+  const lms = ln?.metric_series ?? [];
+  const roadVals = lms.map((p) => p.road_cells);
+  const passVals = lms.map((p) => Number(p.total_passes));
 
   const points = useMemo(() => {
     let pts = d?.points ?? [];
@@ -69,12 +100,11 @@ export default function LearnPage({ lang }: { lang: Lang }) {
       <div className="cyc-head">
         <div className="cyc-title">
           <h2>{ko(lang) ? "학습 센터" : "Learning Center"}</h2>
-          <span className="cyc-title-sub">
-            {ko(lang) ? "② 블록 작업지점 좌표 — GPS 도착 관측을 누적해 좌표를 학습 (모델이 쌓일수록 정밀해짐)" : "Block work-point coordinates — learned from GPS arrivals (sharpens as data accumulates)"}
-          </span>
+          <span className="cyc-title-sub">{ko(lang) ? "GPS에서 학습 — ② 블록 작업지점 좌표 · ③ 차량 주행 차선 (쌓일수록 정밀해짐)" : "Learning from GPS — ② block work-points · ③ driving lanes"}{err && <span className="cyc-err">{ko(lang) ? " · 연결 오류" : " · offline"}</span>}</span>
         </div>
       </div>
 
+      <div className="cyc-sec-h" style={{ marginTop: 4 }}>{ko(lang) ? "② 블록 작업지점 좌표" : "② Block work-point coordinates"}</div>
       <div className="cyc-tiles">
         <Tile label={ko(lang) ? "누적 관측" : "Observations"} value={d ? fmtN(d.total_obs) : "—"} accent="#60a5fa" />
         <Tile label={ko(lang) ? "학습된 작업지점" : "Learned points"} value={d ? fmtN(d.distinct_topos) : "—"} accent="#0ea5e9" />
@@ -82,26 +112,20 @@ export default function LearnPage({ lang }: { lang: Lang }) {
         <Tile label={ko(lang) ? "블록 작업지점" : "Block points"} value={d ? fmtN(d.block_points) : "—"} accent="#a78bfa" />
         <Tile label={ko(lang) ? "중앙 정밀도" : "Median precision"} value={d ? mPrec(d.median_spread_m) : "—"} accent="#f59e0b" />
       </div>
-
       <div className="learn-charts">
         <div className="cyc-tp">
-          <div className="cyc-sec-h">
-            {ko(lang) ? "모델 개선 — 확신 지점 수 (↑ 커버리지)" : "Model improving — confident points (↑)"}
-            {err && <span className="cyc-err">{ko(lang) ? " · 연결 오류" : " · offline"}</span>}
-          </div>
-          <div className="cyc-tp-box">{covVals.length > 1 ? <LineChart values={covVals} color="#34d399" axes /> : <div className="cyc-empty">{ko(lang) ? "품질 스냅샷 수집 중 (시간당 1회)" : "collecting quality snapshots (hourly)"}</div>}</div>
+          <div className="cyc-sec-h">{ko(lang) ? "개선 — 확신 지점 수 (↑)" : "Improving — confident points (↑)"}</div>
+          <div className="cyc-tp-box">{covVals.length > 1 ? <LineChart values={covVals} color="#34d399" axes /> : <div className="cyc-empty">{ko(lang) ? "스냅샷 수집 중" : "collecting"}</div>}</div>
         </div>
         <div className="cyc-tp">
-          <div className="cyc-sec-h">{ko(lang) ? "모델 개선 — 중앙 정밀도 (↓ 산포 m)" : "Model improving — median precision (↓ m)"}</div>
+          <div className="cyc-sec-h">{ko(lang) ? "개선 — 중앙 정밀도 (↓ m)" : "Improving — precision (↓ m)"}</div>
           <div className="cyc-tp-box">{spreadVals.length > 1 ? <LineChart values={spreadVals} color="#f59e0b" axes /> : <div className="cyc-empty">{ko(lang) ? "수집 중" : "collecting"}</div>}</div>
         </div>
       </div>
-
       <div className="cyc-tp">
-        <div className="cyc-sec-h">{ko(lang) ? "누적 학습데이터 — 관측 수 추이" : "Accumulating training data — observations over time"}</div>
+        <div className="cyc-sec-h">{ko(lang) ? "누적 학습데이터 — 관측 수" : "Accumulating data — observations"}</div>
         <div className="cyc-tp-box">{obsVals.length > 1 ? <LineChart values={obsVals} color="#60a5fa" axes /> : <div className="cyc-empty">{ko(lang) ? "수집 중" : "collecting"}</div>}</div>
       </div>
-
       <div className="cyc-board" style={{ marginTop: 14 }}>
         <div className="cyc-board-head">
           <span>{ko(lang) ? "학습된 작업지점 (관측 많은 순)" : "Learned work-points (by observations)"}</span>
@@ -118,6 +142,32 @@ export default function LearnPage({ lang }: { lang: Lang }) {
         <div className="learn-list">
           {points.length === 0 && <div className="cyc-empty">{ko(lang) ? "아직 학습된 지점 없음 (적재 중)" : "none yet (accumulating)"}</div>}
           {points.slice(0, 300).map((p) => <PointRow key={p.topos} p={p} lang={lang} />)}
+        </div>
+      </div>
+
+      <div className="cyc-sec-h" style={{ marginTop: 22 }}>{ko(lang) ? "③ 차량 주행 차선 (GPS 트레이스 → 도로·방향)" : "③ Driving lanes (GPS traces → roads·direction)"}</div>
+      <div className="cyc-tiles">
+        <Tile label={ko(lang) ? "누적 통과" : "Passes"} value={ln ? fmtN(ln.total_passes) : "—"} accent="#60a5fa" />
+        <Tile label={ko(lang) ? "도로 셀 (통과≥20)" : "Road cells (≥20)"} value={ln ? fmtN(ln.road_cells) : "—"} accent="#34d399" />
+        <Tile label={ko(lang) ? "전체 셀" : "Total cells"} value={ln ? fmtN(ln.cells) : "—"} accent="#0ea5e9" />
+        <Tile label={ko(lang) ? "일방통행 비율" : "One-way frac"} value={ln ? pct(ln.oneway_frac) : "—"} accent="#a78bfa" />
+      </div>
+      <div className="learn-charts">
+        <div className="cyc-tp">
+          <div className="cyc-sec-h">{ko(lang) ? "개선 — 도로 셀 수 (↑ 커버리지)" : "Improving — road cells (↑)"}</div>
+          <div className="cyc-tp-box">{roadVals.length > 1 ? <LineChart values={roadVals} color="#34d399" axes /> : <div className="cyc-empty">{ko(lang) ? "스냅샷 수집 중" : "collecting"}</div>}</div>
+        </div>
+        <div className="cyc-tp">
+          <div className="cyc-sec-h">{ko(lang) ? "누적 통과 수" : "Accumulating passes"}</div>
+          <div className="cyc-tp-box">{passVals.length > 1 ? <LineChart values={passVals} color="#60a5fa" axes /> : <div className="cyc-empty">{ko(lang) ? "수집 중" : "collecting"}</div>}</div>
+        </div>
+      </div>
+      <div className="cyc-tp">
+        <div className="cyc-sec-h">
+          {ko(lang) ? "학습된 차선망 (선=진행방향 · 초록=일방 · 주황=양방/혼합)" : "Learned lane network (line=heading · green=one-way · amber=two-way)"}
+        </div>
+        <div className="cyc-tp-box" style={{ height: "auto" }}>
+          {ln ? <LaneMap grid={ln.grid} lang={lang} /> : <div className="cyc-empty">{ko(lang) ? "수집 중" : "collecting"}</div>}
         </div>
       </div>
     </div>
