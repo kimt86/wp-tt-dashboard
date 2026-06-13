@@ -151,6 +151,18 @@ export interface LanesData {
   cells: number; road_cells: number; total_passes: number; oneway_frac: number | null;
   grid: LaneCellOut[]; metric_series: LaneMetricPoint[];
 }
+// 학습 센터 ① — TT 이동시간
+export interface TravelOd {
+  origin: string; dest: string; n: number;
+  median_s: number | null; dist_m: number | null; speed_kmh: number | null;
+}
+export interface TravelMetricPoint {
+  captured_at: string; samples: number; od_pairs: number; confident_pairs: number; median_speed_kmh: number | null;
+}
+export interface TravelData {
+  samples: number; od_pairs: number; confident_pairs: number; median_speed_kmh: number | null;
+  od: TravelOd[]; metric_series: TravelMetricPoint[];
+}
 
 async function get<T>(path: string): Promise<T> {
   const r = await fetch(path);
@@ -175,4 +187,5 @@ export const api = {
     get<CycleDetail>(`/api/tt-cycles/detail?ytno=${encodeURIComponent(ytno)}&hours=${hours}&limit=${limit}`),
   learnTopos: () => get<LearnTopos>("/api/learn/topos"),
   learnLanes: () => get<LanesData>("/api/learn/lanes"),
+  learnTravel: () => get<TravelData>("/api/learn/travel"),
 };

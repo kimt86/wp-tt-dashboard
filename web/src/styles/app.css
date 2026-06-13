@@ -825,6 +825,10 @@ td.mono { font-family: "JetBrains Mono", monospace; color: var(--text); }
 .learn-list { max-height: 420px; overflow-y: auto; }
 .learn-row { font-size: 12px; padding: 5px 8px; border-bottom: 1px solid var(--border); }
 .learn-row.conf { background: rgba(52, 211, 153, 0.08); }
+.learn-od-cols, .learn-od-row { display: grid; grid-template-columns: 1.3fr 1.3fr 0.5fr 0.8fr 0.9fr 0.6fr; gap: 8px; align-items: center; }
+.learn-od-cols { font-size: 11px; color: var(--text-dim); padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.learn-od-row { font-size: 12px; padding: 5px 8px; border-bottom: 1px solid var(--border); }
+.learn-od-row.conf { background: rgba(52, 211, 153, 0.08); }
 @media (max-width: 900px) { .learn-charts { grid-template-columns: 1fr; } }
 .cyc-phase-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .cyc-phase-h .cyc-sec-h { margin-bottom: 4px; }

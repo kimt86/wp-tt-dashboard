@@ -3,7 +3,7 @@
 // ③ 차량 주행 차선: 이동 TT의 GPS 트레이스를 격자에 집계 → 도로·방향.
 import { useEffect, useMemo, useState } from "react";
 import { type Lang } from "./i18n";
-import { api, type LearnTopos, type LearnToposPoint, type LanesData, type LaneCellOut } from "./api";
+import { api, type LearnTopos, type LearnToposPoint, type LanesData, type LaneCellOut, type TravelData, type TravelOd } from "./api";
 import { LineChart } from "./charts";
 
 const ko = (lang: Lang) => lang === "ko";
@@ -12,6 +12,9 @@ const mPrec = (m: number | null | undefined) => (m == null ? "—" : `${m.toFixe
 const pct = (f: number | null | undefined) => (f == null ? "—" : `${Math.round(f * 100)}%`);
 const stamp = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleString([], { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }) : "—";
+const mmss = (s: number | null | undefined) => (s == null ? "—" : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`);
+const mDist = (m: number | null | undefined) => (m == null ? "—" : m >= 1000 ? `${(m / 1000).toFixed(2)}km` : `${Math.round(m)}m`);
+const kmh = (v: number | null | undefined) => (v == null ? "—" : `${v.toFixed(1)}`);
 
 function Tile({ label, value, unit, accent }: { label: string; value: string; unit?: string; accent?: string }) {
   return (
@@ -35,6 +38,19 @@ function PointRow({ p, lang }: { p: LearnToposPoint; lang: Lang }) {
       <span className="mono">{mPrec(p.spread_m)}</span>
       <span className="mono" style={{ fontSize: 11 }}>{p.lat.toFixed(5)}, {p.lon.toFixed(5)}</span>
       <span className="mono" style={{ fontSize: 11, color: "var(--text-mute)" }}>{stamp(p.updated_at)}</span>
+    </div>
+  );
+}
+
+function OdRow({ o }: { o: TravelOd }) {
+  return (
+    <div className={`learn-od-row${o.n >= 10 ? " conf" : ""}`}>
+      <span className="mono">{o.origin}</span>
+      <span className="mono">{o.dest}</span>
+      <span className="mono">{o.n}</span>
+      <span className="mono">{mmss(o.median_s)}</span>
+      <span className="mono">{mDist(o.dist_m)}</span>
+      <span className="mono">{kmh(o.speed_kmh)}</span>
     </div>
   );
 }
@@ -65,6 +81,7 @@ function LaneMap({ grid, lang }: { grid: LaneCellOut[]; lang: Lang }) {
 export default function LearnPage({ lang }: { lang: Lang }) {
   const [d, setD] = useState<LearnTopos | null>(null);
   const [ln, setLn] = useState<LanesData | null>(null);
+  const [tv, setTv] = useState<TravelData | null>(null);
   const [err, setErr] = useState(false);
   const [onlyBlock, setOnlyBlock] = useState(true);
   const [q, setQ] = useState("");
@@ -74,6 +91,7 @@ export default function LearnPage({ lang }: { lang: Lang }) {
     const load = () => {
       api.learnTopos().then((r) => { if (alive) { setD(r); setErr(false); } }).catch(() => alive && setErr(true));
       api.learnLanes().then((r) => { if (alive) setLn(r); }).catch(() => {});
+      api.learnTravel().then((r) => { if (alive) setTv(r); }).catch(() => {});
     };
     load();
     const id = setInterval(load, 30000);
@@ -87,6 +105,9 @@ export default function LearnPage({ lang }: { lang: Lang }) {
   const lms = ln?.metric_series ?? [];
   const roadVals = lms.map((p) => p.road_cells);
   const passVals = lms.map((p) => Number(p.total_passes));
+  const tms = tv?.metric_series ?? [];
+  const odVals = tms.map((p) => p.od_pairs);
+  const sampVals = tms.map((p) => Number(p.samples));
 
   const points = useMemo(() => {
     let pts = d?.points ?? [];
@@ -101,6 +122,34 @@ export default function LearnPage({ lang }: { lang: Lang }) {
         <div className="cyc-title">
           <h2>{ko(lang) ? "학습 센터" : "Learning Center"}</h2>
           <span className="cyc-title-sub">{ko(lang) ? "GPS에서 학습 — ② 블록 작업지점 좌표 · ③ 차량 주행 차선 (쌓일수록 정밀해짐)" : "Learning from GPS — ② block work-points · ③ driving lanes"}{err && <span className="cyc-err">{ko(lang) ? " · 연결 오류" : " · offline"}</span>}</span>
+        </div>
+      </div>
+
+      <div className="cyc-sec-h" style={{ marginTop: 4 }}>{ko(lang) ? "① TT 이동시간 (출발→도착 · v0 베이스라인=중앙값)" : "① TT travel time (origin→dest · v0 baseline)"}</div>
+      <div className="cyc-tiles">
+        <Tile label={ko(lang) ? "학습 표본" : "Samples"} value={tv ? fmtN(tv.samples) : "—"} accent="#60a5fa" />
+        <Tile label={ko(lang) ? "구간(O→D) 쌍" : "O→D pairs"} value={tv ? fmtN(tv.od_pairs) : "—"} accent="#0ea5e9" />
+        <Tile label={ko(lang) ? "확신 쌍 (n≥10)" : "Confident (n≥10)"} value={tv ? fmtN(tv.confident_pairs) : "—"} accent="#34d399" />
+        <Tile label={ko(lang) ? "중앙 속도" : "Median speed"} value={tv ? kmh(tv.median_speed_kmh) : "—"} unit="km/h" accent="#f59e0b" />
+      </div>
+      <div className="learn-charts">
+        <div className="cyc-tp">
+          <div className="cyc-sec-h">{ko(lang) ? "개선 — 구간 쌍 수 (↑ 커버리지)" : "Improving — O→D pairs (↑)"}</div>
+          <div className="cyc-tp-box">{odVals.length > 1 ? <LineChart values={odVals} color="#34d399" axes /> : <div className="cyc-empty">{ko(lang) ? "스냅샷 수집 중" : "collecting"}</div>}</div>
+        </div>
+        <div className="cyc-tp">
+          <div className="cyc-sec-h">{ko(lang) ? "누적 학습 표본" : "Accumulating samples"}</div>
+          <div className="cyc-tp-box">{sampVals.length > 1 ? <LineChart values={sampVals} color="#60a5fa" axes /> : <div className="cyc-empty">{ko(lang) ? "수집 중" : "collecting"}</div>}</div>
+        </div>
+      </div>
+      <div className="cyc-board" style={{ marginTop: 4 }}>
+        <div className="cyc-board-head"><span>{ko(lang) ? "구간별 이동시간 (표본 많은 순)" : "Travel time by O→D (by samples)"}</span></div>
+        <div className="learn-od-cols">
+          <span>{ko(lang) ? "출발" : "origin"}</span><span>{ko(lang) ? "도착" : "dest"}</span><span>n</span><span>{ko(lang) ? "중앙시간" : "median"}</span><span>{ko(lang) ? "거리" : "dist"}</span><span>km/h</span>
+        </div>
+        <div className="learn-list">
+          {(tv?.od ?? []).length === 0 && <div className="cyc-empty">{ko(lang) ? "아직 구간 표본 없음 (사이클에서 수확 중)" : "none yet (harvesting from cycles)"}</div>}
+          {(tv?.od ?? []).slice(0, 250).map((o) => <OdRow key={o.origin + "→" + o.dest} o={o} />)}
         </div>
       </div>
 
