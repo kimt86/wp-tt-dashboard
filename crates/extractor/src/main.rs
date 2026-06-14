@@ -65,6 +65,12 @@ enum Command {
         #[arg(long, default_value = "oracle-prod")]
         target: String,
     },
+    /// Authoritative soon-idle labels: incrementally poll JOB_ORDER_HISTORY completions
+    /// (JOBSTATUS='C') → tos_handover_label via etl_watermark. Run ~every 60s.
+    Handover {
+        #[arg(long, default_value = "oracle-prod")]
+        target: String,
+    },
 }
 
 fn parse_date(s: &str) -> Result<NaiveDate> {
@@ -159,6 +165,10 @@ async fn main() -> Result<()> {
         Command::Workpool { target } => {
             let pool = db::pool().await?;
             wp_extractor::workpool::tick_workpool(&pool, &target).await?;
+        }
+        Command::Handover { target } => {
+            let pool = db::pool().await?;
+            wp_extractor::handover::tick_handover(&pool, &target).await?;
         }
     }
     Ok(())
