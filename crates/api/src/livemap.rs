@@ -1388,6 +1388,42 @@ pub fn spawn_travel_aggregator(pool: PgPool) {
             )
             .execute(&pool)
             .await;
+            // empty trip: origin = previous cycle's drop topos (lag per truck), dest = this
+            // cycle's pickup topos, time = empty_travel_start → empty_arrived. leg_ord=0
+            // (distinct from laden leg ordinals ≥1). Only cycles with a clean empty-travel start.
+            let _ = sqlx::query(
+                "WITH cyc AS (
+                   SELECT v2.ytno, v2.dropped_at, v2.empty_travel_start_at, v2.empty_arrived_at,
+                          (v2.legs->0->>'target') AS pickup_topos,
+                          (v2.legs->(jsonb_array_length(v2.legs)-1)->>'target') AS drop_topos
+                     FROM tt_cycle_v2 v2
+                    WHERE v2.dropped_at > now() - interval '30 minutes'
+                      AND jsonb_array_length(v2.legs) >= 1
+                 ),
+                 wp AS (
+                   SELECT *, lag(drop_topos) OVER (PARTITION BY ytno ORDER BY dropped_at) AS prev_drop
+                     FROM cyc
+                 )
+                 INSERT INTO learn_travel_sample (ytno, dropped_at, leg_ord, origin, dest, travel_s, dist_m, hour)
+                 SELECT wp.ytno, wp.dropped_at, 0, wp.prev_drop, wp.pickup_topos,
+                        extract(epoch FROM wp.empty_arrived_at - wp.empty_travel_start_at)::int,
+                        CASE WHEN po.topos IS NOT NULL AND pd.topos IS NOT NULL THEN
+                          sqrt( power((pd.lat - po.lat) * 111320.0, 2)
+                              + power((pd.lon - po.lon) * 111320.0 * cos(radians((po.lat + pd.lat) / 2)), 2) )
+                        END,
+                        extract(hour FROM wp.empty_arrived_at)::int
+                   FROM wp
+                   LEFT JOIN learn_topos_point po ON po.topos = wp.prev_drop
+                   LEFT JOIN learn_topos_point pd ON pd.topos = wp.pickup_topos
+                  WHERE wp.prev_drop IS NOT NULL AND wp.pickup_topos IS NOT NULL
+                    AND wp.prev_drop <> wp.pickup_topos
+                    AND wp.empty_travel_start_at IS NOT NULL AND wp.empty_arrived_at IS NOT NULL
+                    AND wp.empty_arrived_at > wp.empty_travel_start_at
+                    AND extract(epoch FROM wp.empty_arrived_at - wp.empty_travel_start_at) BETWEEN 10 AND 7200
+                 ON CONFLICT (ytno, dropped_at, leg_ord) DO NOTHING",
+            )
+            .execute(&pool)
+            .await;
             let _ = sqlx::query("DELETE FROM learn_travel_sample WHERE captured_at < now() - interval '30 days'")
                 .execute(&pool)
                 .await;
