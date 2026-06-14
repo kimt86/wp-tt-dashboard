@@ -21,6 +21,7 @@ SELECT
   l.JOB_ODR_YTNO       AS ytno,
   l.JOB_ODR_ARMGC      AS armgc,
   l.JOB_ODR_ETW_DT     AS etw_dt,
+  l.JOB_ODR_ACTV_DT    AS actv_dt,
   SUBSTR(l.JOB_ODR_CONTNO, 1, 11) AS contno,
   l.JOB_ODR_MSNSEQ     AS msnseq,
   l.JOB_ODR_YT_TOPOS   AS yt_topos,

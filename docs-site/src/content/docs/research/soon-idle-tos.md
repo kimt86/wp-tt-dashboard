@@ -290,7 +290,7 @@ WHERE (JOB_HIST_DATE||SUBSTR(JOB_HIST_TIME,1,6)) > {{last_watermark}}
 
 ## 다음 단계(제안) — 2차 검증 반영
 
-1. **가장 싼 즉효(Oracle 추가쿼리 0):** 기존 90초 `workpool.sql`에 **`JOB_ODR_ACTV_DT` 컬럼만 추가** → `live_workpool`에 적재 → DS 활성주문의 RTG 핸드오버 시작+대상트럭 라이브 확보.
+1. **✅ 구현 완료(2026-06-14):** 90초 `workpool.sql`에 `JOB_ODR_ACTV_DT` 추가 → `live_workpool.actv_ts`/`actv_raw`에 적재(Oracle 추가쿼리 0, mig `0029`). **검증: DS 활성 103건 전부(100%) `actv_ts`+`ytno`+`armgc` 보유** — DS 곧유휴(RTG 핸드오버 시작+대상트럭) 라이브 수집 가동.
 2. `classify_tt()` DS 분기에 **TOS 보정 훅**: 활성주문 `ACTV_DT`(있고 미완)면 `soon_idle`, RTG 근접(≤30m) 충족이면 신뢰 상향 — 웹소켓 GPS와 TOS를 OR로 결합(DS 0% 공백 제거).
 3. **권위 라벨:** `etl_watermark` 가동 + `JOB_ORDER_HISTORY`(`JOB_HIST_JOBSTATUS='C'`) 증분 폴링(`IDX_JOBHIST_DATETIME` 워터마크, 30~60초). 양하 라벨 정밀화(−19초 보정)로 곧유휴 정확도 측정 → 그림자 게이트 통과 후 승격.
 4. (선택) `JOB_ODR_YT_QSTATUS`·`YT_STATUS` 전이 의미를 더 좁혀 ACTV보다 타이트한 호라이즌 신호 탐색.

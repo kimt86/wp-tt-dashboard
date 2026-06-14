@@ -49,6 +49,7 @@ pub struct MoveRow {
     pub ytno: Option<String>,
     pub armgc: Option<String>,
     pub etw_dt: Option<String>,
+    pub actv_dt: Option<String>, // JOB_ODR_ACTV_DT: order/RTG activation (soon-idle handover-start, esp. DS)
     pub contno: Option<String>,
     pub msnseq: Option<String>,
     pub yt_topos: Option<String>,
@@ -224,15 +225,17 @@ async fn src_workpool(pool: &PgPool, target: &str, date: chrono::NaiveDate, as_o
             match r.jobstatus.as_deref() {
                 Some("A") => {
                     let etw_ts = r.etw_dt.as_deref().and_then(parse_etw);
+                    // ACTV_DT shares the ETW timestamp shape (YYYYMMDDHH24MISS[mmm], MYT).
+                    let actv_ts = r.actv_dt.as_deref().and_then(parse_etw);
                     sqlx::query(
                         "INSERT INTO live_workpool
                            (queuename, vessel, voyage, jobtype, jobstatus, yt_status, ytno, armgc,
-                            etw_ts, etw_raw, contno, msnseq, yt_topos, from_pos, to_pos, twintandem, as_of_ts)
-                         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)",
+                            etw_ts, etw_raw, actv_ts, actv_raw, contno, msnseq, yt_topos, from_pos, to_pos, twintandem, as_of_ts)
+                         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)",
                     )
                     .bind(&r.queuename).bind(&r.vessel).bind(&r.voyage)
                     .bind(&r.jobtype).bind(&r.jobstatus).bind(&r.yt_status).bind(&r.ytno).bind(&r.armgc)
-                    .bind(etw_ts).bind(&r.etw_dt).bind(&r.contno).bind(&r.msnseq).bind(&r.yt_topos)
+                    .bind(etw_ts).bind(&r.etw_dt).bind(actv_ts).bind(&r.actv_dt).bind(&r.contno).bind(&r.msnseq).bind(&r.yt_topos)
                     .bind(&r.from_pos).bind(&r.to_pos).bind(&r.twintandem).bind(as_of)
                     .execute(&mut *tx).await.context("insert live_workpool")?;
                     active += 1;
@@ -300,10 +303,11 @@ mod tests {
 
     #[test]
     fn parses_move_rows() {
-        let raw = r#"{"result":"[{\"QUEUENAME\":\"34H-D\",\"VESSEL\":\"CLOA\",\"VOYAGE\":\"12E\",\"JOBTYPE\":\"DS\",\"JOBSTATUS\":\"A\",\"YT_STATUS\":\"F\",\"YTNO\":\"TT945\",\"ARMGC\":\"RTG122\",\"ETW_DT\":\"20260609101604681\",\"CONTNO\":\"EITU0580638\",\"MSNSEQ\":null,\"YT_TOPOS\":\"08T-1011\",\"FROM_POS\":\"208\",\"TO_POS\":\"208\",\"TWINTANDEM\":null}]"}"#;
+        let raw = r#"{"result":"[{\"QUEUENAME\":\"34H-D\",\"VESSEL\":\"CLOA\",\"VOYAGE\":\"12E\",\"JOBTYPE\":\"DS\",\"JOBSTATUS\":\"A\",\"YT_STATUS\":\"F\",\"YTNO\":\"TT945\",\"ARMGC\":\"RTG122\",\"ETW_DT\":\"20260609101604681\",\"ACTV_DT\":\"20260609101536\",\"CONTNO\":\"EITU0580638\",\"MSNSEQ\":null,\"YT_TOPOS\":\"08T-1011\",\"FROM_POS\":\"208\",\"TO_POS\":\"208\",\"TWINTANDEM\":null}]"}"#;
         let rows: Vec<MoveRow> = parse_rows(raw).unwrap();
         assert_eq!(rows[0].queuename, "34H-D");
         assert_eq!(rows[0].ytno.as_deref(), Some("TT945"));
         assert!(parse_etw(rows[0].etw_dt.as_deref().unwrap()).is_some());
+        assert!(parse_etw(rows[0].actv_dt.as_deref().unwrap()).is_some());
     }
 }
