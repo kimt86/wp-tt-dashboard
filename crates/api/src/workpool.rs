@@ -36,6 +36,7 @@ struct MoveRow {
     etw_ts: Option<DateTime<Utc>>,
     etw_accurate: Option<DateTime<Utc>>,
     etw_expires: Option<DateTime<Utc>>,
+    actv_ts: Option<DateTime<Utc>>,
     contno: Option<String>,
     yt_topos: Option<String>,
     from_pos: Option<String>,
@@ -57,6 +58,9 @@ struct MoveOut {
     etw_accurate: Option<DateTime<Utc>>,
     /// when that accurate ETW snapshot expires (stale after this)
     etw_expires: Option<DateTime<Utc>>,
+    /// RTG/order activation (JOB_ODR_ACTV_DT) — DS soon-idle handover-start signal.
+    /// NOTE: activation, not the ±1s physical lift (can lead by minutes).
+    actv_ts: Option<DateTime<Utc>>,
     contno: Option<String>,
     yt_topos: Option<String>,
     from_pos: Option<String>,
@@ -142,7 +146,7 @@ pub async fn workpool(State(pool): State<PgPool>) -> Result<Json<WorkpoolOut>, A
     let moves: Vec<MoveRow> = sqlx::query_as(
         "SELECT w.qc, w.queuename, w.vessel, w.jobtype, w.yt_status, w.ytno, w.armgc, w.etw_ts,
                 coalesce(e.qc_etw_utc, e.vessel_etw_utc) AS etw_accurate,
-                e.expires_at_utc AS etw_expires,
+                e.expires_at_utc AS etw_expires, w.actv_ts,
                 w.contno, w.yt_topos, w.from_pos, w.to_pos, w.twintandem
            FROM live_workpool w
            LEFT JOIN tos_etw_cntr e
@@ -168,6 +172,7 @@ pub async fn workpool(State(pool): State<PgPool>) -> Result<Json<WorkpoolOut>, A
         etw_ts: m.etw_ts,
         etw_accurate: m.etw_accurate,
         etw_expires: m.etw_expires,
+        actv_ts: m.actv_ts,
         contno: m.contno.clone(),
         yt_topos: m.yt_topos.clone(),
         from_pos: m.from_pos.clone(),

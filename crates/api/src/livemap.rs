@@ -189,6 +189,9 @@ struct AssignedJob {
     contno: Option<String>,
     qc: Option<String>,
     twintandem: Option<String>,
+    // TOS says the order's crane (RTG for DS) is active on this move (JOB_ODR_ACTV_DT set).
+    // Authoritative soon-idle signal for DS, where the websocket has no RTG PLC.
+    rtg_active: bool,
 }
 
 // TT cycle bounds. A loose physical sanity band only — the *real* artifact filter is GPS
@@ -693,7 +696,7 @@ struct Classed {
 ///  - wait_rtg: loaded + ARRIVED at block but no RTG near yet (arrived ≠ soon-idle)
 fn classify_tt(
     p: &Pos,
-    assigned: bool,
+    aj: Option<&AssignedJob>,
     rtgs: &[(f64, f64)],
     plc: &HashMap<String, Plc>,
     cranes: &HashMap<String, (f64, f64)>,
@@ -701,6 +704,7 @@ fn classify_tt(
     now: i64,
 ) -> Classed {
     let st = |state, reason: Option<String>| Classed { state, reason, ..Default::default() };
+    let assigned = aj.is_some(); // in live_assigned_tt (any active job)
     let loaded = p.container1.as_deref().is_some_and(|s| !s.is_empty());
     if !loaded {
         if p.speed < IDLE_SPEED_KMH {
@@ -756,16 +760,28 @@ fn classify_tt(
     if is_crane {
         return st("delivering", Some("적재 이동 (블록行)".into()));
     }
-    // block handover — needs an RTG engaged (≈ same bay).
+    // block handover — RTG engaged via GPS (≈ same bay) OR TOS says the order's RTG is active.
+    // GPS misses DS RTGs (no PLC, nearest fix is often >30m), so the authoritative TOS ACTV
+    // signal (JOB_ODR_ACTV_DT) fills that gap. Kept as a distinct reason so the upgrade is
+    // auditable. See research/soon-idle-tos (연구 2차).
+    let tos_active = aj.is_some_and(|a| a.rtg_active);
     let nearest = rtgs.iter().map(|r| dist_m((p.lat, p.lon), *r)).fold(f64::INFINITY, f64::min);
-    if !nearest.is_finite() {
-        return st("wait_rtg", Some("도착 · RTG 미관측".into()));
-    }
-    let d = (nearest * 10.0).round() / 10.0;
-    if d <= RTG_BAY_M {
-        Classed { state: "soon_idle", reason: Some(format!("블록 RTG 근접 {d:.0}m")), nearest_rtg_m: Some(d), ..Default::default() }
-    } else {
-        Classed { state: "wait_rtg", reason: Some(format!("도착 · RTG 대기 (최근접 {d:.0}m)")), nearest_rtg_m: Some(d), ..Default::default() }
+    let d = nearest.is_finite().then(|| (nearest * 10.0).round() / 10.0);
+    match (d, tos_active) {
+        (Some(d), _) if d <= RTG_BAY_M => {
+            Classed { state: "soon_idle", reason: Some(format!("블록 RTG 근접 {d:.0}m")), nearest_rtg_m: Some(d), ..Default::default() }
+        }
+        (_, true) => {
+            let reason = match d {
+                Some(d) => format!("TOS RTG 활성 (보정 · GPS {d:.0}m)"),
+                None => "TOS RTG 활성 (보정 · GPS 미관측)".into(),
+            };
+            Classed { state: "soon_idle", reason: Some(reason), nearest_rtg_m: d, ..Default::default() }
+        }
+        (Some(d), false) => {
+            Classed { state: "wait_rtg", reason: Some(format!("도착 · RTG 대기 (최근접 {d:.0}m)")), nearest_rtg_m: Some(d), ..Default::default() }
+        }
+        (None, false) => st("wait_rtg", Some("도착 · RTG 미관측".into())),
     }
 }
 
@@ -802,7 +818,7 @@ pub async fn positions(State(lm): State<Arc<LiveMap>>, State(pool): State<PgPool
             if age > STALE_AFTER_S {
                 return None;
             }
-            let c = (p.cls == "TT").then(|| classify_tt(p, assigned_pool.contains_key(id), &rtgs, &plc, &cranes, &centroids, now));
+            let c = (p.cls == "TT").then(|| classify_tt(p, assigned_pool.get(id), &rtgs, &plc, &cranes, &centroids, now));
             let dispatch = c.as_ref().map(|c| c.state);
             let dispatch_reason = c.as_ref().and_then(|c| c.reason.clone());
             let nearest_rtg_m = c.as_ref().and_then(|c| c.nearest_rtg_m);
@@ -1457,11 +1473,11 @@ pub fn spawn_assignment_refresh(lm: Arc<LiveMap>, pool: PgPool) {
         let mut ticker = tokio::time::interval(Duration::from_secs(30));
         loop {
             ticker.tick().await;
-            let rows = sqlx::query_as::<_, (String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>)>(
-                "SELECT DISTINCT ON (a.ytno) a.ytno, w.jobtype, w.vessel, w.voyage, w.contno, w.qc, w.twintandem
+            let rows = sqlx::query_as::<_, (String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<bool>)>(
+                "SELECT DISTINCT ON (a.ytno) a.ytno, w.jobtype, w.vessel, w.voyage, w.contno, w.qc, w.twintandem, w.rtg_active
                    FROM live_assigned_tt a
                    LEFT JOIN LATERAL (
-                       SELECT jobtype, vessel, voyage, contno, qc, twintandem
+                       SELECT jobtype, vessel, voyage, contno, qc, twintandem, (actv_ts IS NOT NULL) AS rtg_active
                          FROM live_workpool w
                         WHERE w.ytno = a.ytno
                         ORDER BY w.as_of_ts DESC, w.id DESC
@@ -1475,8 +1491,8 @@ pub fn spawn_assignment_refresh(lm: Arc<LiveMap>, pool: PgPool) {
             match rows {
                 Ok(rows) => {
                     let mut next: HashMap<String, AssignedJob> = HashMap::with_capacity(rows.len());
-                    for (ytno, jobtype, vessel, voyage, contno, qc, twintandem) in rows {
-                        next.insert(ytno, AssignedJob { jobtype, vessel, voyage, contno, qc, twintandem });
+                    for (ytno, jobtype, vessel, voyage, contno, qc, twintandem, rtg_active) in rows {
+                        next.insert(ytno, AssignedJob { jobtype, vessel, voyage, contno, qc, twintandem, rtg_active: rtg_active.unwrap_or(false) });
                     }
                     *lm.assigned_pool.write().await = next;
                 }

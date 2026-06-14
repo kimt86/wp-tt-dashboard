@@ -281,6 +281,11 @@ function QcCol({ q, lang, ttState, working, mph }: { q: WpQc; lang: Lang; ttStat
               <div className="bot">
                 {m.jobtype === "DS" ? `${m.yt_topos ?? m.from_pos ?? "?"} → ${m.armgc ?? "RTG"}` : `${m.armgc ?? m.yt_topos ?? "?"} → ${q.qc}`}
                 {(() => { const e = etwLabel(m.etw_accurate, m.etw_expires, lang); return e && <span className={`jetw ${e.cls}`} style={{ marginLeft: 6 }} title={ko(lang) ? "TOS ETW RPC 기반 정확 ETW" : "accurate ETW from the TOS ETW RPC"}>ETW {e.text}</span>; })()}
+                {m.actv_ts && (() => {
+                  const mins = Math.max(0, Math.round((Date.now() - new Date(m.actv_ts).getTime()) / 60000));
+                  const crane = m.jobtype === "DS" ? "RTG" : "QC";
+                  return <span className="jetw rtg-actv" style={{ marginLeft: 6 }} title={ko(lang) ? "TOS: 크레인이 이 주문에 활성 (곧유휴 신호). 활성화 시각이며 ±1초 물리 집기는 아님." : "TOS: crane active on this order (soon-idle signal). Activation, not the ±1s physical lift."}>{ko(lang) ? `${crane}활성 ${mins}분` : `${crane} ${mins}m`}</span>;
+                })()}
               </div>
             </div>
             <div className="assign">
