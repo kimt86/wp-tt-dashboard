@@ -5,26 +5,79 @@ sidebar:
   order: 3
 ---
 
-**상태:** `검증됨`(핵심 골자) · `초안`(권장 설계) · **최종 검토:** 2026-06-14
+**상태:** `검증됨`(핵심 골자 — **2026-06-14 prod Oracle 직접 검증 2차 반영**) · `초안`(권장 설계) · **최종 검토:** 2026-06-14
 
 배차 로직에서 가장 중요한 것 중 하나는 **곧 유휴될(soon-idle) 차량을 미리 감지**하는 것입니다. 웹소켓만으로 알아내면 좋지만 **양하(DS)는 정확도가 구조적으로 약하고**(RTG가 PLC를 안 보냄), 정답(라벨) 확보도 어렵습니다. 그래서 **TOS DB를 보조로** 쓰되, 운영 DB에 **부하를 최소로** 주면서 핵심 두 가지 — **(1) QC·RTG 핸드오버 시작 시점, (2) 핸드오버 대상 차량** — 을 얻는 방안을 연구했습니다. 본 문서는 그 **연구 과정과 결과**를 함께 남깁니다.
 
-> **출처 등급:** **[코드]** = `crates/`에서 직접 확인 · **[DB]** = `psql 127.0.0.1:5433/wp_tt` 직접 쿼리 · **[문서]** = 지식센터/설계문서 · **(미검증)** = 문서·코드·DB로 확인 못 함. 운영원칙: **prod Oracle 직접조회 금지(추출기·Postgres만)**, 관측 못 한 값은 **NULL**(추정 금지).
+> **출처 등급:** **[코드]** = `crates/`에서 직접 확인 · **[DB]** = 서빙 Postgres(`127.0.0.1:5433/wp_tt`) · **[ORA]** = **prod TOS Oracle 직접 조회**(2026-06-14 추가) · **[문서]** = 지식센터/설계문서 · **(미검증)** = 확인 못 함. 운영원칙 갱신: ~~prod Oracle 직접조회 금지~~ → **저부하로 조심히 직접조회 허용**(직렬화·행수 캡·인덱스안전 술어·집계우선; 에이전트 병렬 조회 금지). 관측 못 한 값은 **NULL**(추정 금지).
 
 ## 한 장 요약 — 두 핵심에 대한 직답
 
 | 핵심 질문 | 선적(LD) — 안벽 QC | 양하(DS) — 야드 RTG |
 |---|---|---|
-| **(1) 핸드오버 "시작 시점"** | 권위(사후): `MCH_OPERATION.ST_DT` **[코드/문서]** · 라이브 임박: QC PLC `ctab` load 전이(~1초) **[코드/문서]** · 라이브 예측: `JOB_ORDER_LIST.JOB_ODR_ETW_DT`(크레인 준비시각) **[코드/DB]** | **직접 신호 없음** — RTG는 PLC 미송신 **[코드/문서]** · 사후 프록시: `JOB_ORDER_HISTORY.JOB_HIST_ACTV_DT`(±수 초) · 라이브: RTG GPS가 그 차 레인 **≤30m** 진입(`RTG_BAY_M`) **[코드]** |
-| **(2) 핸드오버 "대상 차량"** | 사후: `MCH_OPERATION.TRK_ID` **[코드/문서]** · 라이브: `JOB_ORDER_LIST.JOB_ODR_YTNO`(=`TT####`, GPS device id와 동일) **[코드/DB]** | 라이브: `JOB_ODR_YTNO` **[DB]** · 담당 RTG는 `JOB_HIST_ARMGC` **[코드/문서]** · 사후 이력의 트럭ID 컬럼은 **(미검증)** |
+| **(1) 핸드오버 "시작 시점"** | 권위(사후): `MCH_OPERATION.ST_DT` **[코드/문서]** · 라이브 임박: QC PLC `ctab` load 전이(~1초) **[코드/문서]** · 라이브 예측: `JOB_ORDER_LIST.JOB_ODR_ETW_DT` **[코드/DB]** | **TOS 라이브로 직접 관측됨(2차)** — `JOB_ORDER_LIST.JOB_ODR_ACTV_DT`(RTG/주문 활성, in-flight) **[ORA: DS 활성주문 113건 보유]** · 권위: `JOB_HIST_ACTV_DT` · 웹소켓 보조: RTG GPS ≤30m(`RTG_BAY_M`) **[코드]**. 단 `ACTV_DT`=활성화이지 ±1초 물리집기 아님 |
+| **(2) 핸드오버 "대상 차량"** | 사후: `MCH_OPERATION.TRK_ID` **[코드/문서]** · 라이브: `JOB_ORDER_LIST.JOB_ODR_YTNO`(=`TT####`, GPS device id와 동일) **[코드/DB]** | 라이브: `JOB_ODR_YTNO` **[ORA]** · **이력도 `JOB_HIST_YTNO` 보유(DS 87% 채움) — 2차 확정**(이전 미검증 해소) · 담당 RTG `JOB_ODR_ARMGC`/`JOB_HIST_ARMGC` **[ORA]** |
 
 **핵심 비대칭(실측):** 차를 비우는 핸드오버가 LD는 PLC 있는 **QC**에서, DS는 PLC 없는 **RTG**에서 일어납니다. 라이브 DB `tt_cycle_log`(61,279 사이클, 2026-06-10~14)에서 **드롭측 크레인 도착 포착 = LD 50.1% vs DS 0.0%** **[DB]** — DS 23,219건 중 단 4건만 PLC로 잡힘. 그래서 "선적 곧유휴는 풀리고, 양하 곧유휴는 구조적으로 어렵다".
 
-**최소부하 결론:** 곧유휴 입력의 **대부분(대상차량·작업종류·ETW·배정RTG·POW)은 이미 `live_workpool`에 90초 주기로 들어와 있습니다** — **LD 곧유휴엔 Oracle 추가추출이 불필요** **[DB: 234행 전부 ytno·armgc 보유, 95% ETW]**. 추가가 필요한 건 **단 하나**: 양하 "방금 유휴" 권위 확정(`JOB_ORDER_HISTORY.ACTV_DT` 저지연 폴링) — 이건 **증분 워터마크 + 진행중-only + 30~60초 주기**로 수~수십 행짜리 쿼리가 되어 Oracle 부하가 무시할 수준입니다.
+**최소부하 결론:** 곧유휴 입력의 **대부분(대상차량·작업종류·ETW·배정RTG·POW)은 이미 `live_workpool`에 90초 주기로 들어와 있습니다** — **LD 곧유휴엔 Oracle 추가추출이 불필요** **[DB: 234행 전부 ytno·armgc 보유, 95% ETW]**. **2차 검증으로 양하(DS)도 거의 공짜로 풀립니다:** 같은 90초 `JOB_ORDER_LIST` 스캔에 **`JOB_ODR_ACTV_DT` 컬럼만 추가**하면(Oracle 추가 쿼리 0) DS 활성주문의 RTG 핸드오버 시작+대상트럭이 라이브로 들어옵니다. 권위 라벨이 필요하면 `JOB_ORDER_HISTORY`를 **`IDX_JOBHIST_DATETIME` 인덱스 워터마크**(존재 확정)로 증분 폴링 — 둘 다 prod 부하 무시 수준. → [연구 2차 상세](#연구-2차--prod-oracle-직접-검증-2026-06-14).
 
 :::tip[권장 — 하이브리드]
 웹소켓을 **1차 라이브 감지**로, TOS를 **권위·라벨·지연보정 2차**로. LD는 PLC가 긴 호라이즌(~90~120초)을 주고, DS는 RTG 근접이 짧은 호라이즌(관여 후 ~30초)만 주되 **RTG 미관여 차는 풀에 넣지 않습니다**(오포함 방지).
 :::
+
+---
+
+## 연구 2차 — prod Oracle 직접 검증 (2026-06-14)
+
+1차는 **운영 Oracle 직접조회 금지** 제약하에 추출 SQL·서빙 Postgres·문서로만 삼각측량했고, 핵심 몇 가지를 `(미검증)`으로 남겼습니다. 제약이 **저부하 직접조회 허용**으로 완화되어, 그 항목들을 **prod TOS Oracle에 직접 질의해 검증**했고 — 그 결과 **양하(DS) 곧유휴 신호가 TOS 라이브에 직접 존재**함을 발견했습니다.
+
+**조사 방법(안전).** `remote-toolbox-sql oracle-prod`(SSH→toolbox 컨테이너) 경유. prod이므로 **에이전트 병렬 조회 금지** — 직렬로, ① 데이터딕셔너리(컬럼·인덱스, 거의 무부하) 먼저 → ② 본 테이블은 **인덱스안전 술어 + 행수 캡(`FETCH FIRST`) + 집계우선**, 추출기가 90초마다 도는 검증된 술어를 그대로 재사용. 총 ~8개 바운드 쿼리.
+
+### 해소된 미검증 항목
+
+| 1차 (미검증) | 2차 검증 결과 | 근거 |
+|---|---|---|
+| HISTORY가 대상 트럭ID를 직접 주는가 | **확정 — `JOB_HIST_YTNO` 실재**(DS 이력 87% 채움: 147,670/169,422) | [ORA] `all_tab_columns` + 집계 |
+| 워터마크용 datetime 인덱스 존재 여부 | **확정 — 존재.** `IDX_JOBHIST_DATETIME = (JOB_HIST_DATE‖JOB_HIST_TIME, JOBSTATUS)` (+ YTNO별·ARMGC별 datetime 인덱스) | [ORA] `all_ind_expressions` |
+| `ACTV_DT` 의미 | **부분 확정 — '주문/RTG 활성화'이지 ±1초 물리집기 아님**(활성 경과 11~18분 사례 다수) | [ORA] 라이브 샘플·집계 |
+| JOBSTATUS 코드 | **확정 — `C`=완료 `A`=활성 `Q`=대기 `P`=계획 `B`=차단** | [코드: workpool.sql 주석] |
+
+### 새 핵심 발견 — 양하(DS) 곧유휴 신호가 TOS 라이브에 직접 존재
+
+웹소켓이 DS 드롭측을 0%로 못 잡던 공백을, **이미 90초마다 추출하는 `JOB_ORDER_LIST`가 메웁니다.** 진행중(`JOB_ODR_COMPDATE IS NULL`) 주문 한 행에 **대상트럭·담당RTG·활성시각·블록작업점**이 함께 있습니다.
+
+라이브 상태 분포 **[ORA, NOW 10:53 MYT]**:
+
+| jobtype | JOBSTATUS | YT_STATUS | ACTV_DT | n |
+|---|---|---|---|---|
+| **DS** | A(활성) | **F**(적재/운반) | **있음** | **113** |
+| DS | A | A | 있음 | 2 |
+| DS | Q(대기) | _ | 없음 | 478 (미배정 후보) |
+| **LD** | A | _(공백) | 없음 | 114 |
+| LD | A | _ | 있음 | 4 |
+
+→ **DS 활성주문 113건이 `JOB_ODR_ACTV_DT` + `JOB_ODR_YTNO`(대상트럭) + `JOB_ODR_ARMGC`(RTG) 보유.** 샘플 **[ORA]**: `TT1109/RTG181/블록11W-1718` DIS 10:40:51 → ACTV 10:51:36(미완) · `TT883/RTG117/07K-07` · `TT982/ES39/12AS-0304` … **ARMGC는 전부 RTG/ES(야드측, C## 없음)**.
+
+**즉 사용자의 두 핵심이 DS에서도 라이브로 답해집니다:** (1) 핸드오버 시작 = `JOB_ODR_ACTV_DT`, (2) 대상 차량 = `JOB_ODR_YTNO`. (LD 활성은 대부분 ACTV 미세팅·yt_status 공백 — 단계가 일러서. LD는 QC PLC 웹소켓이 이미 잘 잡으므로 **상호보완**.)
+
+### 타이밍 실측 (라이브 DS 활성 n=121) [ORA]
+
+- **블록 대기(DIS→ACTV) 중앙값 461초**(≈7.7분), p75 788초(≈13분) — "DS 도착 ≠ 곧유휴"를 정량 확인(RTG 대기가 길고 가변).
+- **ACTV 경과(진행중 주문) 중앙값 361초** + 롱테일(11~18분) → **`ACTV_DT`는 느슨한 활성 신호**(±초 물리집기 아님). 따라서 "30초 카운트다운"이 아니라 **"이 트럭이 RTG 활성 서비스 구간에 들어왔고 대상이 누구인지"** 를 주는 신호 — 그래도 웹소켓-무신호보다 압도적.
+
+### 스키마·인덱스 사실 [ORA]
+
+- `MCH_OPERATION`: 날짜 인덱스가 `IDX_MCH_OPERATION_COMPDATE(MCH_OPER_COMPDATE)` **뿐** — `ST_DT`·`MCH_OPER_STATUS` 인덱스 없음 → **진행중(COMPDATE IS NULL) 조회는 풀스캔**. ∴ MCH_OPERATION은 **완료 move 권위용**이 맞고, 라이브 진행중은 `JOB_ORDER_LIST`가 정답.
+- `JOB_ORDER_HISTORY`는 **이벤트 스트림**(DS만 ~169K행/일, 주문당 다수 행)이고 **거의 실시간**(이력이 현재 초까지). 단 `JOB_HIST_COMP_DT`는 이력에서 항상 NULL → 완료는 `JOBSTATUS='C'` 이벤트로 표현(1차의 "이력 배치지연 ~15일" 가정 일부 정정 — 보존은 ~15일이되 적재는 실시간).
+- 타임존 = **MYT(UTC+8)**. 사용자 표기 KST = MYT+1h.
+
+### 갱신된 최소부하 설계
+
+1. **가장 싼 길(권장, Oracle 추가 쿼리 0):** 기존 90초 `JOB_ORDER_LIST` 추출에 **`JOB_ODR_ACTV_DT`(+선택 `JOB_ODR_YT_QSTATUS`) 컬럼만 추가** — 같은 스캔에 컬럼만 더. 즉시 DS 곧유휴 라이브 확보(현재 `yt_status`는 이미 추출, `actv_dt`만 빠짐).
+2. **권위 라벨(증분 워터마크):** `JOB_ORDER_HISTORY`를 `WHERE JOB_HIST_DATE‖JOB_HIST_TIME > {{watermark}} AND JOB_HIST_JOBSTATUS='C'`로 — **`IDX_JOBHIST_DATETIME` 인덱스 레인지 스캔**(존재 확정). 빈 `etl_watermark` 가동, 30~60초 주기·운영시간 가드.
+
+둘 다 **prod 부하 무시 수준**(전자는 추가 쿼리 0, 후자는 인덱스 레인지 바운드). 아래 1차 분석은 이 2차 검증 이전 내용으로, 결론은 위로 갱신됐습니다.
 
 ---
 
@@ -121,7 +174,8 @@ QC가 **move 기반**이면 RTG는 **대기 기반**입니다. 깨끗한 시작/
 | TT 하차 시각 | `YT_DIS_DT` | **[코드: c08]** |
 | 크레인 활성(시작 프록시) | `JOB_HIST_ACTV_DT` | **[코드: c08]** |
 | **담당 RTG** | `JOB_HIST_ARMGC`(RTG/ES만, C## 없음) | **[코드: c08·e5]** |
-| **대상 트럭ID** | 직접 컬럼 **확인 안 됨** | **(미검증)** — 라이브 `JOB_ODR_YTNO`로 대체 |
+| **대상 트럭ID** | **`JOB_HIST_YTNO`** (DS 이력 87% 채움) | **✅ [ORA] 2차 확정** (1차 "확인 안 됨" 정정) |
+| **크레인 활성** | `JOB_HIST_ACTV_DT` (이력은 `COMP_DT` 항상 NULL → 완료=`JOBSTATUS='C'`) | **[ORA]** |
 
 핵심 파생값: `K_CRANE_Q = (ACTV_DT − YT_DIS_DT) × 86400`초 = "TT 하차 → 야드 크레인 활성까지 대기"(0..1800s) **[코드: c08]**. **이것이 RTG/블록측 신호임을 DB가 증명:** `raw_k_crane_q_daily` in-range 이벤트의 **97.1%가 DS** **[DB]**.
 
@@ -182,7 +236,7 @@ WHERE (JOB_HIST_DATE||SUBSTR(JOB_HIST_TIME,1,6)) > {{last_watermark}}
 4. **부하 추정:** (30~60초 윈도우) × (DS 완료율) ≈ **수~수십 행/폴링** → 현 워크풀(1048행/1.2s)보다 가벼움.
 
 :::caution[열린 질문 — 인덱스]
-prod에 `JOB_HIST_DATE‖TIME` 또는 ROWID/시퀀스 위 인덱스가 있는지 DB로 확인 불가 → 인덱스 부재 시 워터마크 술어도 풀스캔 위험. **TOS팀 인덱스 확인 후 적용.** prod 실행계획 코스트도 본 환경에서 검증 불가 **(미검증)**.
+~~prod에 인덱스가 있는지 DB로 확인 불가~~ → **2차 검증으로 해소: `IDX_JOBHIST_DATETIME = (JOB_HIST_DATE‖JOB_HIST_TIME, JOBSTATUS)` 존재 확정 [ORA]** → 워터마크 술어 `JOB_HIST_DATE‖JOB_HIST_TIME > {{last}}`는 인덱스 레인지 스캔. (실행계획 코스트 자체는 EXPLAIN 미실행이라 **(미검증)**이나, 인덱스 존재로 풀스캔 위험은 제거.)
 :::
 
 ### 4. 하이브리드 감지 로직
@@ -227,18 +281,19 @@ prod에 `JOB_HIST_DATE‖TIME` 또는 ROWID/시퀀스 위 인덱스가 있는지
 | 항목 | 내용 | 상태 |
 |---|---|---|
 | DS 물리 순간 부재 | RTG PLC 없음 → "정확히 언제 비었나"는 GPS dwell/ACTV_DT 근사만 | 구조적, 해소 불가 |
-| 워터마크 인덱스 | `JOB_HIST_DATE‖TIME`/ROWID 위 인덱스 존재 여부 | **(미검증)** — TOS팀 확인 필수 |
-| `ACTV_DT` 의미 | '물리 집기' vs '스케줄 활성' | **(미검증)** |
-| HISTORY 트럭ID | `JOB_ORDER_HISTORY`가 대상 트럭ID를 직접 주는지 | **(미검증)** — 라이브 `JOB_ODR_YTNO`로 대체 |
-| prod Oracle 부하 | 신규 폴링의 실제 실행계획·서버 CPU/IO | **(미검증)** — 추출기 로그로만 간접 추정 |
+| 워터마크 인덱스 | `JOB_HIST_DATE‖JOB_HIST_TIME` 위 인덱스 존재 | **✅ 해소(2차)** — `IDX_JOBHIST_DATETIME` 확정 **[ORA]** |
+| `ACTV_DT` 의미 | '물리 집기' vs '활성화' | **부분해소(2차)** — '주문/RTG 활성화'로 확정(±초 물리집기 아님; 활성 경과 11~18분 사례) **[ORA]** |
+| HISTORY 트럭ID | `JOB_ORDER_HISTORY`가 대상 트럭ID를 직접 주는지 | **✅ 해소(2차)** — `JOB_HIST_YTNO` 실재(DS 87% 채움) **[ORA]** |
+| prod Oracle 부하 | 신규 폴링의 실제 실행계획·서버 CPU/IO | **(미검증)** — 단 권장안은 추가쿼리 0 / 인덱스 레인지로 무시 수준. EXPLAIN PLAN 미실행 |
 | 안 A(RTG 예측) | 관여 *전* 예측(예측기 ⑤)은 미구현 | 미구현 |
 | 보존 한계 | `JOB_ORDER_HISTORY` ~15일, `MCH_OPERATION` ~35일 → 깊은 백필 불가 | 운영 제약 |
 
-## 다음 단계(제안)
+## 다음 단계(제안) — 2차 검증 반영
 
-1. `etl_watermark` 가동 + `JOB_ORDER_HISTORY.ACTV_DT` 증분 폴링 추출기 추가(30~60초, 운영시간 가드) — **TOS팀 인덱스 확인 선행**.
-2. `classify_tt()`에 L3 보정 훅: DS `soon_idle`/`wait_rtg`를 `ACTV_DT` 확정으로 사후 검증(그림자).
-3. 양하 라벨 정밀화(`ACTV_DT`+RTG 근접, −19초 보정)로 곧유휴 정확도 측정 → 게이트 통과 후 승격.
+1. **가장 싼 즉효(Oracle 추가쿼리 0):** 기존 90초 `workpool.sql`에 **`JOB_ODR_ACTV_DT` 컬럼만 추가** → `live_workpool`에 적재 → DS 활성주문의 RTG 핸드오버 시작+대상트럭 라이브 확보.
+2. `classify_tt()` DS 분기에 **TOS 보정 훅**: 활성주문 `ACTV_DT`(있고 미완)면 `soon_idle`, RTG 근접(≤30m) 충족이면 신뢰 상향 — 웹소켓 GPS와 TOS를 OR로 결합(DS 0% 공백 제거).
+3. **권위 라벨:** `etl_watermark` 가동 + `JOB_ORDER_HISTORY`(`JOB_HIST_JOBSTATUS='C'`) 증분 폴링(`IDX_JOBHIST_DATETIME` 워터마크, 30~60초). 양하 라벨 정밀화(−19초 보정)로 곧유휴 정확도 측정 → 그림자 게이트 통과 후 승격.
+4. (선택) `JOB_ODR_YT_QSTATUS`·`YT_STATUS` 전이 의미를 더 좁혀 ACTV보다 타이트한 호라이즌 신호 탐색.
 
 ---
 
