@@ -3,7 +3,7 @@
 // ③ 차량 주행 차선: 이동 TT의 GPS 트레이스를 격자에 집계 → 도로·방향.
 import { useEffect, useMemo, useState } from "react";
 import { type Lang } from "./i18n";
-import { api, type LearnTopos, type LearnToposPoint, type LanesData, type LaneCellOut, type TravelData, type TravelOd } from "./api";
+import { api, type LearnTopos, type LearnToposPoint, type LanesData, type LaneCellOut, type TravelData, type TravelOd, type SoonIdleData } from "./api";
 import { LineChart } from "./charts";
 
 const ko = (lang: Lang) => lang === "ko";
@@ -82,6 +82,7 @@ export default function LearnPage({ lang }: { lang: Lang }) {
   const [d, setD] = useState<LearnTopos | null>(null);
   const [ln, setLn] = useState<LanesData | null>(null);
   const [tv, setTv] = useState<TravelData | null>(null);
+  const [si, setSi] = useState<SoonIdleData | null>(null);
   const [err, setErr] = useState(false);
   const [onlyBlock, setOnlyBlock] = useState(true);
   const [q, setQ] = useState("");
@@ -92,6 +93,7 @@ export default function LearnPage({ lang }: { lang: Lang }) {
       api.learnTopos().then((r) => { if (alive) { setD(r); setErr(false); } }).catch(() => alive && setErr(true));
       api.learnLanes().then((r) => { if (alive) setLn(r); }).catch(() => {});
       api.learnTravel().then((r) => { if (alive) setTv(r); }).catch(() => {});
+      api.learnSoonIdle().then((r) => { if (alive) setSi(r); }).catch(() => {});
     };
     load();
     const id = setInterval(load, 30000);
@@ -108,6 +110,13 @@ export default function LearnPage({ lang }: { lang: Lang }) {
   const tms = tv?.metric_series ?? [];
   const odVals = tms.map((p) => p.od_pairs);
   const sampVals = tms.map((p) => Number(p.samples));
+  // ④ soon-idle accuracy
+  const dsRecall = si?.by_jobtype.find((j) => j.jobtype === "DS");
+  const dsRecallPct = dsRecall?.recall_pct ?? null;
+  const dsDelta = dsRecall && dsRecall.recall_pct != null && dsRecall.recall_gps_pct != null ? dsRecall.recall_pct - dsRecall.recall_gps_pct : null;
+  const dsLeadP50 = si?.by_source.find((s) => s.jobtype === "DS" && s.source === "tos_actv")?.lead_p50_s ?? null;
+  const siRecallSeries = (si?.metric_series ?? []).filter((p) => p.jobtype === "DS" && p.source === "ALL").map((p) => p.recall_pct ?? 0);
+  const siGrid = "50px 84px 56px 64px 64px 72px";
 
   const points = useMemo(() => {
     let pts = d?.points ?? [];
@@ -121,7 +130,7 @@ export default function LearnPage({ lang }: { lang: Lang }) {
       <div className="cyc-head">
         <div className="cyc-title">
           <h2>{ko(lang) ? "학습 센터" : "Learning Center"}</h2>
-          <span className="cyc-title-sub">{ko(lang) ? "GPS에서 학습 — ② 블록 작업지점 좌표 · ③ 차량 주행 차선 (쌓일수록 정밀해짐)" : "Learning from GPS — ② block work-points · ③ driving lanes"}{err && <span className="cyc-err">{ko(lang) ? " · 연결 오류" : " · offline"}</span>}</span>
+          <span className="cyc-title-sub">{ko(lang) ? "① TT 이동시간 · ② 블록 좌표 · ③ 주행 차선 · ④ Soon-idle 정확도(그림자)" : "① travel time · ② block coords · ③ lanes · ④ soon-idle accuracy"}{err && <span className="cyc-err">{ko(lang) ? " · 연결 오류" : " · offline"}</span>}</span>
         </div>
       </div>
 
@@ -217,6 +226,54 @@ export default function LearnPage({ lang }: { lang: Lang }) {
         </div>
         <div className="cyc-tp-box" style={{ height: "auto" }}>
           {ln ? <LaneMap grid={ln.grid} lang={lang} /> : <div className="cyc-empty">{ko(lang) ? "수집 중" : "collecting"}</div>}
+        </div>
+      </div>
+
+      <div className="cyc-sec-h" style={{ marginTop: 22 }}>{ko(lang) ? "④ Soon-idle 예측 정확도 (그림자 — 예측 vs 실제 유휴 comp_ts)" : "④ Soon-idle prediction accuracy (shadow)"}</div>
+      <div className="cyc-tiles">
+        <Tile label={ko(lang) ? "예측 (7일)" : "Predictions (7d)"} value={si ? fmtN(si.predictions) : "—"} accent="#60a5fa" />
+        <Tile label={ko(lang) ? "DS 재현율" : "DS recall"} value={dsRecallPct != null ? `${dsRecallPct.toFixed(0)}%` : "—"} accent="#34d399" />
+        <Tile label={ko(lang) ? "ΔRecall · TOS 기여" : "ΔRecall · TOS"} value={dsDelta != null ? `+${dsDelta.toFixed(0)}%p` : "—"} accent="#a78bfa" />
+        <Tile label={ko(lang) ? "DS 리드타임 p50" : "DS lead p50"} value={mmss(dsLeadP50)} accent="#f59e0b" />
+      </div>
+      <div style={{ fontSize: 12, color: "var(--text-mute)", margin: "2px 2px 8px" }}>
+        {ko(lang)
+          ? "정답 = tos_handover_label.comp_ts(실제 유휴). 예측이 완료를 지나야 채워짐 — 갓 적재분은 정확도 0(수집 중). DS 예측의 gps_would_fire=false는 GPS단독이면 놓쳤을 건 → ΔRecall이 ② TOS 보정의 순이득."
+          : "Ground truth = comp_ts. Accuracy fills once predictions age past completion. ΔRecall = recall the TOS hook added over GPS-alone."}
+      </div>
+      <div className="learn-list">
+        <div style={{ display: "grid", gridTemplateColumns: siGrid, gap: 8, padding: "3px 6px", fontWeight: 600, color: "var(--text-dim)", fontSize: 12 }}>
+          <span>{ko(lang) ? "작업" : "job"}</span><span>{ko(lang) ? "신호" : "signal"}</span><span>{ko(lang) ? "예측" : "pred"}</span><span>{ko(lang) ? "적중" : "match"}</span><span>{ko(lang) ? "정밀도" : "prec"}</span><span>{ko(lang) ? "리드p50" : "lead"}</span>
+        </div>
+        {(si?.by_source ?? []).map((s, i) => (
+          <div key={i} style={{ display: "grid", gridTemplateColumns: siGrid, gap: 8, padding: "3px 6px" }}>
+            <span className="mono">{s.jobtype}</span>
+            <span className="mono" style={{ color: s.source === "tos_actv" ? "#a78bfa" : s.source === "gps_rtg" ? "#34d399" : s.source === "qc_plc" ? "#0ea5e9" : s.source === "both" ? "#22d3ee" : "#94a3b8" }}>{s.source}</span>
+            <span className="mono">{s.predictions}</span>
+            <span className="mono">{s.matched}</span>
+            <span className="mono">{s.precision_pct != null ? `${s.precision_pct.toFixed(0)}%` : "—"}</span>
+            <span className="mono">{mmss(s.lead_p50_s)}</span>
+          </div>
+        ))}
+        {(si?.by_source?.length ?? 0) === 0 && <div className="cyc-empty">{ko(lang) ? "예측 수집 중" : "collecting predictions"}</div>}
+      </div>
+      <div className="learn-charts" style={{ marginTop: 10 }}>
+        <div className="cyc-tp">
+          <div className="cyc-sec-h">{ko(lang) ? "GPS 단독 vs TOS 보정 — 재현율" : "GPS-only vs TOS-corrected — recall"}</div>
+          <div className="cyc-tp-box" style={{ height: "auto", display: "flex", flexDirection: "column", gap: 6, padding: 10 }}>
+            {(si?.by_jobtype ?? []).map((j) => (
+              <div key={j.jobtype} style={{ fontSize: 13 }}>
+                <span className="mono" style={{ fontWeight: 600 }}>{j.jobtype}</span>{" "}
+                {ko(lang) ? "정답" : "truth"} {j.truth_idles} · {ko(lang) ? "재현율" : "recall"} <b style={{ color: "#34d399" }}>{j.recall_pct != null ? `${j.recall_pct.toFixed(0)}%` : "—"}</b>{" "}
+                ({ko(lang) ? "GPS단독" : "GPS"} {j.recall_gps_pct != null ? `${j.recall_gps_pct.toFixed(0)}%` : "—"} → <b style={{ color: "#a78bfa" }}>TOS +{j.recall_pct != null && j.recall_gps_pct != null ? (j.recall_pct - j.recall_gps_pct).toFixed(0) : "—"}%p</b>)
+              </div>
+            ))}
+            {(si?.by_jobtype?.length ?? 0) === 0 && <div className="cyc-empty">{ko(lang) ? "정답 매칭 대기 (예측이 완료를 지나면 채워짐)" : "awaiting label matches"}</div>}
+          </div>
+        </div>
+        <div className="cyc-tp">
+          <div className="cyc-sec-h">{ko(lang) ? "개선 — DS 재현율 (↑)" : "Improving — DS recall (↑)"}</div>
+          <div className="cyc-tp-box">{siRecallSeries.length > 1 ? <LineChart values={siRecallSeries} color="#34d399" axes /> : <div className="cyc-empty">{ko(lang) ? "스냅샷 수집 중" : "collecting"}</div>}</div>
         </div>
       </div>
     </div>

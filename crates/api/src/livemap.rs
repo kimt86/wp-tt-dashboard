@@ -10,7 +10,7 @@
 //! NOTE: this is the ONE outbound network client in the API crate, and it talks ONLY to
 //! the local tunnel endpoint — no Oracle/SSH access, cannot reach the production DB.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -413,6 +413,10 @@ pub struct LiveMap {
     cycle_log: Mutex<VecDeque<CompletedCycle>>,
     // v2 SHADOW: completed leg-based cycles → tt_cycle_v2 (same flusher).
     cycle_v2: Mutex<VecDeque<CompletedV2>>,
+    // soon_idle prediction trips already logged this carry — (ytno, container) — so the 30s
+    // logger records each trip's FIRST soon_idle entry once; released when the truck stops
+    // carrying that container. Powers the soon-idle accuracy shadow (tt_soon_idle_pred).
+    soon_idle_open: Mutex<HashSet<(String, String)>>,
 }
 
 /// Cap on the in-memory completed-cycle buffer. If the flusher stalls we drop the oldest
@@ -434,6 +438,7 @@ impl LiveMap {
             assigned_pool: RwLock::new(HashMap::new()),
             cycle_log: Mutex::new(VecDeque::new()),
             cycle_v2: Mutex::new(VecDeque::new()),
+            soon_idle_open: Mutex::new(HashSet::new()),
             connected: AtomicBool::new(false),
             messages: AtomicU64::new(0),
             reconnects: AtomicU64::new(0),
@@ -1212,6 +1217,137 @@ pub fn spawn_util_sampler(_lm: Arc<LiveMap>, pool: PgPool) {
     });
 }
 
+/// One soon_idle prediction to persist (collected under read locks, inserted after release).
+struct PredRow {
+    ytno: String,
+    container: String,
+    jobtype: Option<String>,
+    qc: Option<String>,
+    topos: Option<String>,
+    source: &'static str,
+    gps_would_fire: bool,
+    nearest_rtg_m: Option<f64>,
+    reason: String,
+}
+
+/// SHADOW: every 30s, evaluate each TT's dispatch state (read-only `classify_tt`) and log the
+/// FIRST soon_idle entry per carry-trip into `tt_soon_idle_pred`, tagged with the firing signal
+/// (gps_rtg/tos_actv/qc_plc/both) and a counterfactual `gps_would_fire` flag. The hot path is
+/// untouched. Ground truth (actual idle) = `tos_handover_label.comp_ts`, matched in the learn
+/// API. See research/soon-idle-tos (다음단계 ④).
+pub fn spawn_soon_idle_logger(lm: Arc<LiveMap>, pool: PgPool) {
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(Duration::from_secs(30));
+        loop {
+            ticker.tick().await;
+            let now = Utc::now().timestamp_millis();
+            // collect prediction rows + current carry map under read locks, then release
+            let (cur_container, soon): (HashMap<String, String>, Vec<PredRow>) = {
+                let devices = lm.devices.read().await;
+                let plc = lm.plc.read().await;
+                let centroids = lm.centroids.read().await;
+                let assigned = lm.assigned_pool.read().await;
+                let rtgs: Vec<(f64, f64)> = devices
+                    .values()
+                    .filter(|p| p.cls == "RTG" && (now - p.last_seen_ms) / 1000 <= STALE_AFTER_S)
+                    .map(|p| (p.lat, p.lon))
+                    .collect();
+                let cranes: HashMap<String, (f64, f64)> = devices
+                    .iter()
+                    .filter(|(_, p)| matches!(p.cls.as_str(), "C" | "M" | "Z") && (now - p.last_seen_ms) / 1000 <= STALE_AFTER_S)
+                    .map(|(id, p)| (id.clone(), (p.lat, p.lon)))
+                    .collect();
+                let mut cur: HashMap<String, String> = HashMap::new();
+                let mut soon: Vec<PredRow> = Vec::new();
+                for (id, p) in devices.iter() {
+                    if p.cls != "TT" || (now - p.last_seen_ms) / 1000 > STALE_AFTER_S {
+                        continue;
+                    }
+                    let aj = assigned.get(id);
+                    // trip identity = the carried container (container1 live, latched across
+                    // feed gaps, else the assigned order's contno) — matches cycle OPEN.
+                    let container = p
+                        .container1
+                        .clone()
+                        .filter(|s| !s.is_empty())
+                        .or_else(|| p.latched_container.clone())
+                        .or_else(|| aj.and_then(|a| a.contno.clone()));
+                    if let Some(c) = &container {
+                        cur.insert(id.clone(), c.clone());
+                    }
+                    let cl = classify_tt(p, aj, &rtgs, &plc, &cranes, &centroids, now);
+                    if cl.state != "soon_idle" {
+                        continue;
+                    }
+                    let Some(container) = container else { continue }; // soon_idle ⇒ loaded ⇒ present
+                    let reason = cl.reason.clone().unwrap_or_default();
+                    // source ↔ classify_tt branch; gps_would_fire = would GPS/PLC alone have fired
+                    let (source, gps_would_fire) = if reason.starts_with("블록 RTG 근접") {
+                        if aj.is_some_and(|a| a.rtg_active) { ("both", true) } else { ("gps_rtg", true) }
+                    } else if reason.starts_with("TOS RTG 활성") {
+                        ("tos_actv", false)
+                    } else if reason.starts_with("안벽") {
+                        ("qc_plc", true)
+                    } else {
+                        ("other", false)
+                    };
+                    soon.push(PredRow {
+                        ytno: id.clone(),
+                        container,
+                        jobtype: p.jobtype.clone().or_else(|| p.latched_jobtype.clone()),
+                        qc: aj.and_then(|a| a.qc.clone()).or_else(|| p.latched_topos.clone().filter(|t| is_crane_code(t))),
+                        topos: p.topos1.clone().or_else(|| p.latched_topos.clone()),
+                        source,
+                        gps_would_fire,
+                        nearest_rtg_m: cl.nearest_rtg_m,
+                        reason,
+                    });
+                }
+                (cur, soon)
+            };
+
+            // release ended trips (truck no longer carrying that container) + pick new first-entries
+            let to_insert: Vec<PredRow> = {
+                let mut open = lm.soon_idle_open.lock().await;
+                open.retain(|(yt, c0)| cur_container.get(yt).map(|c| c == c0).unwrap_or(false));
+                soon.into_iter()
+                    .filter(|r| open.insert((r.ytno.clone(), r.container.clone())))
+                    .collect()
+            };
+            if to_insert.is_empty() {
+                continue;
+            }
+            let (bd, sh) = wp_core::shift::current(wp_core::shift::terminal_now().naive_local());
+            for r in &to_insert {
+                if let Err(e) = sqlx::query(
+                    "INSERT INTO tt_soon_idle_pred
+                       (ytno, container, jobtype, qc, topos, predicted_at, source, gps_would_fire,
+                        nearest_rtg_m, reason, business_date, shift)
+                     VALUES ($1,$2,$3,$4,$5,now(),$6,$7,$8,$9,$10,$11)
+                     ON CONFLICT (ytno, container, predicted_at) DO NOTHING",
+                )
+                .bind(&r.ytno)
+                .bind(&r.container)
+                .bind(&r.jobtype)
+                .bind(&r.qc)
+                .bind(&r.topos)
+                .bind(r.source)
+                .bind(r.gps_would_fire)
+                .bind(r.nearest_rtg_m)
+                .bind(&r.reason)
+                .bind(bd)
+                .bind(sh.label())
+                .execute(&pool)
+                .await
+                {
+                    tracing::warn!(error = %e, ytno = %r.ytno, "tt_soon_idle_pred insert failed");
+                }
+            }
+            tracing::info!(logged = to_insert.len(), "soon_idle predictions");
+        }
+    });
+}
+
 /// Load persisted learned topos centroids (block work-point coords) back into memory on
 /// startup so accumulation survives restarts. var resets to 0 (spread re-accumulates).
 pub async fn load_centroids(lm: &Arc<LiveMap>, pool: &PgPool) {
@@ -1315,6 +1451,65 @@ pub fn spawn_learn_persist(lm: Arc<LiveMap>, pool: PgPool) {
             .execute(&pool)
             .await;
             let _ = sqlx::query("DELETE FROM learn_topos_metric WHERE captured_at < now() - interval '30 days'")
+                .execute(&pool)
+                .await;
+
+            // ── soon-idle accuracy snapshot (④): precision/lead per (jobtype,source) + recall ──
+            // per jobtype (source='ALL'), over a 24h window. Powers the GPS-vs-TOS improvement
+            // curve. Forward = predictions matched to a comp_ts; reverse = censored truth labels
+            // covered by a prediction. HAVING skips empty windows; 30d retention.
+            let _ = sqlx::query(
+                "INSERT INTO tt_soon_idle_metric
+                   (captured_at, jobtype, source, window_h, predictions, matched, precision_pct, lead_p10_s, lead_p50_s, lead_p90_s)
+                 SELECT now(), m.jobtype, m.source, 24, count(*), count(m.comp_ts),
+                        (100.0*count(m.comp_ts)/nullif(count(*),0))::float8,
+                        percentile_cont(0.1) WITHIN GROUP (ORDER BY m.lead_s) FILTER (WHERE m.lead_s >= 0),
+                        percentile_cont(0.5) WITHIN GROUP (ORDER BY m.lead_s) FILTER (WHERE m.lead_s >= 0),
+                        percentile_cont(0.9) WITHIN GROUP (ORDER BY m.lead_s) FILTER (WHERE m.lead_s >= 0)
+                   FROM (
+                     SELECT p.jobtype, p.source, h.comp_ts,
+                            EXTRACT(EPOCH FROM (h.comp_ts - p.predicted_at)) AS lead_s
+                       FROM tt_soon_idle_pred p
+                       LEFT JOIN LATERAL (
+                         SELECT comp_ts FROM tos_handover_label h
+                          WHERE h.ytno = p.ytno AND (p.jobtype <> 'DS' OR h.contno = p.container)
+                            AND h.comp_ts >= p.predicted_at - interval '60 seconds'
+                            AND h.comp_ts <  p.predicted_at + interval '20 minutes'
+                          ORDER BY abs(EXTRACT(EPOCH FROM (h.comp_ts - p.predicted_at))) LIMIT 1
+                       ) h ON true
+                      WHERE p.predicted_at > now() - interval '24 hours'
+                   ) m
+                  GROUP BY m.jobtype, m.source
+                 HAVING count(*) > 0
+                 ON CONFLICT DO NOTHING",
+            )
+            .execute(&pool)
+            .await;
+            let _ = sqlx::query(
+                "INSERT INTO tt_soon_idle_metric
+                   (captured_at, jobtype, source, window_h, predictions, matched, recall_pct)
+                 SELECT now(), t.jobtype, 'ALL', 24, count(*), count(t.pid),
+                        (100.0*count(t.pid)/nullif(count(*),0))::float8
+                   FROM (
+                     SELECT h.jobtype, p.id AS pid
+                       FROM tos_handover_label h
+                       LEFT JOIN LATERAL (
+                         SELECT id FROM tt_soon_idle_pred p
+                          WHERE p.ytno = h.ytno AND (h.jobtype <> 'DS' OR p.container = h.contno)
+                            AND p.predicted_at BETWEEN h.comp_ts - interval '60 minutes' AND h.comp_ts + interval '60 seconds'
+                          ORDER BY abs(EXTRACT(EPOCH FROM (h.comp_ts - p.predicted_at))) LIMIT 1
+                       ) p ON true
+                      WHERE h.comp_ts > now() - interval '24 hours'
+                        AND h.comp_ts < now() - interval '180 seconds'
+                        AND h.comp_ts > (SELECT min(predicted_at) FROM tt_soon_idle_pred) + interval '5 minutes'
+                   ) t
+                  GROUP BY t.jobtype
+                 HAVING count(*) > 0
+                 ON CONFLICT DO NOTHING",
+            )
+            .execute(&pool)
+            .await;
+            let _ = sqlx::query("DELETE FROM tt_soon_idle_metric WHERE captured_at < now() - interval '30 days'")
                 .execute(&pool)
                 .await;
 

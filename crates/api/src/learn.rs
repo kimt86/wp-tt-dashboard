@@ -223,3 +223,128 @@ pub async fn travel(State(pool): State<PgPool>) -> Result<Json<TravelResp>, AppE
 
     Ok(Json(TravelResp { samples, od_pairs, confident_pairs, median_speed_kmh, od, metric_series }))
 }
+
+// ───────────────────────── soon-idle accuracy (④, shadow) ─────────────────────────
+// Match soon_idle predictions (tt_soon_idle_pred) to the authoritative idle moment
+// (tos_handover_label.comp_ts) and report precision / recall / lead-time, split by firing
+// signal — isolating the TOS-correction hook's contribution via the gps_would_fire flag.
+// Matching: DS = (ytno, container); LD = (ytno, time-window), nearest-Δt 1:1. Pure Postgres.
+
+#[derive(Serialize, sqlx::FromRow)]
+struct SiSource {
+    jobtype: String,
+    source: String,
+    predictions: i64,
+    matched: i64,
+    precision_pct: Option<f64>,
+    lead_p10_s: Option<f64>,
+    lead_p50_s: Option<f64>,
+    lead_p90_s: Option<f64>,
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+struct SiRecall {
+    jobtype: String,
+    truth_idles: i64,    // censored ground-truth labels (M)
+    predicted_any: i64,  // covered by any soon_idle prediction
+    predicted_gps: i64,  // covered by a GPS/PLC-alone prediction (counterfactual)
+    recall_pct: Option<f64>,
+    recall_gps_pct: Option<f64>, // GPS-only recall; (recall_pct − this) = TOS hook's gain
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+struct SiMetricPoint {
+    captured_at: DateTime<Utc>,
+    jobtype: String,
+    source: String,
+    predictions: i32,
+    matched: i32,
+    precision_pct: Option<f64>,
+    recall_pct: Option<f64>,
+    lead_p50_s: Option<f64>,
+}
+
+#[derive(Serialize)]
+pub struct SoonIdleResp {
+    predictions: i64, // overall, last 7d
+    matched: i64,
+    precision_pct: Option<f64>,
+    by_source: Vec<SiSource>,
+    by_jobtype: Vec<SiRecall>,
+    metric_series: Vec<SiMetricPoint>,
+}
+
+/// GET /api/learn/soon-idle — soon_idle prediction accuracy vs authoritative idle (shadow).
+pub async fn soon_idle(State(pool): State<PgPool>) -> Result<Json<SoonIdleResp>, AppError> {
+    // forward match: each prediction → nearest comp_ts within [−60s, +20min]; precision + lead.
+    let by_source: Vec<SiSource> = sqlx::query_as(
+        "WITH m AS (
+           SELECT p.jobtype, p.source, h.comp_ts,
+                  EXTRACT(EPOCH FROM (h.comp_ts - p.predicted_at)) AS lead_s
+             FROM tt_soon_idle_pred p
+             LEFT JOIN LATERAL (
+               SELECT comp_ts FROM tos_handover_label h
+                WHERE h.ytno = p.ytno AND (p.jobtype <> 'DS' OR h.contno = p.container)
+                  AND h.comp_ts >= p.predicted_at - interval '60 seconds'
+                  AND h.comp_ts <  p.predicted_at + interval '20 minutes'
+                ORDER BY abs(EXTRACT(EPOCH FROM (h.comp_ts - p.predicted_at))) LIMIT 1
+             ) h ON true
+            WHERE p.predicted_at > now() - interval '7 days'
+         )
+         SELECT jobtype, source, count(*) AS predictions, count(comp_ts) AS matched,
+                (100.0*count(comp_ts)/nullif(count(*),0))::float8 AS precision_pct,
+                percentile_cont(0.1) WITHIN GROUP (ORDER BY lead_s) FILTER (WHERE lead_s >= 0) AS lead_p10_s,
+                percentile_cont(0.5) WITHIN GROUP (ORDER BY lead_s) FILTER (WHERE lead_s >= 0) AS lead_p50_s,
+                percentile_cont(0.9) WITHIN GROUP (ORDER BY lead_s) FILTER (WHERE lead_s >= 0) AS lead_p90_s
+           FROM m GROUP BY jobtype, source ORDER BY jobtype, source",
+    )
+    .fetch_all(&pool)
+    .await?;
+
+    // reverse match over censored truth: recall (any signal) vs GPS-only counterfactual.
+    let by_jobtype: Vec<SiRecall> = sqlx::query_as(
+        "WITH truth AS (
+           SELECT h.jobtype, h.ytno, h.contno, h.comp_ts
+             FROM tos_handover_label h
+            WHERE h.comp_ts > now() - interval '7 days'
+              AND h.comp_ts < now() - interval '180 seconds'
+              AND h.comp_ts > (SELECT min(predicted_at) FROM tt_soon_idle_pred) + interval '5 minutes'
+         ), j AS (
+           SELECT t.jobtype, p.id AS pid, p.gps_would_fire
+             FROM truth t
+             LEFT JOIN LATERAL (
+               SELECT id, gps_would_fire FROM tt_soon_idle_pred p
+                WHERE p.ytno = t.ytno AND (t.jobtype <> 'DS' OR p.container = t.contno)
+                  AND p.predicted_at BETWEEN t.comp_ts - interval '60 minutes' AND t.comp_ts + interval '60 seconds'
+                ORDER BY abs(EXTRACT(EPOCH FROM (t.comp_ts - p.predicted_at))) LIMIT 1
+             ) p ON true
+         )
+         SELECT jobtype, count(*) AS truth_idles, count(pid) AS predicted_any,
+                count(*) FILTER (WHERE gps_would_fire) AS predicted_gps,
+                (100.0*count(pid)/nullif(count(*),0))::float8 AS recall_pct,
+                (100.0*count(*) FILTER (WHERE gps_would_fire)/nullif(count(*),0))::float8 AS recall_gps_pct
+           FROM j GROUP BY jobtype ORDER BY jobtype",
+    )
+    .fetch_all(&pool)
+    .await?;
+
+    let metric_series: Vec<SiMetricPoint> = sqlx::query_as(
+        "SELECT captured_at, jobtype, source, predictions, matched, precision_pct, recall_pct, lead_p50_s
+           FROM tt_soon_idle_metric WHERE captured_at > now() - interval '30 days' ORDER BY captured_at",
+    )
+    .fetch_all(&pool)
+    .await?;
+
+    let predictions: i64 = by_source.iter().map(|s| s.predictions).sum();
+    let matched: i64 = by_source.iter().map(|s| s.matched).sum();
+    let precision_pct = (predictions > 0).then(|| 100.0 * matched as f64 / predictions as f64);
+
+    Ok(Json(SoonIdleResp {
+        predictions,
+        matched,
+        precision_pct,
+        by_source,
+        by_jobtype,
+        metric_series,
+    }))
+}
